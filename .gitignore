@@ -95,3 +95,8 @@ engine/compilers/Make-64bit/Release/
 # CMake out-of-source build directory #
 #######################################
 /build/
+
+# Vendored prebuilt Android libraries (override the global *.a / *.so ignore) #
+##############################################################################
+!engine/lib/freetype/android/lib/**/*.a
+!engine/lib/openal/Android/**/*.so
