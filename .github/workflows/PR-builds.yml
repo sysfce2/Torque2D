@@ -68,11 +68,15 @@ jobs:
       - name: Build Debug
         run: |
           cmake -S . -B build/linux-debug -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug
-          cmake --build build/linux-debug --parallel
+          # Bound parallelism to the core count: bare `--parallel` passes `make -j`
+          # with NO limit, which fires off every TU at once (100s of g++) and
+          # OOM-kills the runner ("received a shutdown signal"), hit by the
+          # memory-heavier 64-bit Debug build.
+          cmake --build build/linux-debug --parallel "$(nproc)"
       - name: Build Release
         run: |
           cmake -S . -B build/linux-release -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release
-          cmake --build build/linux-release --parallel
+          cmake --build build/linux-release --parallel "$(nproc)"
       - uses: actions/upload-artifact@v4
         with:
           name: Torque2D_Linux_x86_64
@@ -107,7 +111,7 @@ jobs:
         run: |
           cmake -S . -B build/linux32 -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_EXE_LINKER_FLAGS=-m32
-          cmake --build build/linux32 --parallel
+          cmake --build build/linux32 --parallel "$(nproc)"
       - uses: actions/upload-artifact@v4
         with:
           name: Torque2D_Linux_x86_32bit
