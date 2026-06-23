@@ -40,7 +40,19 @@ After downloading a copy of the source code, the following project files for eac
 * **Android:** Android Studio
 * **Web:** Emscripten/CMake
 
-Additionally, a **CMake** build system is now available as a cross-platform alternative to the platform-specific project files.
+Additionally, a **CMake** build system is now available as a cross-platform alternative to the platform-specific project files. CMake is becoming the source of truth for the build, so it is the recommended way to produce an up-to-date project file.
+
+#### Generating a Visual Studio 2022 solution with CMake
+
+If you would rather generate a fresh, always-up-to-date Visual Studio solution instead of using the checked-in one, you can do so in a few steps. You do **not** need to know anything about CMake to do this.
+
+1. **Install Visual Studio 2022** (the free Community Edition is fine). In the Visual Studio Installer, make sure the **"Desktop development with C++"** workload is checked.
+2. **Install CMake** from [cmake.org/download](https://cmake.org/download/). On the *Install Options* screen, choose **"Add CMake to the system PATH for all users"** (or for the current user). This one-time step is what lets the generator find CMake.
+3. In the root of the repository, **double-click `generate-vs2022.bat`**. It will create the solution under `build\vs2022\` and open `Torque2D.sln` in Visual Studio. (If CMake or the C++ workload is missing, the script tells you what to fix.)
+4. In Visual Studio, choose a configuration (**Debug** or **Release**) at the top, then build with **Build → Build Solution** (`Ctrl+Shift+B`).
+5. The compiled executable is written to the repository root (`Torque2D_DEBUG.exe` for Debug, `Torque2D.exe` for Release). Run it from there (press **F5** in Visual Studio, which is already set to launch from the repo root).
+
+Whenever the engine's source file list changes (for example after pulling new changes), just **re-run `generate-vs2022.bat`** to regenerate the solution.
 
 See the [wiki](https://github.com/TorqueGameEngines/Torque2D/wiki) for available guides on platform setup and development.
 

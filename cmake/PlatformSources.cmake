@@ -1,11 +1,17 @@
 # -----------------------------------------------------------------------------
 # PlatformSources.cmake
 #
-# Per-platform translation units. Only the active platform's list is added to
-# the Torque2D target by the root CMakeLists. Windows is implemented now; the
-# other platforms are stubbed for the follow-up multi-platform round.
+# Per-platform translation units. The root CMakeLists selects the active
+# platform's list and adds it to the Torque2D target. Windows and the desktop
+# Unixes (macOS, Linux) are populated; iOS/Android/Emscripten are stubbed for a
+# later round.
+#
+# The cross-platform engine sources live in EngineSources.cmake. The generic
+# `platform/` abstraction (compiled on every platform) is part of that list;
+# only the OS-specific back-ends live here.
 # -----------------------------------------------------------------------------
 
+# === Windows (platformWin32) =================================================
 set(TORQUE_PLATFORM_SOURCES_WINDOWS
     # ---- platformWin32 ----
     ${TORQUE_SRC}/platformWin32/cardProfile.cpp
@@ -45,9 +51,118 @@ set(TORQUE_PLATFORM_SOURCES_WINDOWS
     ${TORQUE_SRC}/platformWin32/threads/thread.cc
 )
 
-# --- Stubs for the follow-up multi-platform round (not yet wired/verified) ---
-# set(TORQUE_PLATFORM_SOURCES_MACOS    ...)   # engine/source/platformOSX/*.mm + *.cc
-# set(TORQUE_PLATFORM_SOURCES_LINUX    ...)   # engine/source/platformX86UNIX/*
-# set(TORQUE_PLATFORM_SOURCES_IOS      ...)   # engine/source/platformiOS/*
-# set(TORQUE_PLATFORM_SOURCES_ANDROID  ...)   # engine/source/platformAndroid/*
-# set(TORQUE_PLATFORM_SOURCES_EMSCRIPTEN ...) # engine/source/platformEmscripten/* (incl platformNet_Emscripten.cpp)
+# === macOS (platformOSX) =====================================================
+# Objective-C++ (.mm) back-end. NOTE for the on-platform (Mac) session:
+#   * Consider MACOSX_BUNDLE packaging (.app) in the root CMakeLists.
+#   * CMAKE_OSX_ARCHITECTURES is left to the native default (Apple Silicon =
+#     arm64); the old build hard-coded x86_64 — revisit if you need a fat/universal
+#     or Intel build.
+set(TORQUE_PLATFORM_SOURCES_MACOS
+    # ---- platformOSX ----
+    ${TORQUE_SRC}/platformOSX/AppDelegate.mm
+    ${TORQUE_SRC}/platformOSX/main.mm
+    ${TORQUE_SRC}/platformOSX/osxAudio.mm
+    ${TORQUE_SRC}/platformOSX/osxCPU.mm
+    ${TORQUE_SRC}/platformOSX/osxCocoaUtilities.mm
+    ${TORQUE_SRC}/platformOSX/osxEvents.mm
+    ${TORQUE_SRC}/platformOSX/osxFileDialogs.mm
+    ${TORQUE_SRC}/platformOSX/osxFileIO.mm
+    ${TORQUE_SRC}/platformOSX/osxFont.mm
+    ${TORQUE_SRC}/platformOSX/osxGL.mm
+    ${TORQUE_SRC}/platformOSX/osxInput.mm
+    ${TORQUE_SRC}/platformOSX/osxInputManager.mm
+    ${TORQUE_SRC}/platformOSX/osxMath.mm
+    ${TORQUE_SRC}/platformOSX/osxMemory.mm
+    ${TORQUE_SRC}/platformOSX/osxMutex.mm
+    ${TORQUE_SRC}/platformOSX/osxOpenGLDevice.mm
+    ${TORQUE_SRC}/platformOSX/osxOutlineGL.cc
+    ${TORQUE_SRC}/platformOSX/osxPopupMenu.mm
+    ${TORQUE_SRC}/platformOSX/osxSemaphore.mm
+    ${TORQUE_SRC}/platformOSX/osxString.mm
+    ${TORQUE_SRC}/platformOSX/osxThread.mm
+    ${TORQUE_SRC}/platformOSX/osxTime.mm
+    ${TORQUE_SRC}/platformOSX/osxTorqueView.mm
+    ${TORQUE_SRC}/platformOSX/osxVideo.mm
+    ${TORQUE_SRC}/platformOSX/osxWindow.mm
+    ${TORQUE_SRC}/platformOSX/platformOSX.mm
+)
+
+# === Linux / X11 (platformX86UNIX) ===========================================
+set(TORQUE_PLATFORM_SOURCES_LINUX
+    # ---- platformX86UNIX ----
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXAsmBlit.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXCPUInfo.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXConsole.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXDedicatedStub.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXDialogs.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXFileio.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXFont.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXGL.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXIO.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXInput.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXInputManager.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXMath.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXMath_ASM.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXMemory.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXMessageBox.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXMutex.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXOGLVideo.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXOpenAL.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXPopupMenu.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXProcessControl.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXSemaphore.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXStrings.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXThread.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXTime.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXUtils.cc
+    ${TORQUE_SRC}/platformX86UNIX/x86UNIXWindow.cc
+)
+
+# === iOS (platformiOS) =======================================================
+# UIKit/OpenGL-ES back-end. SEPARATE from macOS (distinct sources + frameworks).
+# Was never supported by the old CMake; recipe derived from the Xcode_iOS project.
+# Requires a Mac + Xcode and `-DCMAKE_SYSTEM_NAME=iOS`; finalize on a Mac.
+set(TORQUE_PLATFORM_SOURCES_IOS
+    # ---- platformiOS ----
+    ${TORQUE_SRC}/platformiOS/GameCenter.mm
+    ${TORQUE_SRC}/platformiOS/SoundEngine.mm
+    ${TORQUE_SRC}/platformiOS/T2DAppDelegate.mm
+    ${TORQUE_SRC}/platformiOS/T2DView.mm
+    ${TORQUE_SRC}/platformiOS/T2DViewController.mm
+    ${TORQUE_SRC}/platformiOS/iOSAlerts.mm
+    ${TORQUE_SRC}/platformiOS/iOSAudio.mm
+    ${TORQUE_SRC}/platformiOS/iOSCPUInfo.mm
+    ${TORQUE_SRC}/platformiOS/iOSConsole.mm
+    ${TORQUE_SRC}/platformiOS/iOSDialogs.mm
+    ${TORQUE_SRC}/platformiOS/iOSEvents.mm
+    ${TORQUE_SRC}/platformiOS/iOSFileio.mm
+    ${TORQUE_SRC}/platformiOS/iOSFont.mm
+    ${TORQUE_SRC}/platformiOS/iOSGL.mm
+    ${TORQUE_SRC}/platformiOS/iOSGL2ES.mm
+    ${TORQUE_SRC}/platformiOS/iOSInput.mm
+    ${TORQUE_SRC}/platformiOS/iOSMath.mm
+    ${TORQUE_SRC}/platformiOS/iOSMemory.mm
+    ${TORQUE_SRC}/platformiOS/iOSMotionManager.mm
+    ${TORQUE_SRC}/platformiOS/iOSMoviePlayback.mm
+    ${TORQUE_SRC}/platformiOS/iOSMutex.mm
+    ${TORQUE_SRC}/platformiOS/iOSOGLVideo.mm
+    ${TORQUE_SRC}/platformiOS/iOSOutlineGL.mm
+    ${TORQUE_SRC}/platformiOS/iOSPlatform.mm
+    ${TORQUE_SRC}/platformiOS/iOSProcessControl.mm
+    ${TORQUE_SRC}/platformiOS/iOSProfiler.mm
+    ${TORQUE_SRC}/platformiOS/iOSSemaphore.mm
+    ${TORQUE_SRC}/platformiOS/iOSStreamSource.cc
+    ${TORQUE_SRC}/platformiOS/iOSStrings.mm
+    ${TORQUE_SRC}/platformiOS/iOSThread.mm
+    ${TORQUE_SRC}/platformiOS/iOSTime.mm
+    ${TORQUE_SRC}/platformiOS/iOSUserMusicLibrary.mm
+    ${TORQUE_SRC}/platformiOS/iOSUtil.mm
+    ${TORQUE_SRC}/platformiOS/iOSWindow.mm
+    ${TORQUE_SRC}/platformiOS/main.mm
+    # ---- platformiOS/menus ----
+    ${TORQUE_SRC}/platformiOS/menus/popupMenu.mm
+)
+
+# === Stubs for a later round (not yet wired/verified) ========================
+# set(TORQUE_PLATFORM_SOURCES_ANDROID    ...)  # engine/source/platformAndroid/*
+# set(TORQUE_PLATFORM_SOURCES_EMSCRIPTEN ...)  # engine/source/platformEmscripten/* (incl platformNet_Emscripten.cpp)

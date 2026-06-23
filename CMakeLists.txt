@@ -89,14 +89,31 @@ add_subdirectory(engine/source/testing/googleTest)
 # Engine target
 # ----------------------------------------------------------------------------
 include(cmake/EngineSources.cmake)      # -> TORQUE_ENGINE_SOURCES
-include(cmake/PlatformSources.cmake)    # -> TORQUE_PLATFORM_SOURCES_WINDOWS (+ stubs)
+include(cmake/PlatformSources.cmake)    # -> TORQUE_PLATFORM_SOURCES_{WINDOWS,MACOS,LINUX}
 
-add_executable(Torque2D WIN32)
-target_sources(Torque2D PRIVATE ${TORQUE_ENGINE_SOURCES})
-
-if(WIN32)
-    target_sources(Torque2D PRIVATE ${TORQUE_PLATFORM_SOURCES_WINDOWS})
+# iOS must be detected explicitly: APPLE is also true on iOS, so it has to be
+# distinguished from the macOS desktop build (set via -DCMAKE_SYSTEM_NAME=iOS).
+if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    set(TORQUE_IOS TRUE)
 endif()
+
+# Select the active platform's OS-specific back-end sources.
+if(WIN32)
+    set(TORQUE_PLATFORM_SOURCES ${TORQUE_PLATFORM_SOURCES_WINDOWS})
+elseif(TORQUE_IOS)
+    set(TORQUE_PLATFORM_SOURCES ${TORQUE_PLATFORM_SOURCES_IOS})
+elseif(APPLE)
+    set(TORQUE_PLATFORM_SOURCES ${TORQUE_PLATFORM_SOURCES_MACOS})
+elseif(UNIX)
+    set(TORQUE_PLATFORM_SOURCES ${TORQUE_PLATFORM_SOURCES_LINUX})
+else()
+    message(FATAL_ERROR "Unsupported platform: no PlatformSources list for this OS.")
+endif()
+
+# WIN32 keyword only affects Windows (GUI/WinMain); ignored elsewhere. For a
+# proper macOS .app, the Mac session can add MACOSX_BUNDLE here later.
+add_executable(Torque2D WIN32)
+target_sources(Torque2D PRIVATE ${TORQUE_ENGINE_SOURCES} ${TORQUE_PLATFORM_SOURCES})
 
 # C++17 across the engine (replaces the old -std=c++11 / unset MSVC default).
 target_compile_features(Torque2D PRIVATE cxx_std_17)
@@ -112,19 +129,24 @@ if(WIN32)
     target_include_directories(Torque2D PRIVATE ${TORQUE_LIB}/openal/win32)
 endif()
 
-# Preprocessor definitions.
-#  * _HAS_STD_BYTE=0 is REQUIRED under C++17/MSVC (std::byte vs the engine's byte).
+# Preprocessor definitions (cross-platform).
 #  * The spurious unconditional DEBUG=1 from the old CMake is intentionally dropped
-#    (MSVC already defines _DEBUG for debug builds; the engine keys off TORQUE_DEBUG).
+#    (the engine keys off TORQUE_DEBUG; MSVC defines _DEBUG for debug runtimes).
 target_compile_definitions(Torque2D PRIVATE
     UNICODE _UNICODE TORQUE_UNICODE
-    _CRT_SECURE_NO_WARNINGS _CRT_SECURE_NO_DEPRECATE
-    _HAS_STD_BYTE=0
     TORQUE_DEBUG_GUARD
     TORQUE_NET_STATS
     $<$<CONFIG:Debug>:TORQUE_DEBUG>
     $<$<CONFIG:Shipping>:TORQUE_SHIPPING>
 )
+if(MSVC)
+    # _HAS_STD_BYTE=0 is REQUIRED under C++17/MSVC (std::byte vs the engine's byte).
+    target_compile_definitions(Torque2D PRIVATE
+        _CRT_SECURE_NO_WARNINGS _CRT_SECURE_NO_DEPRECATE _HAS_STD_BYTE=0)
+endif()
+if(UNIX AND NOT APPLE)
+    target_compile_definitions(Torque2D PRIVATE LINUX)
+endif()
 
 if(MSVC)
     target_compile_options(Torque2D PRIVATE
@@ -150,6 +172,58 @@ if(WIN32)
     )
 endif()
 
+if(APPLE AND NOT TORQUE_IOS)
+    # macOS desktop frameworks (from the historical build recipe). The on-platform
+    # (Mac) session should confirm this links and the app starts; OpenAL is a
+    # framework here (not dynamically loaded as on Windows).
+    target_link_libraries(Torque2D PRIVATE
+        "-framework Cocoa" "-framework OpenGL" "-framework CoreData"
+        "-framework CoreFoundation" "-framework Foundation" "-framework AppKit"
+        "-framework AVFoundation" "-framework OpenAL")
+endif()
+
+if(TORQUE_IOS)
+    # iOS frameworks, derived from the maintained engine/compilers/Xcode_iOS
+    # project. SCAFFOLD — finalize/verify on a Mac: this needs the Xcode generator
+    # with -DCMAKE_SYSTEM_NAME=iOS, a code-signing team, and device/simulator
+    # selection. iOS uses OpenGL ES (not desktop OpenGL).
+    set_target_properties(Torque2D PROPERTIES
+        MACOSX_BUNDLE TRUE
+        XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "12.0")
+    target_link_libraries(Torque2D PRIVATE
+        "-framework UIKit" "-framework OpenGLES" "-framework GLKit"
+        "-framework QuartzCore" "-framework CoreGraphics" "-framework CoreText"
+        "-framework CoreMotion" "-framework CoreMedia" "-framework CoreVideo"
+        "-framework CoreAudio" "-framework CoreImage" "-framework AudioToolbox"
+        "-framework AVFoundation" "-framework MediaPlayer" "-framework Foundation"
+        "-framework CoreFoundation" "-framework OpenAL")
+    # NOTE: platformiOS/GameCenter.mm uses GameKit — add "-framework GameKit" if
+    # that file is compiled. iOS also needs graphics/bitmapPvr.cc (PVR textures),
+    # which is excluded from desktop builds in EngineSources.cmake; re-add it for
+    # iOS (see cmake/BUILD-PLATFORM-NOTES.md).
+endif()
+
+if(UNIX AND NOT APPLE)
+    # Linux system libraries. NOTES for the on-platform (WSL/Linux) session:
+    #   * SDL2 from the old recipe is intentionally omitted — T2D drives X11/GLX
+    #     directly; add it back only if you hit undefined SDL_* symbols.
+    #   * `rt` is a no-op on modern glibc but harmless.
+    #   * OpenGL/FreeType are resolved via find_package (more robust than the old
+    #     hard-coded /usr/include/freetype2 paths). Install dev packages, e.g. on
+    #     Debian/Ubuntu: libx11-dev libxft-dev libfreetype6-dev libopenal-dev
+    #     libgl1-mesa-dev.
+    find_package(Threads REQUIRED)
+    find_package(OpenGL REQUIRED)
+    find_package(Freetype REQUIRED)
+    target_link_libraries(Torque2D PRIVATE
+        Threads::Threads
+        OpenGL::GL
+        Freetype::Freetype
+        m dl rt
+        X11 Xft
+        openal)
+endif()
+
 # Per-config exe name to match the VS solution (Debug -> Torque2D_DEBUG.exe).
 set_target_properties(Torque2D PROPERTIES
     OUTPUT_NAME        "Torque2D"
@@ -172,7 +246,7 @@ endif()
 # IDE niceties (Visual Studio).
 # ----------------------------------------------------------------------------
 source_group(TREE "${TORQUE_SRC}" PREFIX "engine"
-    FILES ${TORQUE_ENGINE_SOURCES} ${TORQUE_PLATFORM_SOURCES_WINDOWS})
+    FILES ${TORQUE_ENGINE_SOURCES} ${TORQUE_PLATFORM_SOURCES})
 
 set_property(DIRECTORY "${CMAKE_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT Torque2D)
 set_target_properties(Torque2D PROPERTIES
