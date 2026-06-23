@@ -136,7 +136,11 @@ extern z_const char * const z_errmsg[10]; /* indexed by 2-zlib_error */
 #    if defined(__MWERKS__) && __dest_os != __be_os && __dest_os != __win32_os
 #      include <unix.h> /* for fdopen */
 #    else
-#      ifndef fdopen
+       /* This stub is for Classic Mac OS, which had no fdopen(). Modern Apple
+        * platforms (macOS/iOS, __APPLE__) DO have fdopen, and TARGET_OS_MAC is
+        * 1 on all of them — so without this guard the macro clobbers the SDK's
+        * <stdio.h> fdopen declaration and fails to compile. */
+#      if !defined(fdopen) && !defined(__APPLE__)
 #        define fdopen(fd,mode) NULL /* No fdopen() */
 #      endif
 #    endif
