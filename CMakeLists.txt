@@ -178,6 +178,10 @@ if(MSVC)
         /bigobj                               # large TUs (compiledEval.cc etc.)
         /wd4800 /wd4100 /wd4127 /wd4512        # noisy warnings (matches old build)
     )
+else()
+    # The engine uses the (C++17-removed) `register` keyword in ~35 files. GCC
+    # tolerates it; Clang (Android NDK, and macOS/iOS) makes -Wregister an error.
+    target_compile_options(Torque2D PRIVATE -Wno-register)
 endif()
 
 # Link: third-party libs built from source (transitively bring their includes).
