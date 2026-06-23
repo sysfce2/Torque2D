@@ -163,6 +163,43 @@ set(TORQUE_PLATFORM_SOURCES_IOS
     ${TORQUE_SRC}/platformiOS/menus/popupMenu.mm
 )
 
-# === Stubs for a later round (not yet wired/verified) ========================
-# set(TORQUE_PLATFORM_SOURCES_ANDROID    ...)  # engine/source/platformAndroid/*
+# === Android (platformAndroid) ===============================================
+# NativeActivity / OpenGL-ES back-end built into libtorque2d.so by the NDK.
+# Recipe derived from the (now-deleted) ndk-build Android.mk; arm64-v8a target.
+set(TORQUE_PLATFORM_SOURCES_ANDROID
+    # ---- platformAndroid ----
+    ${TORQUE_SRC}/platformAndroid/AndroidAlerts.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidAudio.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidCPUInfo.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidConsole.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidDialogs.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidEvents.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidFileio.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidFont.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidGL.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidGL2ES.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidInput.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidMath.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidMemory.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidMutex.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidOGLVideo.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidOutlineGL.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidPlatform.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidProcessControl.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidProfiler.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidSemaphore.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidStreamSource.cc
+    ${TORQUE_SRC}/platformAndroid/AndroidStrings.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidThread.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidTime.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidUtil.cpp
+    ${TORQUE_SRC}/platformAndroid/AndroidWindow.cpp
+    ${TORQUE_SRC}/platformAndroid/T2DActivity.cpp
+    ${TORQUE_SRC}/platformAndroid/android_native_app_glue.c
+    ${TORQUE_SRC}/platformAndroid/main.cpp
+    # ---- platformAndroid/menus ----
+    ${TORQUE_SRC}/platformAndroid/menus/popupMenu.cpp
+)
+
+# === Stub for a later round (not yet wired/verified) =========================
 # set(TORQUE_PLATFORM_SOURCES_EMSCRIPTEN ...)  # engine/source/platformEmscripten/* (incl platformNet_Emscripten.cpp)

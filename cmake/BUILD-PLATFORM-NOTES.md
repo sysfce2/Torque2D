@@ -13,7 +13,8 @@ project files from it.
 | macOS (Xcode) | ✅ scaffolded | ❌ | ❌ | ❌ |
 | Linux (Make) | ✅ scaffolded | ❌ | ❌ | ❌ |
 | iOS (Xcode) | ✅ scaffolded | ❌ | ❌ | ❌ |
-| Android / Web | stubbed | — | — | — |
+| Android (Gradle+CMake) | ✅ scaffolded | ❌ | ❌ | ❌ |
+| Web (Emscripten) | stubbed | — | — | — |
 
 **macOS and Linux are SCAFFOLDED but UNVERIFIED** — never configured or built on
 those platforms. Do that work on the actual platform (Mac / WSL), not from Windows.
@@ -82,6 +83,27 @@ on iOS too).
 4. **WSL runtime caveat:** WSL2 builds/links fine, but running the GL GUI needs
    WSLg (or an X server). Build/link verification is solid in WSL; full "window
    appears" may want a real Linux box or WSLg.
+
+## Android round (build via CI or Android Studio + NDK)
+
+Android builds a **shared library** (`libtorque2d.so`) via Gradle → `externalNativeBuild { cmake }`
+(the root `CMakeLists.txt`), loaded by a NativeActivity; the script/asset tree is copied into the
+APK assets by the `copyGame` Gradle task. The old `Android.mk` (stale, referenced deleted files)
+and its `.cxx` cache were removed; the Gradle project was modernized to AGP 8.6 / Gradle 8.7 /
+`compileSdk 34` / `namespace`. Target is **arm64-v8a only** (the only ABI with prebuilt
+freetype/openal). Build it with the CI job (`./gradlew assembleDebug`) or open
+`engine/compilers/android-studio` in Android Studio.
+
+Expect to iterate (via the Android CI logs):
+- **Engine source set under GLES/NDK:** the unified `EngineSources.cmake` will surface files that
+  need `TORQUE_OS_ANDROID`/GLES guards (the old `Android.mk` compiled a smaller, divergent subset).
+  Fix by guarding the code, not by forking the list.
+- **OpenAL `.so` packaging:** shipped via `jniLibs.srcDirs = ['../../../lib/openal/Android']`; confirm
+  it lands in the APK and loads.
+- **Java glue** (`MyNativeActivity`, helpers) may need minor AndroidX/API updates under AGP 8.
+- **Gradle wrapper jar** is old (5.4.1-era) but should bootstrap 8.7; regenerate with
+  `gradle wrapper --gradle-version 8.7` if it doesn't.
+- Other ABIs (armeabi-v7a/x86/x86_64) are a later round — need freetype/openal built from source.
 
 ## Cross-cutting notes
 

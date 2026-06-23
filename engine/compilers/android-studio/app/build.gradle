@@ -1,68 +1,86 @@
-apply plugin: 'com.android.application'
+plugins {
+    id 'com.android.application'
+}
+
 android {
-    compileSdkVersion 28
-    buildToolsVersion '28.0.3'
+    namespace 'com.garagegames.torque2d'
+    compileSdk 34
+    ndkVersion '25.2.9519653'
+
+    // The native build is now driven by the CMake source of truth at the repo
+    // root (replacing the old hand-maintained src/main/jni/Android.mk).
     externalNativeBuild {
-        ndkBuild {
-            path './src/main/jni/Android.mk'
+        cmake {
+            path '../../../../CMakeLists.txt'
         }
     }
+
     defaultConfig {
         applicationId "com.garagegames.torque2d"
-        minSdkVersion 19
-        targetSdkVersion 28
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "4.0"
 
-        sourceSets.main {
-            assets.srcDirs = [
-                    'src/main/assets',
-                    'src/main/game'
-            ]
-
-            ndk {
-                abiFilters 'x86', 'x86_64', 'armeabi-v7a' , 'arm64-v8a'
+        ndk {
+            // arm64-v8a only for now (the only ABI with prebuilt freetype/openal).
+            abiFilters 'arm64-v8a'
+        }
+        externalNativeBuild {
+            cmake {
+                arguments '-DANDROID_STL=c++_static'
+                cppFlags '-std=c++17'
             }
         }
-
-        task copyGame(type: Copy, description: 'Copy torque scripts and modules') {
-            from('../../../../') {
-                include '**'
-                exclude 'engine/**'
-                exclude 'tools/**'
-                exclude 'tutorials/**'
-                exclude '.**'
-                exclude '*.dll'
-                exclude 'preferences.cs'
-                exclude '*.md'
-                exclude '*.app'
-                exclude '*.bat'
-                exclude '*.log'
-                exclude '*.torsion'
-            }
-            into 'src/main/game'
-            includeEmptyDirs = false
-
-        }
-
-        task wipeGame(type: Delete, description: 'Wipe android-specific copy of torque scripts and modules') {
-            delete 'src/main/game/'
-        }
-
-        clean.dependsOn 'wipeGame'
-
-        tasks.withType(JavaCompile) {
-            compileTask -> compileTask.dependsOn copyGame
-        }
-
-
     }
+
+    sourceSets {
+        main {
+            // The script/asset tree is copied into src/main/game by copyGame below.
+            assets.srcDirs = ['src/main/assets', 'src/main/game']
+            // Package the prebuilt libopenal.so (per-ABI subdirs live under here).
+            jniLibs.srcDirs = ['../../../lib/openal/Android']
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
         }
     }
-    productFlavors {
-    }
 }
 
-dependencies {
+// Copy the Torque scripts/modules into the APK assets (read on device via AAssetManager).
+tasks.register('copyGame', Copy) {
+    description = 'Copy torque scripts and modules into the APK assets'
+    from('../../../../') {
+        include '**'
+        exclude 'engine/**'
+        exclude 'tools/**'
+        exclude 'tutorials/**'
+        exclude 'build/**'
+        exclude '.**'
+        exclude '*.dll'
+        exclude 'preferences.cs'
+        exclude '*.md'
+        exclude '*.app'
+        exclude '*.bat'
+        exclude '*.command'
+        exclude '*.sh'
+        exclude '*.log'
+        exclude '*.torsion'
+    }
+    into 'src/main/game'
+    includeEmptyDirs = false
+}
+
+tasks.register('wipeGame', Delete) {
+    description = 'Remove the android-specific copy of the torque scripts and modules'
+    delete 'src/main/game/'
+}
+tasks.named('clean') { dependsOn 'wipeGame' }
+tasks.withType(JavaCompile).configureEach { dependsOn 'copyGame' }
+// Native build (and asset merge) also depend on the game content being present.
+tasks.matching { it.name.startsWith('merge') && it.name.endsWith('Assets') }.configureEach {
+    dependsOn 'copyGame'
 }

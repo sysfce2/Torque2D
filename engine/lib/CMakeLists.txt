@@ -21,7 +21,8 @@ function(torque_thirdparty_lib name)
     set_target_properties(${name} PROPERTIES FOLDER "ThirdParty")
 endfunction()
 
-# --- zlib ---------------------------------------------------------------------
+# --- zlib (built from source on desktop; Android uses the NDK system libz) -----
+if(NOT ANDROID)
 add_library(zlib STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/zlib/adler32.c
     ${CMAKE_CURRENT_SOURCE_DIR}/zlib/compress.c
@@ -41,6 +42,7 @@ add_library(zlib STATIC
 )
 target_include_directories(zlib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/zlib)
 torque_thirdparty_lib(zlib)
+endif()
 
 # --- lpng (libpng) ------------------------------------------------------------
 add_library(lpng STATIC
@@ -62,7 +64,11 @@ add_library(lpng STATIC
 )
 # png.h includes zlib.h, so zlib's headers are part of lpng's public interface.
 target_include_directories(lpng PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/lpng)
-target_link_libraries(lpng PUBLIC zlib)
+if(ANDROID)
+    target_link_libraries(lpng PUBLIC z)   # NDK system zlib (headers in the sysroot)
+else()
+    target_link_libraries(lpng PUBLIC zlib)
+endif()
 torque_thirdparty_lib(lpng)
 
 # --- ljpeg (libjpeg) ----------------------------------------------------------

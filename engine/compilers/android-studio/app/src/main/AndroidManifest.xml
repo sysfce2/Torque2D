@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest package="com.garagegames.torque2d"
-    android:versionCode="1"
-    android:versionName="3.0" xmlns:android="http://schemas.android.com/apk/res/android">
-    
+<!-- package/versionCode/versionName now live in app/build.gradle (AGP 8 namespace). -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="com.android.vending.CHECK_LICENSE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
@@ -20,8 +19,9 @@
         <activity
             android:name="com.garagegames.torque2d.MyNativeActivity"
             android:label="@string/app_name"
-            android:screenOrientation="sensorLandscape" >
-            <!-- Tell NativeActivity the name of or .so -->
+            android:screenOrientation="sensorLandscape"
+            android:exported="true">
+            <!-- Tell NativeActivity the name of our .so -->
             <meta-data android:name="android.app.lib_name"
                     android:value="torque2d" />
             <intent-filter>

@@ -76,14 +76,18 @@ add_subdirectory(engine/lib)
 # ----------------------------------------------------------------------------
 # GoogleTest — build the vendored distribution and link gtest into the engine so
 # the in-engine unit tests (runAllUnitTests) actually have a framework to run.
+# Not built on Android (no on-device test framework; the testing/* sources are
+# also excluded from the Android build below).
 # ----------------------------------------------------------------------------
-set(gtest_force_shared_crt OFF CACHE BOOL "" FORCE)  # use the static CRT we selected
-set(BUILD_GMOCK   OFF CACHE BOOL "" FORCE)
-set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
-# This is the inner googletest library dir (no monorepo root above it), so the
-# version normally provided by the distribution's parent must be supplied here.
-set(GOOGLETEST_VERSION 1.17.0)
-add_subdirectory(engine/source/testing/googleTest)
+if(NOT ANDROID)
+    set(gtest_force_shared_crt OFF CACHE BOOL "" FORCE)  # use the static CRT we selected
+    set(BUILD_GMOCK   OFF CACHE BOOL "" FORCE)
+    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+    # This is the inner googletest library dir (no monorepo root above it), so the
+    # version normally provided by the distribution's parent must be supplied here.
+    set(GOOGLETEST_VERSION 1.17.0)
+    add_subdirectory(engine/source/testing/googleTest)
+endif()
 
 # ----------------------------------------------------------------------------
 # Engine target
@@ -97,9 +101,12 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     set(TORQUE_IOS TRUE)
 endif()
 
-# Select the active platform's OS-specific back-end sources.
+# Select the active platform's OS-specific back-end sources. Note ANDROID is also
+# UNIX, so it must be matched before the UNIX (Linux) branch.
 if(WIN32)
     set(TORQUE_PLATFORM_SOURCES ${TORQUE_PLATFORM_SOURCES_WINDOWS})
+elseif(ANDROID)
+    set(TORQUE_PLATFORM_SOURCES ${TORQUE_PLATFORM_SOURCES_ANDROID})
 elseif(TORQUE_IOS)
     set(TORQUE_PLATFORM_SOURCES ${TORQUE_PLATFORM_SOURCES_IOS})
 elseif(APPLE)
@@ -110,9 +117,18 @@ else()
     message(FATAL_ERROR "Unsupported platform: no PlatformSources list for this OS.")
 endif()
 
-# WIN32 keyword only affects Windows (GUI/WinMain); ignored elsewhere. For a
-# proper macOS .app, the Mac session can add MACOSX_BUNDLE here later.
-add_executable(Torque2D WIN32)
+# The in-engine unit tests need gtest, which we don't build on Android.
+if(ANDROID)
+    list(FILTER TORQUE_ENGINE_SOURCES EXCLUDE REGEX "/testing/")
+endif()
+
+# Android builds a shared library (libtorque2d.so) loaded by the NativeActivity;
+# every other platform builds an executable. (WIN32 only affects Windows.)
+if(ANDROID)
+    add_library(Torque2D SHARED)
+else()
+    add_executable(Torque2D WIN32)
+endif()
 target_sources(Torque2D PRIVATE ${TORQUE_ENGINE_SOURCES} ${TORQUE_PLATFORM_SOURCES})
 
 # C++17 across the engine (replaces the old -std=c++11 / unset MSVC default).
@@ -129,22 +145,29 @@ if(WIN32)
     target_include_directories(Torque2D PRIVATE ${TORQUE_LIB}/openal/win32)
 endif()
 
-# Preprocessor definitions (cross-platform).
+# Preprocessor definitions.
 #  * The spurious unconditional DEBUG=1 from the old CMake is intentionally dropped
 #    (the engine keys off TORQUE_DEBUG; MSVC defines _DEBUG for debug runtimes).
 target_compile_definitions(Torque2D PRIVATE
-    UNICODE _UNICODE TORQUE_UNICODE
-    TORQUE_DEBUG_GUARD
-    TORQUE_NET_STATS
     $<$<CONFIG:Debug>:TORQUE_DEBUG>
     $<$<CONFIG:Shipping>:TORQUE_SHIPPING>
 )
+if(ANDROID)
+    # From the ndk-build recipe. __ANDROID__ is defined by the NDK toolchain.
+    # HAVE_NEON applies to arm64-v8a (the only ABI we target for now).
+    target_compile_definitions(Torque2D PRIVATE
+        TORQUE_OS_ANDROID GL_GLEXT_PROTOTYPES ENABLE_CONSOLE_MSGS HAVE_NEON=1)
+    target_compile_options(Torque2D PRIVATE -fsigned-char)
+else()
+    target_compile_definitions(Torque2D PRIVATE
+        UNICODE _UNICODE TORQUE_UNICODE TORQUE_DEBUG_GUARD TORQUE_NET_STATS)
+endif()
 if(MSVC)
     # _HAS_STD_BYTE=0 is REQUIRED under C++17/MSVC (std::byte vs the engine's byte).
     target_compile_definitions(Torque2D PRIVATE
         _CRT_SECURE_NO_WARNINGS _CRT_SECURE_NO_DEPRECATE _HAS_STD_BYTE=0)
 endif()
-if(UNIX AND NOT APPLE)
+if(UNIX AND NOT APPLE AND NOT ANDROID)
     target_compile_definitions(Torque2D PRIVATE LINUX)
 endif()
 
@@ -157,11 +180,13 @@ if(MSVC)
     )
 endif()
 
-# Link: third-party libs (transitively bring their public include dirs) + gtest.
-target_link_libraries(Torque2D PRIVATE
-    libogg libvorbis lpng ljpeg zlib
-    gtest
-)
+# Link: third-party libs built from source (transitively bring their includes).
+target_link_libraries(Torque2D PRIVATE libogg libvorbis lpng ljpeg)
+if(NOT ANDROID)
+    # zlib is built from source on desktop; on Android the NDK system libz is used.
+    # gtest provides the in-engine unit-test framework (desktop only).
+    target_link_libraries(Torque2D PRIVATE zlib gtest)
+endif()
 
 if(WIN32)
     # Windows system libraries (matches the VS solution's AdditionalDependencies).
@@ -203,7 +228,7 @@ if(TORQUE_IOS)
     # iOS (see cmake/BUILD-PLATFORM-NOTES.md).
 endif()
 
-if(UNIX AND NOT APPLE)
+if(UNIX AND NOT APPLE AND NOT ANDROID)
     # Linux system libraries. NOTES for the on-platform (WSL/Linux) session:
     #   * SDL2 from the old recipe is intentionally omitted — T2D drives X11/GLX
     #     directly; add it back only if you hit undefined SDL_* symbols.
@@ -224,11 +249,36 @@ if(UNIX AND NOT APPLE)
         openal)
 endif()
 
-# Per-config exe name to match the VS solution (Debug -> Torque2D_DEBUG.exe).
-set_target_properties(Torque2D PROPERTIES
-    OUTPUT_NAME        "Torque2D"
-    OUTPUT_NAME_DEBUG  "Torque2D_DEBUG"
-)
+if(ANDROID)
+    # Prebuilt third-party libs (arm64-v8a only — the other ABIs have no prebuilts).
+    # FreeType is an ancient (2.4.12) static .a; OpenAL is a shared .so that must
+    # also be packaged into the APK (see the Gradle jniLibs config).
+    add_library(android_freetype STATIC IMPORTED)
+    set_target_properties(android_freetype PROPERTIES
+        IMPORTED_LOCATION "${TORQUE_LIB}/freetype/android/lib/${ANDROID_ABI}/libfreetype.a"
+        INTERFACE_INCLUDE_DIRECTORIES "${TORQUE_LIB}/freetype/android/include;${TORQUE_LIB}/freetype/android/include/freetype2")
+
+    add_library(android_openal SHARED IMPORTED)
+    set_target_properties(android_openal PROPERTIES
+        IMPORTED_LOCATION "${TORQUE_LIB}/openal/Android/${ANDROID_ABI}/libopenal.so"
+        INTERFACE_INCLUDE_DIRECTORIES "${TORQUE_LIB}/openal/Android/openal-soft-master/jni/OpenAL/include")
+
+    # Android system libraries (z = NDK libz; GLESv1_CM matches the engine GL path).
+    target_link_libraries(Torque2D PRIVATE
+        android_freetype android_openal
+        log android EGL GLESv1_CM OpenSLES z)
+endif()
+
+# Output name. On Android the NativeActivity loads "torque2d" -> libtorque2d.so.
+# On desktop, match the VS solution (Debug -> Torque2D_DEBUG.exe).
+if(ANDROID)
+    set_target_properties(Torque2D PROPERTIES OUTPUT_NAME "torque2d")
+else()
+    set_target_properties(Torque2D PROPERTIES
+        OUTPUT_NAME        "Torque2D"
+        OUTPUT_NAME_DEBUG  "Torque2D_DEBUG"
+    )
+endif()
 
 # ----------------------------------------------------------------------------
 # Windows application resource (icon + version info) from the .rc template.
