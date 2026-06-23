@@ -14,7 +14,7 @@ project files from it.
 | Linux x86_64 (Make) | ✅ | ✅ | ✅ Debug+Release | ⏳ (WSL: needs WSLg/X server) |
 | Linux x86 32-bit (Make, -m32) | ✅ | ✅ | ✅ Release | ⏳ (WSL: needs WSLg/X server) |
 | iOS (Xcode) | ✅ scaffolded | ❌ | ❌ | ❌ |
-| Android (Gradle+CMake) | ✅ scaffolded | ❌ | ❌ | ❌ |
+| Android (Gradle+CMake) | ✅ | ✅ (CI) | ✅ APK (CI) | ❌ (needs a device) |
 | Web (Emscripten) | stubbed | — | — | — |
 
 **Linux (32 & 64-bit) builds and links** (verified in WSL/Ubuntu 22.04). Runtime
@@ -110,7 +110,23 @@ and its `.cxx` cache were removed; the Gradle project was modernized to AGP 8.6 
 freetype/openal). Build it with the CI job (`./gradlew assembleDebug`) or open
 `engine/compilers/android-studio` in Android Studio.
 
-Expect to iterate (via the Android CI logs):
+**DONE — the Android CI job builds a working APK (arm64-v8a).** Getting there took
+(all are legit cross-platform correctness fixes):
+- `settings.gradle`: `plugins{}` must follow `pluginManagement{}` (before `dependencyResolutionManagement`).
+- Committed the vendored prebuilt arm64 `libfreetype.a` / `libopenal.so` (the global `*.a`/`*.so`
+  ignore was hiding them, so CI had nothing to link).
+- `types.gcc.h`: detect `__aarch64__` (NDK/Linux) as 64-bit ARM, not just Apple's `__arm64__`
+  (fixed CPU/endian + `TORQUE_CPU_X64`).
+- `-Wno-register` for non-MSVC (the engine uses the C++17-removed `register` in ~35 files; clang errors).
+- `mMathSSE.cc`: gate the x86 SSE inline asm on `TORQUE_CPU_X86_64`, not `TORQUE_CPU_X64`
+  (which is now also set for arm64).
+- Added `platformAndroid` to the Android include path (`T2DActivity.h` includes the vendored
+  `<android_native_app_glue.h>`).
+
+Still to do (needs a device/emulator, not CI): actually run the APK; the engine init,
+asset loading from the APK (AAssetManager), and GLES rendering are unverified.
+
+Remaining iteration notes:
 - **Engine source set under GLES/NDK:** the unified `EngineSources.cmake` will surface files that
   need `TORQUE_OS_ANDROID`/GLES guards (the old `Android.mk` compiled a smaller, divergent subset).
   Fix by guarding the code, not by forking the list.
