@@ -144,6 +144,11 @@ if(WIN32)
     # OpenAL headers (OpenAL itself is loaded dynamically at runtime — not linked).
     target_include_directories(Torque2D PRIVATE ${TORQUE_LIB}/openal/win32)
 endif()
+if(ANDROID)
+    # platformAndroid vendors android_native_app_glue.h (included as <...> by
+    # T2DActivity.h); matches the old Android.mk LOCAL_C_INCLUDES.
+    target_include_directories(Torque2D PRIVATE ${TORQUE_SRC}/platformAndroid)
+endif()
 
 # Preprocessor definitions.
 #  * The spurious unconditional DEBUG=1 from the old CMake is intentionally dropped
