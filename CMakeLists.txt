@@ -229,24 +229,56 @@ if(TORQUE_IOS)
 endif()
 
 if(UNIX AND NOT APPLE AND NOT ANDROID)
-    # Linux system libraries. NOTES for the on-platform (WSL/Linux) session:
-    #   * SDL2 from the old recipe is intentionally omitted — T2D drives X11/GLX
-    #     directly; add it back only if you hit undefined SDL_* symbols.
+    # Linux / X11 desktop build (platformX86UNIX). NOTES for the on-platform
+    # (WSL/Linux) session:
+    #   * SDL 1.2 is REQUIRED, not optional: the platform back-end calls 1.2-only
+    #     APIs (SDL_GetVideoSurface, SDL_WM_*, SDL_*GammaRamp, SDL_GL_SwapBuffers)
+    #     and pulls X11_KeyToUnicode out of libSDL. This is NOT SDL2.
     #   * `rt` is a no-op on modern glibc but harmless.
     #   * OpenGL/FreeType are resolved via find_package (more robust than the old
     #     hard-coded /usr/include/freetype2 paths). Install dev packages, e.g. on
-    #     Debian/Ubuntu: libx11-dev libxft-dev libfreetype6-dev libopenal-dev
-    #     libgl1-mesa-dev.
+    #     Debian/Ubuntu: libsdl1.2-dev libx11-dev libxft-dev libfreetype6-dev
+    #     libopenal-dev libgl1-mesa-dev (and nasm for the 32-bit build).
     find_package(Threads REQUIRED)
     find_package(OpenGL REQUIRED)
     find_package(Freetype REQUIRED)
+
+    # SDL 1.2 (legacy). Resolve it directly rather than via FindSDL: the sources
+    # use `#include <SDL/SDL.h>`, which needs the PARENT of the SDL header dir on
+    # the include path (find_path on SDL/SDL.h returns exactly that directory).
+    find_library(SDL12_LIBRARY NAMES SDL SDL-1.2)
+    find_path(SDL12_INCLUDE_DIR NAMES SDL/SDL.h)
+    if(NOT SDL12_LIBRARY OR NOT SDL12_INCLUDE_DIR)
+        message(FATAL_ERROR
+            "SDL 1.2 not found. Install it (Debian/Ubuntu: 'sudo apt install libsdl1.2-dev').")
+    endif()
+    target_include_directories(Torque2D PRIVATE ${SDL12_INCLUDE_DIR})
+
     target_link_libraries(Torque2D PRIVATE
         Threads::Threads
         OpenGL::GL
         Freetype::Freetype
         m dl rt
         X11 Xft
+        ${SDL12_LIBRARY}
         openal)
+
+    # CPU / bitness. detectX86CPUInfo() (platform/platformCPUInfo.asm — 32-bit
+    # NASM, it does NOT assemble for elf64) is referenced only when TORQUE_64 is
+    # undefined (engine/source/platformX86UNIX/x86UNIXCPUInfo.cc).
+    #   * 64-bit: define TORQUE_64 so the asm is never referenced (and never built).
+    #   * 32-bit (-m32): assemble the asm with NASM (elf32) and define `i386` —
+    #     bare `i386` isn't predefined under standard C++, and the engine's CPU
+    #     detection (types.gcc.h) keys off it. LINUX is already a target define,
+    #     so NASM picks it up too (its export macro is `%ifdef LINUX`).
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        target_compile_definitions(Torque2D PRIVATE TORQUE_64)
+    else()
+        set(CMAKE_ASM_NASM_OBJECT_FORMAT elf32)
+        enable_language(ASM_NASM)
+        target_sources(Torque2D PRIVATE ${TORQUE_SRC}/platform/platformCPUInfo.asm)
+        target_compile_definitions(Torque2D PRIVATE i386)
+    endif()
 endif()
 
 if(ANDROID)

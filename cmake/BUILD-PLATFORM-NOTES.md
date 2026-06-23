@@ -11,13 +11,15 @@ project files from it.
 | Windows (VS2022) | ✅ | ✅ | ✅ Debug+Release | ✅ (GUI launches) |
 | Windows (VS2026) | ✅ | — | — | generator supported by CMake 4.x; needs VS2026 installed |
 | macOS (Xcode) | ✅ scaffolded | ❌ | ❌ | ❌ |
-| Linux (Make) | ✅ scaffolded | ❌ | ❌ | ❌ |
+| Linux x86_64 (Make) | ✅ | ✅ | ✅ Debug+Release | ⏳ (WSL: needs WSLg/X server) |
+| Linux x86 32-bit (Make, -m32) | ✅ | ✅ | ✅ Release | ⏳ (WSL: needs WSLg/X server) |
 | iOS (Xcode) | ✅ scaffolded | ❌ | ❌ | ❌ |
 | Android (Gradle+CMake) | ✅ scaffolded | ❌ | ❌ | ❌ |
 | Web (Emscripten) | stubbed | — | — | — |
 
-**macOS and Linux are SCAFFOLDED but UNVERIFIED** — never configured or built on
-those platforms. Do that work on the actual platform (Mac / WSL), not from Windows.
+**Linux (32 & 64-bit) builds and links** (verified in WSL/Ubuntu 22.04). Runtime
+("window appears") still wants WSLg or a real Linux box — see the WSL caveat below.
+**macOS is SCAFFOLDED but UNVERIFIED** — do that work on a Mac, not from Windows.
 
 ## How the build is structured
 
@@ -70,16 +72,30 @@ on iOS too).
 3. The source list (`TORQUE_PLATFORM_SOURCES_IOS`, 36 files incl. `platformiOS/menus`)
    and the framework set are scaffolded; treat the rest as on-device iteration.
 
-## Linux round (run in WSL or on Linux)
+## Linux round (run in WSL or on Linux) — DONE (builds & links, 32 & 64-bit)
 
-1. Install deps (Debian/Ubuntu): `sudo apt install build-essential cmake libx11-dev libxft-dev libfreetype6-dev libopenal-dev libgl1-mesa-dev`
-2. `./generate-make.sh Debug` then `cmake --build build/make -j$(nproc)` — or use Ninja.
-3. Expect to resolve:
-   - **SDL2** is intentionally omitted (T2D uses X11/GLX directly). Add it back
-     only if you get undefined `SDL_*` symbols.
-   - **OpenGL/FreeType** are resolved via `find_package` (`OpenGL::GL`,
-     `Freetype::Freetype`) instead of the old hard-coded `/usr/include/freetype2`.
-   - The engine may `dlopen` libGL at runtime; linking `OpenGL::GL` is harmless.
+1. Install deps (Debian/Ubuntu):
+   `sudo apt install build-essential cmake nasm libsdl1.2-dev libx11-dev libxft-dev libfreetype6-dev libopenal-dev libgl1-mesa-dev`
+   For 32-bit add the multilib toolchain + `:i386` libs:
+   `sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install gcc-multilib g++-multilib libsdl1.2-dev:i386 libx11-dev:i386 libxft-dev:i386 libfreetype6-dev:i386 libopenal-dev:i386 libgl1-mesa-dev:i386`
+2. 64-bit: `./generate-make.sh Debug` then `cmake --build build/make -j$(nproc)`.
+   32-bit: configure with `-DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_EXE_LINKER_FLAGS=-m32`
+   (and `PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig`), then build. The root
+   picks the bitness path automatically from `CMAKE_SIZEOF_VOID_P`.
+3. Resolved issues (the original scaffold's wrong assumptions):
+   - **SDL 1.2 is REQUIRED, not optional.** The back-end calls 1.2-only APIs
+     (`SDL_GetVideoSurface`, `SDL_WM_*`, `SDL_*GammaRamp`, `SDL_GL_SwapBuffers`)
+     and pulls `X11_KeyToUnicode` out of `libSDL`. This is **NOT SDL2** — and NOT
+     the SDL2-based `sdl12-compat` shim, which lacks `X11_KeyToUnicode` (so CI is
+     pinned to ubuntu-22.04, which still ships genuine SDL 1.2.15).
+   - **`detectX86CPUInfo`** comes from `platform/platformCPUInfo.asm`, 32-bit-only
+     NASM (does not assemble for elf64). It's referenced only `#ifndef TORQUE_64`,
+     so 64-bit defines `TORQUE_64` (asm unneeded); 32-bit assembles it via NASM.
+   - **Bitness macros:** 64-bit defines `TORQUE_64` (`__amd64__` is auto); 32-bit
+     defines `i386` (bare `i386` isn't predefined under standard C++, and
+     `types.gcc.h`'s CPU detection keys off it).
+   - **OpenGL/FreeType** are resolved via `find_package`; SDL via
+     `find_library`/`find_path` (the latter so `#include <SDL/SDL.h>` resolves).
 4. **WSL runtime caveat:** WSL2 builds/links fine, but running the GL GUI needs
    WSLg (or an X server). Build/link verification is solid in WSL; full "window
    appears" may want a real Linux box or WSLg.

@@ -52,7 +52,11 @@ jobs:
   # ===========================================================================
   linux-x64:
     name: Linux x86_64
-    runs-on: ubuntu-latest
+    # Pinned to 22.04: the engine's X11 back-end needs GENUINE SDL 1.2 (it links
+    # the SDL-1.2 X11 driver symbol X11_KeyToUnicode and calls 1.2-only APIs).
+    # On 24.04, libsdl1.2-dev is the SDL2-based sdl12-compat shim, which does NOT
+    # export those symbols, so the link fails.
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - uses: lukka/get-cmake@latest
@@ -60,7 +64,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential \
-            libx11-dev libxft-dev libfreetype6-dev libopenal-dev libgl1-mesa-dev
+            libsdl1.2-dev libx11-dev libxft-dev libfreetype6-dev libopenal-dev libgl1-mesa-dev
       - name: Build Debug
         run: |
           cmake -S . -B build/linux-debug -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug
@@ -80,18 +84,21 @@ jobs:
 
   linux-x86:
     name: Linux x86 (32-bit)
-    runs-on: ubuntu-latest
+    # Pinned to 22.04 for genuine SDL 1.2 (see the linux-x64 job). The 32-bit
+    # build additionally needs NASM: platform/platformCPUInfo.asm (detectX86CPUInfo)
+    # is compiled only on 32-bit (it is x86-only and is skipped on 64-bit via
+    # TORQUE_64).
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - uses: lukka/get-cmake@latest
-      # 32-bit (multilib) toolchain + :i386 dev libraries. Some :i386 -dev packages
-      # can be flaky on the hosted image; expect to iterate on this list.
+      # 32-bit (multilib) toolchain + NASM + :i386 dev libraries.
       - name: Install 32-bit dependencies (multilib)
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
-          sudo apt-get install -y gcc-multilib g++-multilib \
-            libx11-dev:i386 libxft-dev:i386 libfreetype6-dev:i386 \
+          sudo apt-get install -y gcc-multilib g++-multilib nasm \
+            libsdl1.2-dev:i386 libx11-dev:i386 libxft-dev:i386 libfreetype6-dev:i386 \
             libopenal-dev:i386 libgl1-mesa-dev:i386
       - name: Build Release (-m32)
         env:

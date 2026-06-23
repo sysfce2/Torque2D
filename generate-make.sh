@@ -6,10 +6,12 @@
 #  Then:   cmake --build build/make -j
 #
 #  Requires CMake and the usual dev packages, e.g. on Debian/Ubuntu:
-#    sudo apt install build-essential cmake \
+#    sudo apt install build-essential cmake nasm libsdl1.2-dev \
 #         libx11-dev libxft-dev libfreetype6-dev libopenal-dev libgl1-mesa-dev
+#  (nasm is only needed for the 32-bit build; SDL 1.2 — NOT SDL2 — is required.)
 #
-#  STATUS: scaffolded, NOT yet verified on Linux. See cmake/BUILD-PLATFORM-NOTES.md.
+#  For a 32-bit build see cmake/BUILD-PLATFORM-NOTES.md (multilib + :i386 libs and
+#  -m32 flags). STATUS: builds & links on Linux (verified 32 & 64-bit).
 # ---------------------------------------------------------------------------
 set -e
 cd "$(dirname "$0")"
