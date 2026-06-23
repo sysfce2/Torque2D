@@ -2,9 +2,8 @@
 # PlatformSources.cmake
 #
 # Per-platform translation units. The root CMakeLists selects the active
-# platform's list and adds it to the Torque2D target. Windows and the desktop
-# Unixes (macOS, Linux) are populated; iOS/Android/Emscripten are stubbed for a
-# later round.
+# platform's list and adds it to the Torque2D target. Windows, macOS, Linux, iOS
+# and Android are populated and build; Emscripten is stubbed for a later round.
 #
 # The cross-platform engine sources live in EngineSources.cmake. The generic
 # `platform/` abstraction (compiled on every platform) is part of that list;
@@ -52,11 +51,11 @@ set(TORQUE_PLATFORM_SOURCES_WINDOWS
 )
 
 # === macOS (platformOSX) =====================================================
-# Objective-C++ (.mm) back-end. NOTE for the on-platform (Mac) session:
-#   * Consider MACOSX_BUNDLE packaging (.app) in the root CMakeLists.
-#   * CMAKE_OSX_ARCHITECTURES is left to the native default (Apple Silicon =
-#     arm64); the old build hard-coded x86_64 — revisit if you need a fat/universal
-#     or Intel build.
+# Objective-C++ (.mm) back-end. Builds & links on Apple Silicon (arm64) with both
+# the Makefiles and Xcode generators; the root CMakeLists force-includes
+# tools/CMake/macOS-Prefix.h (Cocoa) and pins
+# CMAKE_OSX_ARCHITECTURES=arm64. The exe builds as a plain binary that runs from
+# the repo root (so it finds main.cs) — no MACOSX_BUNDLE on desktop.
 set(TORQUE_PLATFORM_SOURCES_MACOS
     # ---- platformOSX ----
     ${TORQUE_SRC}/platformOSX/AppDelegate.mm
@@ -121,7 +120,10 @@ set(TORQUE_PLATFORM_SOURCES_LINUX
 # === iOS (platformiOS) =======================================================
 # UIKit/OpenGL-ES back-end. SEPARATE from macOS (distinct sources + frameworks).
 # Was never supported by the old CMake; recipe derived from the Xcode_iOS project.
-# Requires a Mac + Xcode and `-DCMAKE_SYSTEM_NAME=iOS`; finalize on a Mac.
+# Builds & links for the arm64 simulator (iOS 18.2 SDK) -> Torque2D_DEBUG.app.
+# Requires full Xcode + `-DCMAKE_SYSTEM_NAME=iOS`; the root CMakeLists' TORQUE_IOS
+# block adds bitmapPvr.cc, defines TORQUE_OS_IOS + NO_REDEFINE_GL_FUNCS, and
+# force-includes tools/CMake/iOS-Prefix.h. See cmake/BUILD-PLATFORM-NOTES.md.
 set(TORQUE_PLATFORM_SOURCES_IOS
     # ---- platformiOS ----
     ${TORQUE_SRC}/platformiOS/GameCenter.mm

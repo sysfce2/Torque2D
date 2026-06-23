@@ -10,16 +10,23 @@ project files from it.
 |----------|--------------|------------|-------|------------------|
 | Windows (VS2022) | ✅ | ✅ | ✅ Debug+Release | ✅ (GUI launches) |
 | Windows (VS2026) | ✅ | — | — | generator supported by CMake 4.x; needs VS2026 installed |
-| macOS (Xcode) | ✅ scaffolded | ❌ | ❌ | ❌ |
+| macOS (arm64) | ✅ | ✅ | ✅ Debug | ⏳ (launches, no crash; GUI needs an interactive login session) |
 | Linux x86_64 (Make) | ✅ | ✅ | ✅ Debug+Release | ⏳ (WSL: needs WSLg/X server) |
 | Linux x86 32-bit (Make, -m32) | ✅ | ✅ | ✅ Release | ⏳ (WSL: needs WSLg/X server) |
-| iOS (Xcode) | ✅ scaffolded | ❌ | ❌ | ❌ |
+| iOS (arm64 simulator) | ✅ | ✅ | ✅ Debug (.app) | ⏳ (build/link done; not yet run in sim) |
 | Android (Gradle+CMake) | ✅ | ✅ (CI) | ✅ APK (CI) | ❌ (needs a device) |
 | Web (Emscripten) | stubbed | — | — | — |
 
 **Linux (32 & 64-bit) builds and links** (verified in WSL/Ubuntu 22.04). Runtime
 ("window appears") still wants WSLg or a real Linux box — see the WSL caveat below.
-**macOS is SCAFFOLDED but UNVERIFIED** — do that work on a Mac, not from Windows.
+**macOS (arm64) builds and links** with both the Unix Makefiles and the Xcode
+generators (Apple Silicon, Xcode 16.2 / Apple clang 15–16, 0 errors). The binary
+launches without crashing, but full GUI/OpenGL init was NOT confirmed from this
+automated (headless) session — the process sits idle waiting on a window-server
+session, the same class of limitation as the Linux WSLg caveat below. Confirm the
+window + GL on an interactive desktop login. **iOS (arm64 simulator) builds and
+links** to a `Torque2D_DEBUG.app` (iOS 18.2 SDK); running it in the Simulator is
+the remaining step.
 
 ## How the build is structured
 
@@ -34,43 +41,111 @@ project files from it.
 - Generator scripts at repo root: `generate-vs2022.bat`, `generate-vs2026.bat`,
   `generate-xcode.command`, `generate-make.sh`.
 
-## macOS round (run on a Mac)
+## macOS round (run on a Mac) — builds & links (arm64); GUI runtime unconfirmed
 
-1. `chmod +x generate-xcode.command` (exec bit isn't preserved from a Windows checkout), then run it — or `cmake -S . -B build/xcode -G Xcode`.
-2. Build in Xcode (or `cmake --build build/xcode --config Debug`). Expect to fix:
-   - Objective-C++ (`.mm`) compile errors and any missing `#import`s.
-   - Framework linking (Cocoa/OpenGL/AppKit/AVFoundation/OpenAL are wired).
-3. Decisions to make:
-   - **App bundle:** the exe currently builds as a plain binary that runs from the
-     repo root (so it finds `main.cs`). For a real `.app`, add `MACOSX_BUNDLE` to
-     `add_executable` and sort out resource/cwd handling.
-   - **Architecture:** left at native (Apple Silicon = arm64). The old build forced
-     `x86_64` + deployment target `10.9`; set `CMAKE_OSX_ARCHITECTURES` /
-     `CMAKE_OSX_DEPLOYMENT_TARGET` only if you need Intel/universal/older targets.
-4. Verify the window launches and OpenGL initializes (as on Windows).
+Verified on Apple Silicon (Xcode 16.2) with BOTH generators (0 errors). Configure + build:
+- Makefiles: `cmake -S . -B build/macos -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug`
+  then `cmake --build build/macos -j8`.
+- Xcode: `generate-xcode.command` (or `cmake -S . -B build/xcode -G Xcode`) then
+  `cmake --build build/xcode --config Debug`. Both generators produce an identical
+  arm64 `Torque2D_DEBUG` at the repo root.
+- The exe lands at the repo root and must run from there so it finds `main.cs`. It
+  launches without crashing; full window/GL init was not reproducible from this
+  automated session (it blocks at 0% CPU waiting on a window-server session). Run it
+  from an interactive desktop login to confirm the GUI + OpenGL come up.
 
-## iOS round (run on a Mac, alongside the macOS round)
+Resolved issues (were latent in the scaffold):
+- **zlib needs `<unistd.h>`.** `engine/lib/zlib/gz*.c` call `read/write/close/lseek`;
+  zconf.h only includes `<unistd.h>` when `Z_HAVE_UNISTD_H` is set. Modern clang
+  errors on the otherwise-implicit declarations. Fixed by defining `HAVE_UNISTD_H`
+  on the zlib target for `UNIX` (`engine/lib/CMakeLists.txt`).
+- **Cocoa prefix header.** The `platformOSX` `.mm` back-end uses AppKit/Foundation
+  types at file scope (NSApplicationMain, NSEvent, NSCursor, NSAutoreleasePool,
+  NSTask, NSString, ...) and relied on the legacy Xcode prefix header. Reproduced
+  by force-including `tools/CMake/macOS-Prefix.h` (`-include`, guarded by `__OBJC__`
+  so C/C++ TUs are unaffected).
+- **One stray include.** `osxCocoaUtilities.mm` used `#import "fileDialog.h"`; fixed
+  to the canonical `"platform/nativeDialogs/fileDialog.h"` (matches every other
+  reference; the header dir was never on the search path).
+- **Architecture:** `CMAKE_OSX_ARCHITECTURES` is set to `arm64` (Apple Silicon) in
+  the `APPLE` block, overridable on the command line for Intel/universal builds. The
+  old build hard-coded `x86_64`.
+- **Deployment target:** `CMAKE_OSX_DEPLOYMENT_TARGET` is pinned to `11.0` (Big Sur,
+  the arm64 floor). Without it the binary inherited the host SDK default (14.6 here),
+  needlessly excluding older Macs. 11.0 does not block a future Metal renderer
+  (Metal/MetalKit ship since 10.11; only the Metal 3 feature set would need 13.0+).
+  The legacy Xcode project used 10.13 (an Intel-era value; predates arm64).
+
+Comparison against the legacy `engine/compilers/Xcode` project (differences that are
+deliberate or benign, not bugs):
+- **C++17** (vs legacy C++14) and the **modern C standard** (vs legacy `gnu89`) are
+  intentional. `gnu89` is precisely what masked the zlib implicit-declaration error;
+  it's fixed properly via `HAVE_UNISTD_H` rather than by loosening the C dialect.
+- The legacy project linked `ApplicationServices` and `QD` (QuickDraw) frameworks
+  and put `QD.framework` on the header path. The CMake build compiles and links
+  without them (QuickDraw is long dead; no active code includes it). Add them back
+  only if a runtime/link symbol turns up missing.
+- Source membership: the CMake build is a SUPERSET of the legacy project's compiled
+  sources — nothing is dropped. Third-party libs are separate static-lib targets
+  (`engine/lib/`); libjpeg uses `jmemmgr.c`+`jmemnobs.c` where legacy used the
+  equivalent `jmemansi.c`. CMake additionally compiles the editorToy sources,
+  `arrayObject`, `b2ParticleAssembly`, the (arm64-inert) x86 SIMD math TUs, and the
+  GoogleTest suite.
+
+## iOS round (run on a Mac) — DONE (builds & links; arm64 simulator)
 
 iOS is a **separate** platform from macOS (distinct `platformiOS/` sources and a
 UIKit/OpenGL-ES framework stack), and was **never supported by the old CMake** —
 the recipe here was derived fresh from the maintained `engine/compilers/Xcode_iOS`
 project. `CMakeLists.txt` distinguishes it via `TORQUE_IOS` (since `APPLE` is true
-on iOS too).
+on iOS too). Verified building/linking a `Torque2D_DEBUG.app` against the iOS 18.2
+simulator SDK.
 
-1. Configure with the Xcode generator and the iOS system name, e.g.:
-   `cmake -S . -B build/ios -G Xcode -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0`
-   (You'll also need a development team / signing identity for device builds; the
-   simulator is easier for a first pass.)
-2. Expect to resolve, on-platform:
-   - **`graphics/bitmapPvr.cc` (PVR textures) is required on iOS** but is excluded
-     from desktop builds in `EngineSources.cmake`. Re-add it for iOS (e.g. append
-     it to the iOS sources, or make its exclusion `if(NOT TORQUE_IOS)`).
-   - **GameKit:** `platformiOS/GameCenter.mm` uses GameKit — add
-     `"-framework GameKit"` if that file is compiled (the framework block notes this).
-   - OpenGL **ES** vs desktop GL paths in the engine (`iOSGL.mm` / `iOSGL2ES.mm`).
-   - Bundle/`Info.plist`, launch storyboard, and resource packaging for the `.app`.
-3. The source list (`TORQUE_PLATFORM_SOURCES_IOS`, 36 files incl. `platformiOS/menus`)
-   and the framework set are scaffolded; treat the rest as on-device iteration.
+Configure (arm64 simulator — no code-signing needed for a first pass):
+```
+cmake -S . -B build/ios -G Xcode -DCMAKE_SYSTEM_NAME=iOS \
+  -DCMAKE_OSX_SYSROOT=iphonesimulator -DCMAKE_OSX_ARCHITECTURES=arm64 \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
+cmake --build build/ios --config Debug
+```
+(For a device build, drop `-DCMAKE_OSX_SYSROOT=iphonesimulator`, set a development
+team, and flip `XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED`.) Use full Xcode, not just the
+Command Line Tools — point at it with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`
+(or `sudo xcode-select -s`).
+
+Resolved issues:
+- **`TORQUE_OS_IOS` must be predefined by the build.** `platform/types.gcc.h` gates
+  the iOS branch on `TORQUE_OS_IOS` but only *defines* it inside that branch — a
+  chicken-and-egg. Without it, `__APPLE__` selects the macOS/desktop-GL back-end and
+  fails on `<OpenGL/gl.h>`. The `TORQUE_IOS` block now defines `TORQUE_OS_IOS` (as
+  the legacy Xcode_iOS project did).
+- **UIKit prefix header.** Same mechanism as macOS: force-include
+  `tools/CMake/iOS-Prefix.h` (imports UIKit + Foundation, `__OBJC__`-guarded).
+- **`glDrawArraysProcPtr` collision (modern SDK).** The debug-only "outline GL"
+  feature does `#define glDrawArrays glDrawArraysProcPtr`. On the modern SDK the
+  prefix header drags GLES `gl.h` in a second time (UIKit → CoreImage), and the
+  macro rewrites the SDK's `glDrawArrays` *function* decl into `glDrawArraysProcPtr`,
+  colliding with the engine's same-named *variable*. Fixed by defining
+  `NO_REDEFINE_GL_FUNCS` for the iOS target (the engine's own escape hatch) — the
+  outline/wireframe debug draw becomes a no-op on iOS. (macOS is unaffected because
+  the Cocoa prefix header doesn't pull GL.)
+- **`graphics/bitmapPvr.cc` (PVR textures)** is required on iOS but excluded from
+  desktop builds in `EngineSources.cmake`; the `TORQUE_IOS` block adds it back.
+- **GameKit:** `"-framework GameKit"` is linked for `platformiOS/GameCenter.mm`.
+- **Output location:** like every target, the `.app` lands at the repo root
+  (`Torque2D_DEBUG.app`). A stale macOS bundle of the same name can leave a leftover
+  `Contents/` subdir inside it — harmless; delete it if it bothers you.
+
+Comparison against the legacy `engine/compilers/Xcode_iOS` project: same as macOS,
+the CMake source set is a superset (it also compiles the GoogleTest suite, which the
+legacy iOS project omitted). Deployment target is set to 12.0 to match legacy
+(`XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET` + `CMAKE_OSX_DEPLOYMENT_TARGET`);
+note the arm64 *simulator* slice reports minos 14.0 (simulators have their own floor)
+— a device build honors 12.0. Legacy used C++14; we use C++17 (engine-wide).
+
+Remaining: run it in the Simulator (`xcrun simctl install booted Torque2D_DEBUG.app`)
+and sort out asset/cwd packaging (the desktop build relies on running from the repo
+root; an installed `.app` needs the script/asset tree bundled).
 
 ## Linux round (run in WSL or on Linux) — DONE (builds & links, 32 & 64-bit)
 

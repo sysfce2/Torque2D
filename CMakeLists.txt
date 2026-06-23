@@ -7,8 +7,9 @@
 # filesystem or a hand-maintained .sln — is the single source of truth. Add a
 # source file there once, then regenerate the per-platform project files.
 #
-# This foundation round targets Windows (Visual Studio generator). Other
-# platforms are stubbed in PlatformSources.cmake for a follow-up round.
+# Windows (VS), macOS (arm64), Linux (32/64-bit), iOS (arm64 simulator), and
+# Android are wired and build; Emscripten is stubbed. See cmake/PlatformSources.cmake
+# and cmake/BUILD-PLATFORM-NOTES.md for per-platform status and recipes.
 # -----------------------------------------------------------------------------
 cmake_minimum_required(VERSION 3.21)
 
@@ -207,6 +208,30 @@ if(WIN32)
 endif()
 
 if(APPLE AND NOT TORQUE_IOS)
+    # Apple Silicon (arm64) build. The legacy Xcode project hard-coded x86_64;
+    # we target arm64 natively. Set explicitly so the architecture is reproducible
+    # regardless of the host (and overridable via -DCMAKE_OSX_ARCHITECTURES for a
+    # universal/Intel build).
+    if(NOT CMAKE_OSX_ARCHITECTURES)
+        set(CMAKE_OSX_ARCHITECTURES "arm64" CACHE STRING "macOS build architecture" FORCE)
+    endif()
+
+    # Minimum macOS. Without this the binary inherits the build host's SDK default
+    # (e.g. 14.6), needlessly excluding older Macs. 11.0 (Big Sur) is the floor for
+    # arm64 and is the lowest that still lets users on older systems run the game.
+    # It does NOT constrain a future Metal renderer: Metal/MetalKit have shipped
+    # since 10.11, so 11.0 fully supports Metal (only the Metal 3 feature set would
+    # need 13.0+, which a 2D engine won't require). Overridable on the command line.
+    if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+        set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version" FORCE)
+    endif()
+
+    # The platformOSX .mm back-end uses AppKit/Foundation types at file scope and
+    # relied on the legacy Xcode prefix header to import Cocoa. Reproduce that by
+    # force-including a CMake-owned prefix header (no-op for C/C++ TUs via __OBJC__).
+    target_compile_options(Torque2D PRIVATE
+        -include "${CMAKE_SOURCE_DIR}/tools/CMake/macOS-Prefix.h")
+
     # macOS desktop frameworks (from the historical build recipe). The on-platform
     # (Mac) session should confirm this links and the app starts; OpenAL is a
     # framework here (not dynamically loaded as on Windows).
@@ -218,23 +243,49 @@ endif()
 
 if(TORQUE_IOS)
     # iOS frameworks, derived from the maintained engine/compilers/Xcode_iOS
-    # project. SCAFFOLD — finalize/verify on a Mac: this needs the Xcode generator
-    # with -DCMAKE_SYSTEM_NAME=iOS, a code-signing team, and device/simulator
-    # selection. iOS uses OpenGL ES (not desktop OpenGL).
+    # project. Configure with the Xcode generator and -DCMAKE_SYSTEM_NAME=iOS.
+    # iOS uses OpenGL ES (not desktop OpenGL). The arm64 simulator is the easiest
+    # first target (no code-signing); device builds additionally need a team.
     set_target_properties(Torque2D PROPERTIES
         MACOSX_BUNDLE TRUE
-        XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "12.0")
+        XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "12.0"
+        # No automatic signing for a simulator/CI build; override for device.
+        XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO")
+
+    # The engine's OS detection (platform/types.gcc.h) gates the iOS branch on
+    # TORQUE_OS_IOS but only DEFINES it inside that branch — so the build system
+    # must predefine it (the legacy Xcode_iOS project did). Without it, __APPLE__
+    # makes the engine select the macOS/desktop-GL back-end and fail.
+    target_compile_definitions(Torque2D PRIVATE TORQUE_OS_IOS)
+
+    # The debug-only "outline GL" feature (iOSOutlineGL.h) does
+    # `#define glDrawArrays glDrawArraysProcPtr` to route draws through a swappable
+    # function pointer. On a modern iOS SDK the prefix header drags GLES gl.h in a
+    # second time (UIKit -> CoreImage), and the macro rewrites the SDK's
+    # glDrawArrays *function* declaration into glDrawArraysProcPtr, colliding with
+    # the engine's same-named *variable*. NO_REDEFINE_GL_FUNCS disables the macro
+    # (the engine's own escape hatch; each platform's *OutlineGL source already
+    # defines it locally) — outline/wireframe debug draw becomes a no-op on iOS.
+    target_compile_definitions(Torque2D PRIVATE NO_REDEFINE_GL_FUNCS)
+
+    # graphics/bitmapPvr.cc (PVR textures) is required on iOS but excluded from
+    # desktop builds in EngineSources.cmake — add it back here.
+    target_sources(Torque2D PRIVATE ${TORQUE_SRC}/graphics/bitmapPvr.cc)
+
+    # The platformiOS .mm back-end uses UIKit/Foundation types at file scope and
+    # relied on the legacy Xcode prefix header. Force-include the CMake-owned one
+    # (no-op for C/C++ TUs via __OBJC__).
+    target_compile_options(Torque2D PRIVATE
+        -include "${CMAKE_SOURCE_DIR}/tools/CMake/iOS-Prefix.h")
+
     target_link_libraries(Torque2D PRIVATE
         "-framework UIKit" "-framework OpenGLES" "-framework GLKit"
         "-framework QuartzCore" "-framework CoreGraphics" "-framework CoreText"
         "-framework CoreMotion" "-framework CoreMedia" "-framework CoreVideo"
         "-framework CoreAudio" "-framework CoreImage" "-framework AudioToolbox"
         "-framework AVFoundation" "-framework MediaPlayer" "-framework Foundation"
-        "-framework CoreFoundation" "-framework OpenAL")
-    # NOTE: platformiOS/GameCenter.mm uses GameKit — add "-framework GameKit" if
-    # that file is compiled. iOS also needs graphics/bitmapPvr.cc (PVR textures),
-    # which is excluded from desktop builds in EngineSources.cmake; re-add it for
-    # iOS (see cmake/BUILD-PLATFORM-NOTES.md).
+        "-framework CoreFoundation" "-framework OpenAL"
+        "-framework GameKit")  # platformiOS/GameCenter.mm
 endif()
 
 if(UNIX AND NOT APPLE AND NOT ANDROID)

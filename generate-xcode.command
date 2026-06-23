@@ -6,7 +6,9 @@
 #  once, since the executable bit is not preserved on a Windows checkout).
 #  Requires CMake and Xcode (with command line tools) installed.
 #
-#  STATUS: scaffolded, NOT yet verified on a Mac. See cmake/BUILD-PLATFORM-NOTES.md.
+#  STATUS: verified on Apple Silicon (Xcode 16.2) — builds & links (arm64, 0 errors).
+#  Full GUI/GL runtime should be confirmed from an interactive desktop login.
+#  For an iOS (simulator) project see cmake/BUILD-PLATFORM-NOTES.md.
 # ---------------------------------------------------------------------------
 set -e
 cd "$(dirname "$0")"

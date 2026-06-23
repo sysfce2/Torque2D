@@ -41,6 +41,13 @@ add_library(zlib STATIC
     ${CMAKE_CURRENT_SOURCE_DIR}/zlib/zutil.c
 )
 target_include_directories(zlib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/zlib)
+# On Unix, zlib's gz*.c call read/write/close/lseek, declared in <unistd.h>.
+# zconf.h only includes it when Z_HAVE_UNISTD_H is set (the ./configure macro);
+# define HAVE_UNISTD_H so it does. Modern clang (macOS) errors on the otherwise
+# implicit declarations; on Windows there is no <unistd.h> (uses <io.h>).
+if(UNIX)
+    target_compile_definitions(zlib PRIVATE HAVE_UNISTD_H)
+endif()
 torque_thirdparty_lib(zlib)
 endif()
 
