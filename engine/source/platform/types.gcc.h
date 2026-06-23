@@ -143,8 +143,9 @@ typedef unsigned long long  U64;
 #  define TORQUE_CPU_ARM
 #  define TORQUE_LITTLE_ENDIAN
 
-#elif defined(__arm64__)
-#  define TORQUE_CPU_STRING "ARM"
+#elif defined(__arm64__) || defined(__aarch64__)
+// __arm64__ is Apple clang; __aarch64__ is the Android NDK / Linux toolchains.
+#  define TORQUE_CPU_STRING "ARM64"
 #  define TORQUE_CPU_ARM
 #  define TORQUE_LITTLE_ENDIAN
 #  define TORQUE_CPU_X64
