@@ -333,8 +333,13 @@
     */
 #  include <float.h>
 
-#  if (defined(__MWERKS__) && defined(macintosh)) || defined(applec) || \
-    defined(THINK_C) || defined(__SC__) || defined(TARGET_OS_MAC)
+     /* The first branch targets Classic Mac OS, whose <fp.h> predates <math.h>.
+      * TARGET_OS_MAC is 1 on ALL modern Apple platforms (macOS/iOS), which have
+      * no <fp.h> and use <math.h> — so exclude modern Apple (__APPLE__), or the
+      * build fails with "'fp.h' file not found". */
+#  if ((defined(__MWERKS__) && defined(macintosh)) || defined(applec) || \
+    defined(THINK_C) || defined(__SC__) || defined(TARGET_OS_MAC)) && \
+    !defined(__APPLE__)
      /* We need to check that <math.h> hasn't already been included earlier
       * as it seems it doesn't agree with <fp.h>, yet we should really use
       * <fp.h> if possible.

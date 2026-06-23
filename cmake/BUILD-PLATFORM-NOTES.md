@@ -59,15 +59,24 @@ Resolved issues (were latent in the scaffold):
   zconf.h only includes `<unistd.h>` when `Z_HAVE_UNISTD_H` is set. Modern clang
   errors on the otherwise-implicit declarations. Fixed by defining `HAVE_UNISTD_H`
   on the zlib target for `UNIX` (`engine/lib/CMakeLists.txt`).
-- **zlib's Classic-Mac `fdopen` stub.** `zutil.h` does `#define fdopen(fd,mode) NULL`
-  under `MACOS || TARGET_OS_MAC`, but `TARGET_OS_MAC` is 1 on ALL modern Apple
-  platforms (macOS *and* iOS), which have a real `fdopen` — so the macro clobbers
-  the SDK's `<stdio.h>` declaration and fails to compile. `HAVE_UNISTD_H` (above)
-  pulls `<unistd.h>` early, defining `TARGET_OS_MAC` before the branch, which trips
-  this on newer SDKs (Xcode 16.4 / SDK 15.5 / iPhoneOS 18.5 on the CI runners; it
-  was latent on older local SDKs). Patched `zutil.h` to guard the stub with
-  `!defined(__APPLE__)` so only true Classic Mac OS gets it. This broke the macOS
-  and iOS CI jobs after the first Apple commit.
+- **Classic-Mac-OS landmines in the vendored libs (`TARGET_OS_MAC`).** Several of
+  the old vendored C libs gate code on `MACOS`/`TARGET_OS_MAC` assuming it means
+  *Classic* Mac OS. But `TARGET_OS_MAC` is 1 on ALL modern Apple platforms (macOS
+  *and* iOS), so those branches wrongly fire and reference headers/behaviour that
+  no longer exist. They are latent on older SDKs (which don't define
+  `TARGET_OS_MAC` until late) and fire on newer ones (Xcode 16.4 / macOS SDK 15.5 /
+  iPhoneOS 18.5 on the CI runners). Each surfaces only once the prior is fixed,
+  since the libs build in sequence. Fixed in place by excluding modern Apple
+  (`!defined(__APPLE__)`):
+    - `zlib/zutil.h` — `#define fdopen(fd,mode) NULL` clobbered the SDK's
+      `<stdio.h>` `fdopen` (`HAVE_UNISTD_H` above pulls `<unistd.h>` early, which
+      defines `TARGET_OS_MAC` before the branch).
+    - `lpng/pngpriv.h` — included the dead Classic-Mac `<fp.h>` instead of `<math.h>`.
+  The other Apple-compiled libs are clean: `ljpeg/jconfig.h` already handles
+  `__APPLE__`; `libogg`/`libvorbis` only branch on `_WIN32`. (The `TARGET_OS_MAC`
+  hits under `engine/lib/openal/*` and `engine/lib/freetype/android/*` are for
+  Windows/Android/iPhone-framework headers NOT compiled by the Apple CMake build —
+  macOS/iOS link the system OpenAL.framework and use Cocoa/UIKit fonts.)
 - **Cocoa prefix header.** The `platformOSX` `.mm` back-end uses AppKit/Foundation
   types at file scope (NSApplicationMain, NSEvent, NSCursor, NSAutoreleasePool,
   NSTask, NSString, ...) and relied on the legacy Xcode prefix header. Reproduced
