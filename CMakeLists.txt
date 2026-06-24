@@ -385,7 +385,7 @@ if(WIN32)
 endif()
 
 # ----------------------------------------------------------------------------
-# IDE niceties (Visual Studio).
+# IDE niceties (Visual Studio + Xcode).
 # ----------------------------------------------------------------------------
 source_group(TREE "${TORQUE_SRC}" PREFIX "engine"
     FILES ${TORQUE_ENGINE_SOURCES} ${TORQUE_PLATFORM_SOURCES})
@@ -393,3 +393,14 @@ source_group(TREE "${TORQUE_SRC}" PREFIX "engine"
 set_property(DIRECTORY "${CMAKE_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT Torque2D)
 set_target_properties(Torque2D PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+# On the macOS desktop build, make Xcode's Run/Debug scheme launch the app with
+# the repo root as its working directory — the exe loads main.cs and the script/
+# asset trees relative to the cwd, so without this "Run" from Xcode starts in the
+# wrong directory and the engine can't find main.cs. (iOS runs from a bundle in
+# the simulator/device, so this doesn't apply there.)
+if(APPLE AND NOT TORQUE_IOS)
+    set_target_properties(Torque2D PROPERTIES
+        XCODE_GENERATE_SCHEME        TRUE
+        XCODE_SCHEME_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+endif()
