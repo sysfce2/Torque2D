@@ -10,14 +10,23 @@ Target platforms: Windows, macOS, Linux, iOS, Android, and Web (Emscripten).
 
 ## Building
 
-There is **no single build command** — the engine is built through per-platform project files in `engine/compilers/`, all of which compile the sources in `engine/source` into an executable that is dropped at the **repository root** (`Torque2D.exe` / `Torque2D_DEBUG.exe` on Windows).
+**CMake is the single source of truth.** The engine is built from the root
+`CMakeLists.txt`; you generate a project for your platform/toolchain and build it.
+The executable is dropped at the **repository root** (`Torque2D.exe` /
+`Torque2D_DEBUG.exe` on Windows).
 
-- **Windows:** open `engine/compilers/VisualStudio 2022/Torque 2D.sln` (or the 2019 variant) in Visual Studio and build. The startup project and debugger working directory are preconfigured to the repo root.
-- **macOS / iOS:** Xcode projects in `engine/compilers/Xcode` and `engine/compilers/Xcode_iOS`.
-- **Linux:** Makefiles in `engine/compilers/Make-32bit` / `Make-64bit`.
-- **Android:** `engine/compilers/android-studio`.
-- **Web:** Emscripten/CMake under `engine/compilers/emscripten`.
-- **CMake (modern, target-based — being made the source of truth):** configure from the root `CMakeLists.txt`, e.g. `cmake -S . -B build -G "Visual Studio 17 2022" -A x64` then `cmake --build build --config Debug` (also `Release`/`Shipping`). The exe lands at the repo root (`Torque2D_DEBUG.exe` / `Torque2D.exe`). Engine sources are listed **explicitly** in `cmake/EngineSources.cmake` (cross-platform) and `cmake/PlatformSources.cmake` (per-platform; Windows implemented, others stubbed) — these are the authoritative file lists, **not** globs. Third-party libs (libogg, libvorbis, lpng, ljpeg, zlib) are built as static targets from `engine/lib/CMakeLists.txt`; GoogleTest is built via `add_subdirectory` and linked for the in-engine unit tests. Windows specifics that are load-bearing: static non-debug runtime `/MT` for all configs (avoids `_DEBUG`, which would make tinyXML `#define DEBUG` and break Box2D), `/Zc:wchar_t-` (so `wchar_t` == the engine's `UTF16`), C++17, and `_HAS_STD_BYTE=0`.
+- **Configure + build:** e.g. `cmake -S . -B build -G "Visual Studio 17 2022" -A x64` then `cmake --build build --config Debug` (also `Release`/`Shipping`). Single-config generators (Make/Ninja) use `-DCMAKE_BUILD_TYPE=` instead of `--config`. Convenience generator scripts live at the repo root (`generate-vs2022.bat`, `generate-vs2026.bat`, `generate-xcode.command`, `generate-make.sh`, `build-linux.sh`).
+- **Per-platform recipes & status** (configure flags for macOS/iOS/Linux 32-bit/Android, runtime-verification state) are documented in `cmake/BUILD-PLATFORM-NOTES.md`.
+- Engine sources are listed **explicitly** in `cmake/EngineSources.cmake` (cross-platform) and `cmake/PlatformSources.cmake` (per-platform back-ends: Windows, macOS, Linux, iOS, Android wired; Emscripten stubbed) — these are the authoritative file lists, **not** globs.
+- Third-party libs (libogg, libvorbis, lpng, ljpeg, zlib) are built as static targets from `engine/lib/CMakeLists.txt`; GoogleTest is built via `add_subdirectory` and linked for the in-engine unit tests (desktop only).
+- **Windows specifics that are load-bearing:** static non-debug runtime `/MT` for all configs (avoids `_DEBUG`, which would make tinyXML `#define DEBUG` and break Box2D), `/Zc:wchar_t-` (so `wchar_t` == the engine's `UTF16`), C++17, and `_HAS_STD_BYTE=0`.
+
+The few remaining items under `engine/compilers/` are **not** standalone build
+systems: `android-studio` is the Android app shell whose Gradle native step *invokes*
+the root CMake via the NDK; `Xcode_iOS` and `emscripten` are reference recipes kept
+until those platforms are CMake-runtime-verified. The legacy hand-maintained desktop
+projects (VS solutions, the macOS Xcode project, the Linux Makefiles) have been
+**retired** — CMake replaces them.
 
 The built executable must run from the repo root because it loads `main.cs` and the script/asset trees (`editor/`, `library/`, `toybox/`, `tools/`) relative to the working directory.
 
@@ -76,5 +85,5 @@ Games are composed of **modules**, each defined by a `module.taml` (`engine/sour
 ## Conventions
 
 - Header include guards use the `_NAME_H_` convention and are wrapped in `#ifndef` checks at every include site (see `platform.h`) — follow this when adding headers.
-- New engine source files must be added explicitly to `cmake/EngineSources.cmake` (or `cmake/PlatformSources.cmake` for platform-specific code) to be compiled under the CMake build, and — until CMake fully drives project generation — also added to the per-platform project files (e.g. the VS `.vcxproj`).
+- New engine source files must be added explicitly to `cmake/EngineSources.cmake` (cross-platform) or `cmake/PlatformSources.cmake` (platform-specific back-ends) to be compiled. These CMake lists are the single source of truth — regenerate your project from them; there are no hand-maintained `.vcxproj`/Xcode/Makefile lists to keep in sync anymore.
 - All pull requests target the **`development`** branch, not `master` (master is the stable release branch).

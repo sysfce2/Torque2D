@@ -31,6 +31,15 @@ there past "it builds" took six runtime fixes — see the macOS round below. **i
 has NOT been run yet and, being arm64, almost certainly carries the same runtime
 landmines macOS hit (see the arm64 float→unsigned note in the macOS round).
 
+**Legacy desktop projects retired.** With Windows, macOS, and Linux (32 & 64-bit)
+all CMake-runtime-verified, the hand-maintained desktop project files were deleted
+from `engine/compilers/` (the VS 2019/2022 solutions, the macOS `Xcode` project, and
+the `Make-32bit`/`Make-64bit` Makefiles) — CMake is now their single source of truth.
+What remains under `engine/compilers/` is intentionally kept: `android-studio` (the
+Gradle shell that *drives* CMake via the NDK), and `Xcode_iOS` + `emscripten` as
+reference recipes until those platforms are CMake-runtime-verified. (`cmake-modules`
+is retained because `emscripten/CMakeLists.txt` includes `CopyFiles` from it.)
+
 ## How the build is structured
 
 - `CMakeLists.txt` (root) — modern, target-based. Selects the active platform's
@@ -138,8 +147,9 @@ Resolved BUILD issues (were latent in the scaffold):
   (Metal/MetalKit ship since 10.11; only the Metal 3 feature set would need 13.0+).
   The legacy Xcode project used 10.13 (an Intel-era value; predates arm64).
 
-Comparison against the legacy `engine/compilers/Xcode` project (differences that are
-deliberate or benign, not bugs):
+Comparison against the legacy `engine/compilers/Xcode` project (now **retired** — see
+it in git history before the CMake migration; differences below are deliberate or
+benign, not bugs):
 - **C++17** (vs legacy C++14) and the **modern C standard** (vs legacy `gnu89`) are
   intentional. `gnu89` is precisely what masked the zlib implicit-declaration error;
   it's fixed properly via `HAVE_UNISTD_H` rather than by loosening the C dialect.
