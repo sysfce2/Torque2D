@@ -10,7 +10,7 @@ project files from it.
 |----------|--------------|------------|-------|------------------|
 | Windows (VS2022) | ✅ | ✅ | ✅ Debug+Release | ✅ (GUI launches) |
 | Windows (VS2026) | ✅ | — | — | generator supported by CMake 4.x; needs VS2026 installed |
-| macOS (arm64) | ✅ | ✅ | ✅ Debug | ⏳ (launches, no crash; GUI needs an interactive login session) |
+| macOS (arm64) | ✅ | ✅ | ✅ Debug (.app, signed) | ✅ (single window; editor renders + animates) |
 | Linux x86_64 (Make) | ✅ | ✅ | ✅ Debug+Release | ✅ (GUI launches under WSLg) |
 | Linux x86 32-bit (Make, -m32) | ✅ | ✅ | ✅ Release | ⏳ (WSL: needs WSLg/X server) |
 | iOS (arm64 simulator) | ✅ | ✅ | ✅ Debug (.app) | ⏳ (build/link done; not yet run in sim) |
@@ -22,14 +22,13 @@ project files from it.
 `./Torque2D_DEBUG`): the Project Manager window launches, OpenGL initializes via
 WSLg's D3D12/Mesa GL, and it shuts down cleanly. The 32-bit runtime still wants a
 display check — see the WSL caveat below.
-**macOS (arm64) builds and links** with both the Unix Makefiles and the Xcode
-generators (Apple Silicon, Xcode 16.2 / Apple clang 15–16, 0 errors). The binary
-launches without crashing, but full GUI/OpenGL init was NOT confirmed from this
-automated (headless) session — the process sits idle waiting on a window-server
-session, the same class of limitation as the Linux WSLg caveat below. Confirm the
-window + GL on an interactive desktop login. **iOS (arm64 simulator) builds and
-links** to a `Torque2D_DEBUG.app` (iOS 18.2 SDK); running it in the Simulator is
-the remaining step.
+**macOS (arm64) is DONE and RUNTIME-VERIFIED** (Apple Silicon, Xcode 16.2). It
+builds + code-signs a `Torque2D_DEBUG.app`, launches as a single window from Xcode,
+boots, and the Project Manager / editor renders and animates correctly. Getting
+there past "it builds" took six runtime fixes — see the macOS round below. **iOS
+(arm64 simulator) builds and links** to a `Torque2D_DEBUG.app` (iOS 18.2 SDK); it
+has NOT been run yet and, being arm64, almost certainly carries the same runtime
+landmines macOS hit (see the arm64 float→unsigned note in the macOS round).
 
 ## How the build is structured
 
@@ -44,20 +43,61 @@ the remaining step.
 - Generator scripts at repo root: `generate-vs2022.bat`, `generate-vs2026.bat`,
   `generate-xcode.command`, `generate-make.sh`.
 
-## macOS round (run on a Mac) — builds & links (arm64); GUI runtime unconfirmed
+## macOS round (run on a Mac) — DONE (builds, signs, runs; arm64)
 
-Verified on Apple Silicon (Xcode 16.2) with BOTH generators (0 errors). Configure + build:
+Verified on Apple Silicon (Xcode 16.2): builds with both generators (0 errors),
+code-signs, launches as a single window from Xcode, boots, and the editor renders +
+animates. Configure + build:
+- Xcode (recommended): `./generate-xcode.command` (or `cmake -S . -B build/xcode -G
+  Xcode`), then in Xcode pick the `Torque2D` scheme and Cmd-R. The Run scheme is
+  preconfigured with the repo root as its working directory.
 - Makefiles: `cmake -S . -B build/macos -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug`
   then `cmake --build build/macos -j8`.
-- Xcode: `generate-xcode.command` (or `cmake -S . -B build/xcode -G Xcode`) then
-  `cmake --build build/xcode --config Debug`. Both generators produce an identical
-  arm64 `Torque2D_DEBUG` at the repo root.
-- The exe lands at the repo root and must run from there so it finds `main.cs`. It
-  launches without crashing; full window/GL init was not reproducible from this
-  automated session (it blocks at 0% CPU waiting on a window-server session). Run it
-  from an interactive desktop login to confirm the GUI + OpenGL come up.
+- The product is a real `.app` bundle at the repo root (`Torque2D_DEBUG.app`). The
+  engine's `getExecutablePath()` finds `main.cs` in the bundle's PARENT dir, so no
+  asset repackaging is needed. NOTE: a `.app` must be launched via LaunchServices
+  (Xcode / `open` / double-click) — running the inner binary directly, or `open`ing
+  it from a headless/non-GUI session, won't deliver the launch event (launchd error
+  153), so GUI runtime can only be checked from an interactive desktop.
 
-Resolved issues (were latent in the scaffold):
+Resolved RUNTIME issues (these only appear once the app actually runs; six of them
+stood between "it builds" and "the editor works"):
+- **No window** — the bare executable installed no app delegate, so the engine never
+  booted. Fixed by bootstrapping AppKit programmatically in `platformOSX/main.mm`
+  (create NSApplication, set Regular activation policy, install AppDelegate, run) —
+  no nib required; the legacy `NSApplicationMain`/nib path is preserved for a bundle
+  that ships one.
+- **Crash on launch** — `GuiListBoxCtrl`'s `std::sort` comparators weren't a strict
+  weak ordering (`<=` for equality, negation for descending); modern libc++ aborts
+  on that. Fixed in `gui/guiListBoxCtrl.h`.
+- **Frozen UI / no scheduled events** — `getRealMilliseconds()` cast an out-of-range
+  `double` to `U32`, which SATURATES to a constant on arm64 (`fcvtzu`), so the sim
+  clock never advanced. Fixed via `U64` in `platformOSX/osxTime.mm`. (See the
+  recurring-bug note at the end of this section.)
+- **Duplicate windows (only under Xcode)** — the target was a `com.apple.product-
+  type.tool`, and Xcode relaunches a *tool* that becomes a GUI app via LaunchServices
+  → Terminal, spawning extra copies. Fixed with `MACOSX_BUNDLE` (a real `.app` has a
+  stable LaunchServices identity, launched once).
+- **CodeSign failure** — a `.app` must be signed to run on arm64; also the repo-root
+  `Torque2D_DEBUG.app` got contaminated by stale legacy + iOS build artifacts (iOS
+  writes a *flat* `.app` to the same path), which breaks codesign ("unsealed contents
+  in the bundle root"). Fixed with ad-hoc signing (`CODE_SIGN_IDENTITY="-"`, Manual
+  style) + cleaning the stale `.app`. **Delete the repo-root `.app` when switching
+  between the iOS and macOS builds in one checkout.**
+- **Editor UI hidden behind the background** — every fade-OUT was frozen.
+  `FluidColorI::processValue` did `(U8)mRound((target-start)*progress)`; for a fade
+  DOWN, `(target-start)` is negative and `(U8)(negative float)` saturates to 0 on
+  arm64, so alpha never left the start value. The Project Manager rendered fine but
+  sat under a `torqueCurtain` that never faded. Fixed in `math/mFluid.h` (round in
+  signed space, cast only the final sum to U8).
+
+**Recurring arm64 trap:** three of the above (clock, fades) are the SAME bug class —
+converting an out-of-range or negative float to an unsigned int **saturates** on
+arm64 where x86 silently **wrapped**. For any Apple-Silicon "value won't change"
+runtime bug, suspect this first; grep for `(U8)`/`(U32)` casts of float/time/`mRound`
+results. Casting a *positive in-range* value is fine (e.g. font metrics).
+
+Resolved BUILD issues (were latent in the scaffold):
 - **zlib needs `<unistd.h>`.** `engine/lib/zlib/gz*.c` call `read/write/close/lseek`;
   zconf.h only includes `<unistd.h>` when `Z_HAVE_UNISTD_H` is set. Modern clang
   errors on the otherwise-implicit declarations. Fixed by defining `HAVE_UNISTD_H`
@@ -164,9 +204,19 @@ legacy iOS project omitted). Deployment target is set to 12.0 to match legacy
 note the arm64 *simulator* slice reports minos 14.0 (simulators have their own floor)
 — a device build honors 12.0. Legacy used C++14; we use C++17 (engine-wide).
 
-Remaining: run it in the Simulator (`xcrun simctl install booted Torque2D_DEBUG.app`)
-and sort out asset/cwd packaging (the desktop build relies on running from the repo
-root; an installed `.app` needs the script/asset tree bundled).
+Remaining (NOT yet run): install in the Simulator (`xcrun simctl install booted
+Torque2D_DEBUG.app`) and sort out asset/cwd packaging (the desktop build runs from
+the repo root; an installed `.app` needs the script/asset tree bundled). Expect a
+batch of runtime fixes like macOS needed — iOS is arm64, so the **arm64 float→
+unsigned saturation** class (frozen clock, frozen fade-outs; see the macOS round)
+almost certainly bites here too, plus GLES-vs-desktop-GL paths and UIKit lifecycle.
+The macOS runtime fixes in `osxTime.mm`/`mFluid.h`/`guiListBoxCtrl.h` are
+cross-platform or have iOS equivalents worth checking first.
+
+Heads-up on the shared output path: iOS and macOS both emit `Torque2D_DEBUG.app` to
+the repo root but with INCOMPATIBLE layouts (iOS = flat; macOS = `Contents/`).
+Building one then the other in the same checkout corrupts the bundle and breaks
+codesign — `rm -rf Torque2D_DEBUG.app` when switching platforms.
 
 ## Linux round (run in WSL or on Linux) — DONE (builds & links, 32 & 64-bit)
 
