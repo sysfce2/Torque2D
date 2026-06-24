@@ -226,6 +226,36 @@ if(APPLE AND NOT TORQUE_IOS)
         set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS version" FORCE)
     endif()
 
+    # Build a proper .app bundle, NOT a bare command-line tool. Without this CMake
+    # emits a `com.apple.product-type.tool` target; when Xcode runs a tool that then
+    # turns itself into a GUI app (NSApplication / setActivationPolicy:Regular),
+    # macOS relaunches it to grant a GUI session — and relaunching a non-bundle
+    # executable goes through LaunchServices -> Terminal, which spawned EXTRA copies
+    # of the app (the mysterious "3 windows" only under Xcode). A real .app has a
+    # stable LaunchServices identity and is launched exactly once.
+    #
+    # The bundle lands at the repo root (CMAKE_RUNTIME_OUTPUT_DIRECTORY) next to
+    # main.cs. The engine's getExecutablePath() (osxFileIO.mm) searches inside the
+    # bundle (Contents/Resources) and then the bundle's PARENT dir for main.cs, so
+    # the script/asset trees resolve with no extra packaging — same as the legacy
+    # .app build.
+    set_target_properties(Torque2D PROPERTIES
+        MACOSX_BUNDLE                      TRUE
+        MACOSX_BUNDLE_BUNDLE_NAME          "Torque2D"
+        MACOSX_BUNDLE_GUI_IDENTIFIER       "org.torque2d.Torque2D"
+        MACOSX_BUNDLE_BUNDLE_VERSION       "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}")
+
+    # Ad-hoc code signing ("Sign to Run Locally"). On Apple Silicon a .app must be
+    # signed to run, but we don't want to require an Apple developer team/identity
+    # for a local build. "-" is the ad-hoc identity; Manual style stops Xcode's
+    # automatic signing from trying (and failing) to use a real team. Override these
+    # for a distributable, notarized build.
+    set_target_properties(Torque2D PROPERTIES
+        XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY  "-"
+        XCODE_ATTRIBUTE_CODE_SIGN_STYLE     "Manual"
+        XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED "NO")
+
     # The platformOSX .mm back-end uses AppKit/Foundation types at file scope and
     # relied on the legacy Xcode prefix header to import Cocoa. Reproduce that by
     # force-including a CMake-owned prefix header (no-op for C/C++ TUs via __OBJC__).
