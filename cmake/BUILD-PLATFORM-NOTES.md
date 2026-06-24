@@ -12,7 +12,7 @@ project files from it.
 | Windows (VS2026) | ✅ | — | — | generator supported by CMake 4.x; needs VS2026 installed |
 | macOS (arm64) | ✅ | ✅ | ✅ Debug (.app, signed) | ✅ (single window; editor renders + animates) |
 | Linux x86_64 (Make) | ✅ | ✅ | ✅ Debug+Release | ✅ (GUI launches under WSLg) |
-| Linux x86 32-bit (Make, -m32) | ✅ | ✅ | ✅ Release | ⏳ (WSL: needs WSLg/X server) |
+| Linux x86 32-bit (Make, -m32) | ✅ | ✅ | ✅ Debug+Release | ✅ (boots+GL init under WSLg via llvmpipe) |
 | iOS (arm64 simulator) | ✅ | ✅ | ✅ Debug (.app) | ⏳ (build/link done; not yet run in sim) |
 | Android (Gradle+CMake) | ✅ | ✅ (CI) | ✅ APK (CI) | ❌ (needs a device) |
 | Web (Emscripten) | stubbed | — | — | — |
@@ -20,8 +20,9 @@ project files from it.
 **Linux (32 & 64-bit) builds and links** (verified in WSL/Ubuntu 22.04). The
 **64-bit Debug GUI runtime is verified under WSLg** (`./build-linux.sh` →
 `./Torque2D_DEBUG`): the Project Manager window launches, OpenGL initializes via
-WSLg's D3D12/Mesa GL, and it shuts down cleanly. The 32-bit runtime still wants a
-display check — see the WSL caveat below.
+WSLg's D3D12/Mesa GL, and it shuts down cleanly. The **32-bit Debug runtime is also
+verified** under WSLg — same boot/GUI, but on llvmpipe (software GL), since WSLg's
+hardware-GL passthrough is 64-bit only. See the WSL caveat below.
 **macOS (arm64) is DONE and RUNTIME-VERIFIED** (Apple Silicon, Xcode 16.2). It
 builds + code-signs a `Torque2D_DEBUG.app`, launches as a single window from Xcode,
 boots, and the Project Manager / editor renders and animates correctly. Getting
@@ -224,17 +225,32 @@ codesign — `rm -rf Torque2D_DEBUG.app` when switching platforms.
    `sudo apt install build-essential cmake nasm libsdl1.2-dev libx11-dev libxft-dev libfreetype6-dev libopenal-dev libgl1-mesa-dev`
    For 32-bit add the multilib toolchain + `:i386` libs:
    `sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install gcc-multilib g++-multilib libsdl1.2-dev:i386 libx11-dev:i386 libxft-dev:i386 libfreetype6-dev:i386 libopenal-dev:i386 libgl1-mesa-dev:i386`
-   **Gotcha:** the dev package is per-arch. A box prepped for 32-bit has only
-   `libsdl1.2-dev:i386` (which still provides `sdl-config`, masking the problem),
-   so a default 64-bit configure fails `find_library(SDL12_LIBRARY)` with "SDL 1.2
-   not found". Install `libsdl1.2-dev` (`:amd64`) for the 64-bit build; the two
-   coexist.
+   **Gotcha (per-arch `-dev`, and they do NOT coexist):** `libsdl1.2-dev:amd64`
+   and `libsdl1.2-dev:i386` conflict (shared files like `sdl-config`), so only one
+   can be installed at a time — installing one removes the other. A box prepped for
+   32-bit has only `libsdl1.2-dev:i386` (which still provides `sdl-config`, masking
+   the problem), so a default 64-bit configure fails `find_library(SDL12_LIBRARY)`
+   with "SDL 1.2 not found"; install `libsdl1.2-dev` (`:amd64`) to build 64-bit.
+   The reverse bites the 32-bit build: with the amd64 `-dev` installed, the i386
+   dev symlink `/usr/lib/i386-linux-gnu/libSDL.so` is gone (only the runtime
+   `libSDL-1.2.so.0` from `libsdl1.2debian:i386` remains), so `find_library` can't
+   find it. The headers are arch-independent (shared), so the fix is to point CMake
+   at the i386 runtime directly: `-DSDL12_LIBRARY=/usr/lib/i386-linux-gnu/libSDL-1.2.so.0`
+   (no sudo; leaves the 64-bit setup intact). Alternatively recreate the symlink
+   (`sudo ln -s libSDL-1.2.so.0 /usr/lib/i386-linux-gnu/libSDL.so`) or swap dev
+   packages per build.
 2. 64-bit one-shot: `./build-linux.sh [Debug|Release|Shipping]` (configures **and**
    compiles, bounding `--parallel` to `nproc`, leaving the exe at the repo root).
    Configure-only: `./generate-make.sh Debug` then `cmake --build build/make -j$(nproc)`.
-   32-bit: configure with `-DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_EXE_LINKER_FLAGS=-m32`
-   (and `PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig`), then build. The root
-   picks the bitness path automatically from `CMAKE_SIZEOF_VOID_P`.
+   32-bit (verified building, linking, and running): configure with
+   `-DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_EXE_LINKER_FLAGS=-m32`
+   (and `PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig`, plus the SDL override
+   above when only the amd64 `-dev` is present), then build. `-m32` makes CMake
+   auto-detect `CMAKE_LIBRARY_ARCHITECTURE=i386-linux-gnu`, so OpenGL/FreeType/etc.
+   resolve to `/usr/lib/i386-linux-gnu`; the root picks the bitness code path from
+   `CMAKE_SIZEOF_VOID_P`. Note both builds emit `Torque2D_DEBUG` at the repo root,
+   so they overwrite each other — use separate build dirs (`build/make`, `build/make32`)
+   and rebuild whichever bitness you want at the root.
 3. Resolved issues (the original scaffold's wrong assumptions):
    - **SDL 1.2 is REQUIRED, not optional.** The back-end calls 1.2-only APIs
      (`SDL_GetVideoSurface`, `SDL_WM_*`, `SDL_*GammaRamp`, `SDL_GL_SwapBuffers`)
@@ -256,6 +272,10 @@ codesign — `rm -rf Torque2D_DEBUG.app` when switching platforms.
    load, and it exits 0 on close. The `X11_KeyToUnicode()` warning at startup is
    expected (the genuine-SDL-1.2 symbol, see above) and harmless. Without WSLg/an X
    server the build/link still verifies but the window won't appear.
+   **32-bit also boots under WSLg**, but falls back to **llvmpipe (software GL)** —
+   `Renderer: llvmpipe (...)` rather than the 64-bit `D3D12 (NVIDIA ...)`, because
+   WSLg's hardware-GL passthrough (the d3d12 Mesa driver) is 64-bit only. It still
+   renders; on real 32-bit hardware it would use the native GL driver.
 
 ## Android round (build via CI or Android Studio + NDK)
 
