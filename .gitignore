@@ -6,6 +6,7 @@
 /tmp/*
 /preferences.cs
 /engine/**/preferences.cs
+/console.log
 *.dso
 *.edso
 *.user
