@@ -1067,10 +1067,14 @@ bool dPathCopy(const char *fromName, const char *toName, bool nooverwrite)
 
    // Add path to our return list (provided it is valid).
    if (!Platform::isExcludedDirectory(subPath)){
-      if (noBasePath && (subPath && (dStrncmp (subPath, "", 1) != 0)) ){
-         // There is no base path to concatenate with, and this subpath is nonempty.
-         // Store the subPath as a starting point.
-         directoryVector.push_back(StringTable->insert(subPath));
+      if (noBasePath){
+         // No base path requested: store only non-empty subpaths, and NEVER the
+         // base directory itself. This matches the Win32 back-end and is what
+         // getDirectoryList() relies on to return immediate child names — the old
+         // code fell into the else below for the empty-subPath root call and
+         // pushed the base path, so getDirectoryList() returned just the path.
+         if (subPath && (dStrncmp(subPath, "", 1) != 0))
+            directoryVector.push_back(StringTable->insert(subPath));
       } else {
          // There is a base path. Store the concatenated path.
          directoryVector.push_back(StringTable->insert(Path));
@@ -1157,7 +1161,12 @@ bool dPathCopy(const char *fromName, const char *toName, bool nooverwrite)
  bool Platform::dumpDirectories(const char *path, Vector<StringTableEntry> &directoryVector, S32 depth, bool noBasePath)
  {
    ResourceManager->initExcludedDirectories();
-   bool retVal = recurseDumpDirectories(path, "", directoryVector, 0, depth, noBasePath);
+   // Start the recursion at currentDepth = -1 (NOT 0) to match the Win32 back-end:
+   // the child-recursion guard is `currentDepth < recurseDepth`, so with the common
+   // depth==0 call (e.g. getDirectoryList) a start of 0 gives `0 < 0` == false and
+   // descends into NO children, returning an empty/just-base list. Starting at -1
+   // makes depth==0 enumerate the immediate child directories as intended.
+   bool retVal = recurseDumpDirectories(path, "", directoryVector, -1, depth, noBasePath);
    clearExcludedDirectories();
    return retVal;
  }
