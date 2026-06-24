@@ -61,7 +61,11 @@ public:
 	inline bool isAnimating() { return mAnimationProgress < 1.0f; }
 	F32 getProgress(const S32 time); //Returns the progress to the target with 0 as starting and 1 as the target.
 
-	inline U8 processValue(const F32 progress, const U8 start, const U8 target) { return start + (U8)mRound((target - start) * progress); };
+	// NOTE: mRound returns F32, and (target - start) is negative when fading toward
+	// a smaller value. Casting that negative float straight to U8 is undefined and
+	// SATURATES TO 0 on arm64 (fcvtzu) — so every fade-OUT froze at the start value.
+	// Round to a signed int and cast only the final (in-range) sum to U8.
+	inline U8 processValue(const F32 progress, const U8 start, const U8 target) { return (U8)(start + (S32)mRound((target - start) * progress)); };
 	inline S32 processValue(const F32 progress, const S32 start, const S32 target) { return start + (S32)mRound((target - start) * progress); };
 	inline F32 processValue(const F32 progress, const F32 start, const F32 target) { return start + ((target - start) * progress); };
 };
