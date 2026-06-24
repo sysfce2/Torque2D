@@ -11,14 +11,17 @@ project files from it.
 | Windows (VS2022) | ✅ | ✅ | ✅ Debug+Release | ✅ (GUI launches) |
 | Windows (VS2026) | ✅ | — | — | generator supported by CMake 4.x; needs VS2026 installed |
 | macOS (arm64) | ✅ | ✅ | ✅ Debug | ⏳ (launches, no crash; GUI needs an interactive login session) |
-| Linux x86_64 (Make) | ✅ | ✅ | ✅ Debug+Release | ⏳ (WSL: needs WSLg/X server) |
+| Linux x86_64 (Make) | ✅ | ✅ | ✅ Debug+Release | ✅ (GUI launches under WSLg) |
 | Linux x86 32-bit (Make, -m32) | ✅ | ✅ | ✅ Release | ⏳ (WSL: needs WSLg/X server) |
 | iOS (arm64 simulator) | ✅ | ✅ | ✅ Debug (.app) | ⏳ (build/link done; not yet run in sim) |
 | Android (Gradle+CMake) | ✅ | ✅ (CI) | ✅ APK (CI) | ❌ (needs a device) |
 | Web (Emscripten) | stubbed | — | — | — |
 
-**Linux (32 & 64-bit) builds and links** (verified in WSL/Ubuntu 22.04). Runtime
-("window appears") still wants WSLg or a real Linux box — see the WSL caveat below.
+**Linux (32 & 64-bit) builds and links** (verified in WSL/Ubuntu 22.04). The
+**64-bit Debug GUI runtime is verified under WSLg** (`./build-linux.sh` →
+`./Torque2D_DEBUG`): the Project Manager window launches, OpenGL initializes via
+WSLg's D3D12/Mesa GL, and it shuts down cleanly. The 32-bit runtime still wants a
+display check — see the WSL caveat below.
 **macOS (arm64) builds and links** with both the Unix Makefiles and the Xcode
 generators (Apple Silicon, Xcode 16.2 / Apple clang 15–16, 0 errors). The binary
 launches without crashing, but full GUI/OpenGL init was NOT confirmed from this
@@ -171,7 +174,14 @@ root; an installed `.app` needs the script/asset tree bundled).
    `sudo apt install build-essential cmake nasm libsdl1.2-dev libx11-dev libxft-dev libfreetype6-dev libopenal-dev libgl1-mesa-dev`
    For 32-bit add the multilib toolchain + `:i386` libs:
    `sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install gcc-multilib g++-multilib libsdl1.2-dev:i386 libx11-dev:i386 libxft-dev:i386 libfreetype6-dev:i386 libopenal-dev:i386 libgl1-mesa-dev:i386`
-2. 64-bit: `./generate-make.sh Debug` then `cmake --build build/make -j$(nproc)`.
+   **Gotcha:** the dev package is per-arch. A box prepped for 32-bit has only
+   `libsdl1.2-dev:i386` (which still provides `sdl-config`, masking the problem),
+   so a default 64-bit configure fails `find_library(SDL12_LIBRARY)` with "SDL 1.2
+   not found". Install `libsdl1.2-dev` (`:amd64`) for the 64-bit build; the two
+   coexist.
+2. 64-bit one-shot: `./build-linux.sh [Debug|Release|Shipping]` (configures **and**
+   compiles, bounding `--parallel` to `nproc`, leaving the exe at the repo root).
+   Configure-only: `./generate-make.sh Debug` then `cmake --build build/make -j$(nproc)`.
    32-bit: configure with `-DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_EXE_LINKER_FLAGS=-m32`
    (and `PKG_CONFIG_PATH=/usr/lib/i386-linux-gnu/pkgconfig`), then build. The root
    picks the bitness path automatically from `CMAKE_SIZEOF_VOID_P`.
@@ -189,9 +199,13 @@ root; an installed `.app` needs the script/asset tree bundled).
      `types.gcc.h`'s CPU detection keys off it).
    - **OpenGL/FreeType** are resolved via `find_package`; SDL via
      `find_library`/`find_path` (the latter so `#include <SDL/SDL.h>` resolves).
-4. **WSL runtime caveat:** WSL2 builds/links fine, but running the GL GUI needs
-   WSLg (or an X server). Build/link verification is solid in WSL; full "window
-   appears" may want a real Linux box or WSLg.
+4. **WSL runtime — VERIFIED under WSLg (64-bit Debug).** On a WSL2 box with WSLg
+   up (`DISPLAY=:0`, `WAYLAND_DISPLAY=wayland-0`, `/mnt/wslg/.X11-unix/X0`),
+   `./Torque2D_DEBUG` launches the Project Manager GUI: OpenGL initializes through
+   WSLg's GL stack (`Renderer: D3D12 (...) Mesa`), screen mode sets, editor modules
+   load, and it exits 0 on close. The `X11_KeyToUnicode()` warning at startup is
+   expected (the genuine-SDL-1.2 symbol, see above) and harmless. Without WSLg/an X
+   server the build/link still verifies but the window won't appear.
 
 ## Android round (build via CI or Android Studio + NDK)
 
