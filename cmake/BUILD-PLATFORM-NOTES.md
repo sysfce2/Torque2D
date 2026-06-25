@@ -13,7 +13,8 @@ project files from it.
 | macOS (arm64) | ✅ | ✅ | ✅ Debug (.app, signed) | ✅ (single window; editor renders + animates) |
 | Linux x86_64 (Make) | ✅ | ✅ | ✅ Debug+Release | ✅ (GUI launches under WSLg) |
 | Linux x86 32-bit (Make, -m32) | ✅ | ✅ | ✅ Debug+Release | ✅ (boots+GL init under WSLg via llvmpipe) |
-| iOS (arm64 simulator) | ✅ | ✅ | ✅ Debug (.app) | ⏳ (build/link done; not yet run in sim) |
+| iOS (arm64 simulator) | ✅ | ✅ | ✅ Debug (.app, full bundle) | ✅ editor renders + touch works (user-confirmed) |
+| iOS (arm64 device) | ✅ | ✅ | ✅ Debug (.app, code-signed) | ✅ runs on a real iPad — perfect FPS, touch good (user-confirmed) |
 | Android (Gradle+CMake) | ✅ | ✅ (CI) | ✅ APK (CI) | ❌ (needs a device) |
 | Web (Emscripten) | stubbed | — | — | — |
 
@@ -27,9 +28,13 @@ hardware-GL passthrough is 64-bit only. See the WSL caveat below.
 builds + code-signs a `Torque2D_DEBUG.app`, launches as a single window from Xcode,
 boots, and the Project Manager / editor renders and animates correctly. Getting
 there past "it builds" took six runtime fixes — see the macOS round below. **iOS
-(arm64 simulator) builds and links** to a `Torque2D_DEBUG.app` (iOS 18.2 SDK); it
-has NOT been run yet and, being arm64, almost certainly carries the same runtime
-landmines macOS hit (see the arm64 float→unsigned note in the macOS round).
+(arm64) is DONE and RUNTIME-VERIFIED on both the simulator AND a real iPad
+(iOS 26.2.1, Xcode 26.x).** The editor renders, point-based GUI scale is correct,
+and touch input works; on hardware the frame rate is perfect (the simulator's poor
+FPS was its GLES translation layer, not the engine). Getting from "builds" to "runs"
+took four runtime fixes (frozen clock, frame-allocator size, point-vs-pixel scale,
+touch release) — see the iOS round below. The device build is code-signed with a free
+Apple ID (7-day profile; no paid account).
 
 **Legacy desktop projects retired.** With Windows, macOS, and Linux (32 & 64-bit)
 all CMake-runtime-verified, the hand-maintained desktop project files were deleted
@@ -51,7 +56,8 @@ is retained because `emscripten/CMakeLists.txt` includes `CopyFiles` from it.)
 - `engine/lib/CMakeLists.txt` — third-party static libs (platform-neutral; MSVC
   flags are guarded by `if(MSVC)`).
 - Generator scripts at repo root: `generate-vs2022.bat`, `generate-vs2026.bat`,
-  `generate-xcode.command`, `generate-make.sh`.
+  `generate-xcode.command` (macOS), `generate-xcode-ios.command` (iOS simulator),
+  `generate-xcode-ios-device.command` (iOS device, code-signed), `generate-make.sh`.
 
 ## macOS round (run on a Mac) — DONE (builds, signs, runs; arm64)
 
@@ -164,7 +170,7 @@ benign, not bugs):
   `arrayObject`, `b2ParticleAssembly`, the (arm64-inert) x86 SIMD math TUs, and the
   GoogleTest suite.
 
-## iOS round (run on a Mac) — DONE (builds & links; arm64 simulator)
+## iOS round (run on a Mac) — DONE (runtime-verified; arm64 simulator AND real device)
 
 iOS is a **separate** platform from macOS (distinct `platformiOS/` sources and a
 UIKit/OpenGL-ES framework stack), and was **never supported by the old CMake** —
@@ -180,10 +186,32 @@ cmake -S . -B build/ios -G Xcode -DCMAKE_SYSTEM_NAME=iOS \
   -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
 cmake --build build/ios --config Debug
 ```
-(For a device build, drop `-DCMAKE_OSX_SYSROOT=iphonesimulator`, set a development
-team, and flip `XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED`.) Use full Xcode, not just the
-Command Line Tools — point at it with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`
-(or `sudo xcode-select -s`).
+Use full Xcode, not just the Command Line Tools — point at it with
+`DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` (or `sudo xcode-select -s`).
+
+**Device build (code-signed):** `./generate-xcode-ios-device.command` (configures into
+`build/ios-device` with `-DCMAKE_OSX_SYSROOT=iphoneos`). The root `CMakeLists` detects
+simulator-vs-device from the SDK: a `[Ss]imulator` sysroot keeps `CODE_SIGNING_ALLOWED=NO`;
+anything else (incl. the default empty → iphoneos) switches to `CODE_SIGN_STYLE=Automatic`.
+Supply the signing identity one of two ways: pass `-DTORQUE_IOS_TEAM=<10-char team id>`
+(the device script forwards `$TORQUE_IOS_TEAM`/`$TORQUE_IOS_BUNDLE_ID` from the env), or
+leave it empty and pick the team in Xcode's target → Signing & Capabilities. The bundle id
+(`-DTORQUE_IOS_BUNDLE_ID`, default `org.torque2d.Torque2D`) must be unique to the Apple
+account; a free Apple ID works for running on your own device (7-day profile). On the device:
+enable Developer Mode (Settings → Privacy & Security), and trust the cert after first install
+(Settings → General → VPN & Device Management). A device `.app` is a thin/arm64 bundle; the
+same POST_BUILD content copy applies, so `main.cs` + the trees ship inside it.
+
+**Verified on real hardware** (an iPad on iOS 26.2.1, Xcode 26.x) — the editor runs, the
+point-based GUI scale is correct, touch input works, and the frame rate is perfect. Toolchain
+note: an iOS 26 device needs Xcode 26.x (hence a recent macOS — this required upgrading off
+Sonoma 14.6.1). Free-account first-launch gotcha that cost real time: the device showed
+"Unable to Verify App — An Internet connection is required" / "Developer App Certificate is
+not trusted" *even while online*. With a free Personal Team, iOS must reach Apple's cert server
+(`ppq.apple.com`) on first launch, and that check fails silently on clock skew or a stuck network
+state. **What fixed it: restart the iPad, then Verify** (with Date & Time on Automatic). Toggling
+airplane mode and dropping to cellular-only did NOT help. A paid Developer Program account would
+remove the online-verify step (and the 7-day expiry) entirely, but it isn't needed for spot-testing.
 
 Resolved issues:
 - **`TORQUE_OS_IOS` must be predefined by the build.** `platform/types.gcc.h` gates
@@ -215,14 +243,85 @@ legacy iOS project omitted). Deployment target is set to 12.0 to match legacy
 note the arm64 *simulator* slice reports minos 14.0 (simulators have their own floor)
 — a device build honors 12.0. Legacy used C++14; we use C++17 (engine-wide).
 
-Remaining (NOT yet run): install in the Simulator (`xcrun simctl install booted
-Torque2D_DEBUG.app`) and sort out asset/cwd packaging (the desktop build runs from
-the repo root; an installed `.app` needs the script/asset tree bundled). Expect a
-batch of runtime fixes like macOS needed — iOS is arm64, so the **arm64 float→
-unsigned saturation** class (frozen clock, frozen fade-outs; see the macOS round)
-almost certainly bites here too, plus GLES-vs-desktop-GL paths and UIKit lifecycle.
-The macOS runtime fixes in `osxTime.mm`/`mFluid.h`/`guiListBoxCtrl.h` are
-cross-platform or have iOS equivalents worth checking first.
+Runnable bundle — DONE. The first simulator run showed the app launching but
+**nothing rendering**, because the CMake-generated `.app` was bundle-incomplete: it
+had no `CFBundleIdentifier`, no storyboard, and no game content. The iOS app's
+window is NOT created programmatically — `T2DAppDelegate` (`@synthesize window`, no
+`UIWindow alloc`) relies on a **Main storyboard** (`UIMainStoryboardFile`) to
+instantiate `T2DViewController` (a `GLKViewController`) hosting `T2DView` (the
+`GLKView` the engine renders into). The bare CMake plist had none of that, so the
+delegate launched but no window/GL view ever existed. Fixed by reproducing the
+legacy `engine/compilers/Xcode_iOS` bundle in CMake (`TORQUE_IOS` block):
+- **`tools/CMake/iOS-Info.plist.in`** (wired via `MACOSX_BUNDLE_INFO_PLIST`):
+  bundle id, `UIMainStoryboardFile`(+`~ipad`), `UILaunchStoryboardName`,
+  `LSRequiresIPhoneOS`, landscape orientations, `UIRequiresFullScreen`. Device
+  family + bundle id are ALSO set as build settings (`TARGETED_DEVICE_FAMILY`,
+  `PRODUCT_BUNDLE_IDENTIFIER`) because Xcode overrides the matching plist keys and
+  warns otherwise.
+- **Storyboards** bundled as compiled resources (ibtool): `iPhoneStoryboard` /
+  `iPadStoryboard` (copied from the legacy project into `tools/CMake` so the build
+  is self-contained — the GLKit UI) + a new minimal static **`LaunchScreen`**
+  (modern iOS needs a launch storyboard for a full-screen drawable; it may contain
+  no custom classes, so it's separate from the GL storyboards).
+- **Game content** copied into the flat `.app` root via POST_BUILD: `main.cs` +
+  `editor/`, `library/`, `toybox/`, `tools/`. An installed iOS app is sandboxed, so
+  `getExecutablePath()` resolves to the bundle and the content must live inside it
+  (the desktop build instead runs from the repo-root cwd). `main.cs` boots the
+  editor (`exec "./editor/main.cs"`), same as desktop.
+
+Verified: `xcodebuild ... -sdk iphonesimulator -arch arm64` BUILD SUCCEEDED with the
+storyboards compiled/linked and all content present in `Torque2D_DEBUG.app`. Generate
+with `./generate-xcode-ios.command`.
+
+Runtime — DONE (the editor renders; user-confirmed from Xcode on an iPad Pro 11" M4
+iOS 18.3 simulator). Three fixes stood between "launches" and "renders":
+- **Black screen #1 — frozen clock.** `platformiOS/iOSTime.mm` `getRealMilliseconds()`
+  was the **arm64 float→unsigned saturation** bug (see the macOS round), in iOS's own
+  time file that the `osxTime.mm` fix never touched: `mach_absolute_time() *
+  absolute_to_millis` (a huge double) was stored in a Carbon `Duration` (SInt32) and
+  saturated to INT_MAX on arm64 → constant time → sim clock never advanced → the
+  editor's fade-in curtain stayed opaque → black. Fixed via U64 (mirrors `osxTime.mm`).
+  `mFluid.h`/`guiListBoxCtrl.h` are shared headers, already applied to iOS.
+- **Black screen #2 — FrameAllocator assert.** `game/defaultGame.cc` initialized the iOS
+  frame allocator at 256/512KB (a 2013, ~256MB-RAM-era value), but `main.cs` boots the
+  full desktop editor; a boot-time allocation overran the buffer and tripped the fatal
+  `frameAllocator.h:102` "alloc too large" assert → halt. Bumped iOS to the desktop 3MB
+  (negligible on modern devices; Android/Emscripten keep the small budget).
+- **Half-size GUI + broken scene picking — pixel-vs-point coordinate mismatch.**
+  The engine ran in PIXEL resolution (`$pref::iOS::Width = points * scale`) while the GL
+  backing was built at POINT resolution (`createFramebuffer` runs in `viewDidLoad` and the
+  old `contentScaleFactor` set in `Platform::initWindow` ran later and only for `scale==2`).
+  The decision (user direction) is to render in **points**, not pixels: a Retina display
+  packs 2-3x the pixels into the same physical area, so a GUI laid out in raw pixels is
+  half/third size. The fix makes logical resolution, GL backing, and touch input all share
+  ONE point-space coordinate system:
+    * `iOSWindow.mm` `Platform::init`: `$pref::iOS::Width/Height` = point bounds (dropped the
+      `* screenScale`).
+    * `T2DViewController.mm`: force `view.contentScaleFactor = 1` BEFORE `createFramebuffer`
+      (a UIView otherwise defaults it to the screen scale), and `retinaEnabled = false` so
+      touch points are not scaled up. `iOSWindow.mm` `initWindow` also pins it to 1 (and no
+      longer special-cases `scale==2`).
+  Trade-off: rendering is at point resolution (UIKit upscales the layer to the physical
+  screen → slightly soft on Retina), but GUI sizing and scene picking are correct. A future
+  improvement could decouple a points logical space from a pixel backing for crisp Retina,
+  but that needs the GL viewport to use `backingWidth` while the projection stays in points.
+  (Confirmed correct on the simulator and on a real iPad.)
+- **Touch never released (press stuck) — two layers.** (1) `iOSInput.mm` `createMouseUpEvent`
+  posted `SI_BREAK` only on an EXACT coordinate match with the stored slot; the simulator's
+  mouse-up lands a pixel off → event dropped. Also it never freed the slot (leak → eventually
+  no downs). Fixed: fall back to the first occupied slot, set the cursor to the release point,
+  clear the slot. (2) The REAL stick was in `gui/guiCanvas.cc` `rootScreenTouchUp`: unlike the
+  desktop `rootMouseUp`, it ignored `mMouseCapturedControl` and only dispatched to the control
+  under the release point. A `GuiButtonCtrl` calls `mouseLock()` in `onTouchDown`, so if the
+  release didn't re-hit the button it stayed locked + depressed with no way to release. Fixed
+  by routing the up to the captured control first (mirrors `rootMouseUp`); touch-only, so
+  desktop is unaffected.
+
+All four fixes are confirmed working in the simulator AND on a real iPad. The simulator's
+**poor frame rate did NOT carry to hardware** — on the device the frame rate is perfect, so it
+was the simulator's GLES translation layer, not an engine problem. Note that on touch there is
+no hover/move without a finger down, so the editor cursor only tracks during a press — that is
+inherent to touch, not a bug.
 
 Heads-up on the shared output path: iOS and macOS both emit `Torque2D_DEBUG.app` to
 the repo root but with INCOMPATIBLE layouts (iOS = flat; macOS = `Contents/`).

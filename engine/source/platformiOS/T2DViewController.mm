@@ -129,32 +129,39 @@ extern void _iOSGameInnerLoop();
     
     T2DView *view = (T2DView *) self.view;
     view.context = self.context;
-    
+
+    // Point-based rendering: pin the GL backing to POINT resolution by forcing
+    // contentScaleFactor = 1 BEFORE createFramebuffer. createFramebuffer sizes the
+    // renderbuffer from layer.bounds * layer.contentsScale (renderbufferStorage:
+    // fromDrawable:), and a UIView defaults contentScaleFactor to the screen scale
+    // (2-3 on Retina). We deliberately render in points so the GUI is physically
+    // the right size on Retina (see Platform::init); the logical resolution, this
+    // backing, and the point-space touch coords must therefore all be at scale 1.
+    // (Must be set here — the old Platform::initWindow set ran AFTER this, too late,
+    // and only for scale==2.) retinaEnabled=false so touch points are NOT scaled up.
+    view.contentScaleFactor = 1.0f;
+    retinaEnabled = false;
+
 	if( AccelerometerUpdateMS <= 0 ) {
         //Luma:	This variable needs to be store MS value, not Seconds value
         AccelerometerUpdateMS = 33; // 33 ms
 	}
-	
+
 	//Luma: Do division by 1000.0f here to get the seconds value that the UIAccelerometer needs
 	//[[UIAccelerometer sharedAccelerometer] setUpdateInterval:(AccelerometerUpdateMS / 1000.0f)];//this value is in seconds
 	//[[UIAccelerometer sharedAccelerometer] setDelegate:self];
-    
+
 	[EAGLContext setCurrentContext:self.context];
 	[self createFramebuffer];
-	
+
     view.isLayedOut = true;
-    
+
     //by default, we are in portrait(upright) mode
 	view.currentAngle = (M_PI / 2.0);
-    
+
     platState.multipleTouchesEnabled = true;
     [self.view setMultipleTouchEnabled:YES];
-    
-    retinaEnabled = false;
-    
-    if([[UIScreen mainScreen] respondsToSelector:@selector(scale)] && [[UIScreen mainScreen] scale] > 1)
-        retinaEnabled = true;
-    
+
     UIApplication * application = [UIApplication sharedApplication];
     id appDelegate = [application delegate];
     

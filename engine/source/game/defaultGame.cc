@@ -126,7 +126,7 @@ bool initializeLibraries()
     // Create the stock colors.
     StockColor::create();
     
-#if defined(TORQUE_OS_IOS) || defined(TORQUE_OS_ANDROID) || defined(TORQUE_OS_EMSCRIPTEN)
+#if defined(TORQUE_OS_ANDROID) || defined(TORQUE_OS_EMSCRIPTEN)
    //3MB default is way too big for iPhone!!!
 #ifdef	TORQUE_SHIPPING
     FrameAllocator::init(256 * 1024);	//256KB for now... but let's test and see!
@@ -134,8 +134,14 @@ bool initializeLibraries()
     FrameAllocator::init(512 * 1024);	//512KB for now... but let's test and see!
 #endif	//TORQUE_SHIPPING
 #else
+    // iOS uses the full 3MB like desktop. main.cs boots the same desktop-class
+    // editor, which is sized for the 3MB budget; the historical 256/512KB iPhone
+    // limit (a 2013, ~256MB-RAM-era value) is far too small and a single editor-
+    // boot allocation overruns it, tripping the FrameAllocator "alloc too large"
+    // AssertFatal -> the app halts to a black screen. Modern iOS devices have GBs
+    // of RAM, so 3MB is negligible. (Android/Emscripten keep the small budget above.)
     FrameAllocator::init(3 << 20);      // 3 meg frame allocator buffer
-#endif	//TORQUE_OS_IOS
+#endif	//TORQUE_OS_ANDROID || TORQUE_OS_EMSCRIPTEN
 
     TextureManager::create();
     ResManager::create();

@@ -1185,18 +1185,32 @@ bool createMouseDownEvent( S32 touchNumber, S32 x, S32 y, U32 numTouches )
 bool createMouseUpEvent( S32 touchNumber, S32 x, S32 y, S32 lastX, S32 lastY, U32 numTouches ) //EFM
 {	
 	S32 currentSlot = -1;
-	
+
 	for( int i = 0 ; (i < MAX_TOUCH_EVENTS) && (currentSlot == -1) ; i++ )
 	{
 		if(( (x == lastTouches[i].lastX) && (y == lastTouches[i].lastY )) ||
 		   ( (lastX == lastTouches[i].lastX ) && (lastY == lastTouches[i].lastY )))
 		{
 			currentSlot = i;
-		}	
+		}
 	}
-	
-	if( currentSlot == -1 ) 
+
+	// Fallback: no exact coordinate match. The release can land a pixel off the
+	// last move/down (notably the simulator's mouse-up), and on a touchscreen that
+	// otherwise left the press STUCK with no way to release it (the click never
+	// "let go"). Release the first occupied slot instead of dropping the event.
+	if( currentSlot == -1 )
+	{
+		for( int i = 0 ; (i < MAX_TOUCH_EVENTS) && (currentSlot == -1) ; i++ )
+			if( lastTouches[i].lastX != -1 )
+				currentSlot = i;
+	}
+
+	if( currentSlot == -1 )
         return false;
+
+	//Luma: keep the cursor at the release point so the GUI registers the up there
+	Canvas->setCursorPos( Point2I( x, y ) );
 
 	ScreenTouchEvent event;
 	event.xPos = x;
@@ -1204,11 +1218,18 @@ bool createMouseUpEvent( S32 touchNumber, S32 x, S32 y, S32 lastX, S32 lastY, U3
 	event.action = SI_BREAK;
 	event.touchID = currentSlot;
 	event.numTouches = numTouches;
-    
-	TouchUpEvents.push_back( touchEvent( currentSlot, x, y ) );	
-	
+
+	// Free the slot so the next press can reuse it. createMouseDownEvent claims a
+	// slot where lastX == -1; the up handler never released it, so after
+	// MAX_TOUCH_EVENTS presses every slot was occupied and no further mouse-downs
+	// registered. (move/down set lastTouches; only up clears it.)
+	lastTouches[currentSlot].lastX = -1;
+	lastTouches[currentSlot].lastY = -1;
+
+	TouchUpEvents.push_back( touchEvent( currentSlot, x, y ) );
+
 	Game->postEvent(event);
-	
+
 	return true;//return false if we get bad values or something
 }
 

@@ -274,13 +274,81 @@ endif()
 if(TORQUE_IOS)
     # iOS frameworks, derived from the maintained engine/compilers/Xcode_iOS
     # project. Configure with the Xcode generator and -DCMAKE_SYSTEM_NAME=iOS.
-    # iOS uses OpenGL ES (not desktop OpenGL). The arm64 simulator is the easiest
-    # first target (no code-signing); device builds additionally need a team.
+    # iOS uses OpenGL ES (not desktop OpenGL).
+
+    # Simulator vs. device. The simulator (-DCMAKE_OSX_SYSROOT=iphonesimulator)
+    # needs NO code-signing — the easiest first target. A physical device needs a
+    # real signing identity + provisioning profile, which means automatic signing
+    # and an Apple Development Team. Detect from the SDK: anything not a *simulator*
+    # SDK (incl. the default empty -> iphoneos) is a device build.
+    if(CMAKE_OSX_SYSROOT MATCHES "[Ss]imulator")
+        set(TORQUE_IOS_SIMULATOR TRUE)
+    else()
+        set(TORQUE_IOS_SIMULATOR FALSE)
+    endif()
+
+    # Overridable identity. Bundle id should be unique to YOUR Apple account for
+    # device provisioning (default uses the project's reverse-domain; override with
+    # e.g. -DTORQUE_IOS_BUNDLE_ID=com.yourcompany.torque2d). TORQUE_IOS_TEAM is your
+    # 10-char Apple Development Team ID — leave empty to pick the team in Xcode's
+    # Signing & Capabilities tab instead.
+    set(TORQUE_IOS_BUNDLE_ID "org.torque2d.Torque2D" CACHE STRING "iOS app bundle identifier")
+    set(TORQUE_IOS_TEAM "" CACHE STRING "Apple Development Team ID for iOS device code-signing")
+
     set_target_properties(Torque2D PROPERTIES
         MACOSX_BUNDLE TRUE
-        XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "12.0"
-        # No automatic signing for a simulator/CI build; override for device.
-        XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO")
+        XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET "12.0")
+
+    if(TORQUE_IOS_SIMULATOR)
+        # Simulator: skip signing entirely.
+        set_target_properties(Torque2D PROPERTIES XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO")
+    else()
+        # Device: automatic signing. Xcode creates/uses a development provisioning
+        # profile for TORQUE_IOS_BUNDLE_ID under the selected team. If TORQUE_IOS_TEAM
+        # is empty, Xcode shows "Signing requires a development team" until you pick
+        # one in the target's Signing & Capabilities tab (a free Apple ID works).
+        set_target_properties(Torque2D PROPERTIES XCODE_ATTRIBUTE_CODE_SIGN_STYLE "Automatic")
+        if(TORQUE_IOS_TEAM)
+            set_target_properties(Torque2D PROPERTIES XCODE_ATTRIBUTE_DEVELOPMENT_TEAM "${TORQUE_IOS_TEAM}")
+        endif()
+    endif()
+
+    # The iOS app's window is NOT created programmatically — T2DAppDelegate relies
+    # on a Main storyboard (UIMainStoryboardFile) to instantiate T2DViewController
+    # (a GLKViewController) hosting T2DView (the GLKView the engine renders into).
+    # CMake's auto-generated Info.plist has none of the iOS keys (no bundle id, no
+    # storyboard, no orientations), so the bare bundle launches the delegate but
+    # never gets a window -> black screen. Supply a real iOS Info.plist template
+    # and fill it from these MACOSX_BUNDLE_* properties (CFBundleExecutable is
+    # filled per-config, so Debug -> Torque2D_DEBUG / Release -> Torque2D).
+    set_target_properties(Torque2D PROPERTIES
+        MACOSX_BUNDLE_INFO_PLIST           "${CMAKE_SOURCE_DIR}/tools/CMake/iOS-Info.plist.in"
+        MACOSX_BUNDLE_BUNDLE_NAME          "Torque2D"
+        MACOSX_BUNDLE_GUI_IDENTIFIER       "${TORQUE_IOS_BUNDLE_ID}"
+        MACOSX_BUNDLE_BUNDLE_VERSION       "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        # Xcode prefers these build settings over the matching Info.plist keys and
+        # warns on a mismatch. Set them so the bundle id used at install time is
+        # ours and the device family (1=iPhone, 2=iPad) is authoritative. (The
+        # plist's CFBundleIdentifier is kept as a literal for non-Xcode tooling;
+        # UIDeviceFamily is intentionally omitted from the plist in favor of this.)
+        XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${TORQUE_IOS_BUNDLE_ID}"
+        XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY    "1,2")
+
+    # Bundle the storyboards as compiled resources (Xcode runs ibtool on them).
+    # iPhone/iPad: the GLKit UI referenced by UIMainStoryboardFile. LaunchScreen:
+    # a plain static screen referenced by UILaunchStoryboardName (modern iOS needs
+    # one for a full-screen drawable; it may not contain custom classes, so it's
+    # separate from the GL storyboards). The two GL storyboards were copied from
+    # engine/compilers/Xcode_iOS into tools/CMake so the CMake build is self-
+    # contained (independent of the legacy project tree).
+    set(TORQUE_IOS_STORYBOARDS
+        ${CMAKE_SOURCE_DIR}/tools/CMake/iPhoneStoryboard.storyboard
+        ${CMAKE_SOURCE_DIR}/tools/CMake/iPadStoryboard.storyboard
+        ${CMAKE_SOURCE_DIR}/tools/CMake/LaunchScreen.storyboard)
+    target_sources(Torque2D PRIVATE ${TORQUE_IOS_STORYBOARDS})
+    set_source_files_properties(${TORQUE_IOS_STORYBOARDS} PROPERTIES
+        MACOSX_PACKAGE_LOCATION Resources)
 
     # The engine's OS detection (platform/types.gcc.h) gates the iOS branch on
     # TORQUE_OS_IOS but only DEFINES it inside that branch — so the build system
@@ -316,6 +384,26 @@ if(TORQUE_IOS)
         "-framework AVFoundation" "-framework MediaPlayer" "-framework Foundation"
         "-framework CoreFoundation" "-framework OpenAL"
         "-framework GameKit")  # platformiOS/GameCenter.mm
+
+    # Bundle the script/asset trees INTO the .app. Unlike the desktop build (which
+    # runs from the repo root and finds main.cs + the trees via the cwd), an
+    # installed iOS app is sandboxed: getExecutablePath() (iOSFileio.mm) resolves
+    # to the bundle, so the content must live inside it. The engine boots the
+    # editor via main.cs (exec "./editor/main.cs"), which needs the library/ and
+    # toybox/ trees too. iOS bundles are FLAT, so everything goes to the bundle
+    # ROOT ($<TARGET_BUNDLE_DIR>), matching the legacy Xcode_iOS folder references.
+    # (POST_BUILD so it lands in whatever build dir Xcode produces, before install;
+    # copy_directory re-copies each build — acceptable for a dev/smoke-test bundle.)
+    set(TORQUE_IOS_CONTENT_DIRS editor library toybox tools)
+    add_custom_command(TARGET Torque2D POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy
+            "${CMAKE_SOURCE_DIR}/main.cs" "$<TARGET_BUNDLE_DIR:Torque2D>/main.cs"
+        COMMENT "Bundling Torque2D script/asset trees into the iOS .app")
+    foreach(_dir ${TORQUE_IOS_CONTENT_DIRS})
+        add_custom_command(TARGET Torque2D POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_SOURCE_DIR}/${_dir}" "$<TARGET_BUNDLE_DIR:Torque2D>/${_dir}")
+    endforeach()
 endif()
 
 if(UNIX AND NOT APPLE AND NOT ANDROID)
