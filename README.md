@@ -31,16 +31,16 @@ If you do not wish to compile the source code yourself, precompiled binary files
 
 ### Building the Source
 
-After downloading a copy of the source code, the following project files for each platform are provided for you and can be found in the `engine/compilers` folder.
+**CMake is the single source of truth for the build.** You generate a project for your platform/toolchain from the root `CMakeLists.txt` and build it; the compiled executable is written to the repository root. Convenience generator scripts live at the repo root:
 
-* **Windows:** Visual Studio 2019 and 2022 (works with the free Community Edition)
-* **OSX:** Xcode
-* **Linux:** Make
-* **iOS:** Xcode_iOS
-* **Android:** Android Studio
-* **Web:** Emscripten/CMake
+* **Windows:** `generate-vs2022.bat` (or `generate-vs2026.bat`) → a Visual Studio solution
+* **macOS:** `generate-xcode.command` → an Xcode project
+* **Linux:** `build-linux.sh` (configures and builds; 32- and 64-bit)
+* **iOS:** `generate-xcode-ios.command` (simulator) or `generate-xcode-ios-device.command` (device)
+* **Android:** open `engine/compilers/android-studio` in Android Studio — its Gradle build drives CMake via the NDK
+* **Web:** Emscripten support is being migrated to CMake and is not yet available
 
-Additionally, a **CMake** build system is now available as a cross-platform alternative to the platform-specific project files. CMake is becoming the source of truth for the build, so it is the recommended way to produce an up-to-date project file.
+The hand-maintained per-platform project files that used to live in `engine/compilers/` have been removed — CMake replaces them. For full step-by-step build instructions on every platform, see the [Torque2D wiki](https://github.com/TorqueGameEngines/Torque2D/wiki) (the *Building from Source* guide).
 
 #### Generating a Visual Studio 2022 solution with CMake
 

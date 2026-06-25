@@ -36,13 +36,13 @@ took four runtime fixes (frozen clock, frame-allocator size, point-vs-pixel scal
 touch release) — see the iOS round below. The device build is code-signed with a free
 Apple ID (7-day profile; no paid account).
 
-**Legacy desktop projects retired.** With Windows, macOS, and Linux (32 & 64-bit)
-all CMake-runtime-verified, the hand-maintained desktop project files were deleted
-from `engine/compilers/` (the VS 2019/2022 solutions, the macOS `Xcode` project, and
-the `Make-32bit`/`Make-64bit` Makefiles) — CMake is now their single source of truth.
-What remains under `engine/compilers/` is intentionally kept: `android-studio` (the
-Gradle shell that *drives* CMake via the NDK), and `Xcode_iOS` + `emscripten` as
-reference recipes until those platforms are CMake-runtime-verified. (`cmake-modules`
+**Legacy projects retired.** With Windows, macOS, Linux (32 & 64-bit), and iOS all
+CMake-runtime-verified, the hand-maintained project files were deleted from
+`engine/compilers/` (the VS 2019/2022 solutions, the macOS `Xcode` project, the
+`Make-32bit`/`Make-64bit` Makefiles, and the `Xcode_iOS` project) — CMake is now their
+single source of truth. What remains under `engine/compilers/` is intentionally kept:
+`android-studio` (the Gradle shell that *drives* CMake via the NDK) and `emscripten`
+(a reference recipe until the Web target is CMake-runtime-verified). (`cmake-modules`
 is retained because `emscripten/CMakeLists.txt` includes `CopyFiles` from it.)
 
 ## How the build is structured
@@ -236,7 +236,8 @@ Resolved issues:
   (`Torque2D_DEBUG.app`). A stale macOS bundle of the same name can leave a leftover
   `Contents/` subdir inside it — harmless; delete it if it bothers you.
 
-Comparison against the legacy `engine/compilers/Xcode_iOS` project: same as macOS,
+Comparison against the legacy `engine/compilers/Xcode_iOS` project (now **retired** —
+see git history): same as macOS,
 the CMake source set is a superset (it also compiles the GoogleTest suite, which the
 legacy iOS project omitted). Deployment target is set to 12.0 to match legacy
 (`XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET` + `CMAKE_OSX_DEPLOYMENT_TARGET`);

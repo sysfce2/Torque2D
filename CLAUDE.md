@@ -23,9 +23,9 @@ The executable is dropped at the **repository root** (`Torque2D.exe` /
 
 The few remaining items under `engine/compilers/` are **not** standalone build
 systems: `android-studio` is the Android app shell whose Gradle native step *invokes*
-the root CMake via the NDK; `Xcode_iOS` and `emscripten` are reference recipes kept
-until those platforms are CMake-runtime-verified. The legacy hand-maintained desktop
-projects (VS solutions, the macOS Xcode project, the Linux Makefiles) have been
+the root CMake via the NDK, and `emscripten` is a reference recipe kept until the Web
+target is CMake-runtime-verified. The legacy hand-maintained projects (the VS
+solutions, the macOS and iOS Xcode projects, and the Linux Makefiles) have all been
 **retired** — CMake replaces them.
 
 The built executable must run from the repo root because it loads `main.cs` and the script/asset trees (`editor/`, `library/`, `toybox/`, `tools/`) relative to the working directory.
