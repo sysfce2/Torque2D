@@ -307,7 +307,18 @@ bool initializeGame(int argc, const char **argv)
     Platform::makeFullPathName(useDefaultScript ? defaultScriptName : argv[1], buffer, sizeof(buffer), Platform::getCurrentDirectory());
     ptr = dStrrchr( buffer, '/' );
     if ( ptr )
-        *ptr = 0;
+    {
+        // If the only slash is the leading one, the script lives at the filesystem
+        // root (e.g. "/main.cs" on Android, where the asset tree is the APK root).
+        // Truncating at that slash would leave an EMPTY main.cs dir, and an empty
+        // cwd feeds makeFullPathName a buffer whose end pointer underflows past its
+        // start -> out-of-bounds path math -> crash during module registration.
+        // Keep the leading slash so the directory is "/" rather than "".
+        if ( ptr == buffer )
+            ptr[1] = 0;   // "/"
+        else
+            *ptr = 0;
+    }
     Platform::setMainDotCsDir(buffer);
     Platform::setCurrentDirectory(buffer);
 

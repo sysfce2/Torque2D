@@ -15,7 +15,7 @@ project files from it.
 | Linux x86 32-bit (Make, -m32) | ✅ | ✅ | ✅ Debug+Release | ✅ (boots+GL init under WSLg via llvmpipe) |
 | iOS (arm64 simulator) | ✅ | ✅ | ✅ Debug (.app, full bundle) | ✅ editor renders + touch works (user-confirmed) |
 | iOS (arm64 device) | ✅ | ✅ | ✅ Debug (.app, code-signed) | ✅ runs on a real iPad — perfect FPS, touch good (user-confirmed) |
-| Android (Gradle+CMake) | ✅ | ✅ (CI) | ✅ APK (CI) | ❌ (needs a device) |
+| Android (Gradle+CMake) | ✅ | ✅ (CI) | ✅ APK (CI) | ⏳ (runs via Firebase Test Lab; registers all modules, then crashes in font init — see Android round) |
 | Web (Emscripten) | stubbed | — | — | — |
 
 **Linux (32 & 64-bit) builds and links** (verified in WSL/Ubuntu 22.04). The
@@ -410,8 +410,39 @@ freetype/openal). Build it with the CI job (`./gradlew assembleDebug`) or open
 - Added `platformAndroid` to the Android include path (`T2DActivity.h` includes the vendored
   `<android_native_app_glue.h>`).
 
-Still to do (needs a device/emulator, not CI): actually run the APK; the engine init,
-asset loading from the APK (AAssetManager), and GLES rendering are unverified.
+**Runtime — IN PROGRESS (debugged via Firebase Test Lab).** With no local arm64 device,
+the APK is run on a **real Pixel 7** through Firebase Test Lab (Robo test, free Spark
+tier). The local x86_64 emulator *can* run the arm64 APK via NDK ARM translation, but a
+crash there lands in an anonymous translated-code region that can't be symbolicated — so
+use a real device. Debug loop: build → FTL Robo run → download the logcat →
+`ndk-stack -sym <app/build/intermediates/cxx/Debug/.../obj/arm64-v8a> -dump <logcat>`
+(the unstripped lib keeps full symbols + line numbers).
+
+What works so far: APK installs, EGL + GLESv1/v2 and OpenAL initialize, the
+android_native_app_glue lifecycle runs, and **all editor modules register**.
+
+Fixed to get there:
+- **Empty main.cs dir (the module-registration crash).** Android's process cwd is `/`, so
+  `defaultGame.cc` resolved `main.cs` to `/main.cs`, then chopped the filename at the
+  *leading* slash, leaving an **empty** main.cs dir. That empty string became the `cwd`
+  for every `Platform::makeFullPathName`, so `endptr = buffer + strlen("")-1 = buffer-1`
+  (before the buffer) → out-of-bounds path math → SIGSEGV in `catPath`. Fixed in
+  `defaultGame.cc`: when the script is at the filesystem root, keep `/` as the directory
+  rather than truncating to `""`. Also hardened `platformFileIO.cc` `makeFullPathName` /
+  `catPath` (signed remaining-length via `getMax(...,0)` + a `len<3` guard) so a
+  degenerate cwd can't overrun the buffer again — a latent cross-platform bug.
+
+NEXT bug (not yet fixed): **font loading.** Once the editor draws its first text it
+crashes in `AndroidFont::getCharInfo` (null deref, fault 0x98) ← `GFont::getStrNWidth`.
+Two layers: (1) the editor's font fails to load — `FT_New_Face` errors on the path from
+`T2DActivity::getFontPath` (`AndroidFont.cpp` / `T2DActivity.cpp:1072`); (2) latent
+robustness bug — `AndroidFont::create()` returns `true` even when the face fails, and
+`getCharInfo` dereferences `face` with no null check. The fix needs the font to actually
+resolve on Android AND the failure propagated/guarded.
+
+Also still expect the **arm64 float→unsigned saturation** class (frozen clock / frozen
+fades; fixed on macOS/iOS in `osxTime.mm` / `iOSTime.mm` / `mFluid.h`) once it reaches the
+sim/render loop — `AndroidTime` / `AndroidMath` likely carry the same trap.
 
 Remaining iteration notes:
 - **Engine source set under GLES/NDK:** the unified `EngineSources.cmake` will surface files that
