@@ -58,7 +58,7 @@ U32 _StringTable::hashString(const char* str)
    char c;
    while((c = *str++) != 0) {
       ret <<= 1;
-      ret ^= sgHashTable[c];
+      ret ^= sgHashTable[(U8)c];   // index unsigned: `char` is signed, so a byte >= 0x80 would index sgHashTable[negative] -> OOB (a hard trap on wasm; silently wrong on desktop)
    }
    return ret;
 }
@@ -72,7 +72,7 @@ U32 _StringTable::hashStringn(const char* str, S32 len)
    char c;
    while((c = *str++) != 0 && len--) {
       ret <<= 1;
-      ret ^= sgHashTable[c];
+      ret ^= sgHashTable[(U8)c];   // index unsigned: `char` is signed, so a byte >= 0x80 would index sgHashTable[negative] -> OOB (a hard trap on wasm; silently wrong on desktop)
    }
    return ret;
 }
