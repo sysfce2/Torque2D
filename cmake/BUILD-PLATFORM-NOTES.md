@@ -16,7 +16,7 @@ project files from it.
 | iOS (arm64 simulator) | ✅ | ✅ | ✅ Debug (.app, full bundle) | ✅ editor renders + touch works (user-confirmed) |
 | iOS (arm64 device) | ✅ | ✅ | ✅ Debug (.app, code-signed) | ✅ runs on a real iPad — perfect FPS, touch good (user-confirmed) |
 | Android (Gradle+CMake) | ✅ | ✅ (CI) | ✅ APK (CI) | ⏳ (runs via Firebase Test Lab; registers all modules, then crashes in font init — see Android round) |
-| Web (Emscripten/WASM) | ✅ | ✅ | ✅ Debug (.html/.js/.wasm/.data) | ⏳ boots in-browser (WebGL up, modules load, main loop runs); editor render blocked on fonts |
+| Web (Emscripten/WASM) | ✅ | ✅ | ✅ Debug (.html/.js/.wasm/.data) | ✅ editor renders in-browser — Project Manager UI with TEXT (from .uft cache) + sprites; stable, no crash (a few un-baked title font sizes log non-fatal warnings) |
 
 **Linux (32 & 64-bit) builds and links** (verified in WSL/Ubuntu 22.04). The
 **64-bit Debug GUI runtime is verified under WSLg** (`./build-linux.sh` →
@@ -578,26 +578,64 @@ screenshotting. Boot reaches: all subsystems init → **WebGL 1.0 context up**
   font-robustness bug (`AndroidFont::create` returning true on failure + unguarded
   deref).
 
-### Open: FONTS are the hard blocker between "boots" and "editor renders"
-The web build has **no font backend** — `EmscriptenFont.cpp createPlatformFont()`
-returns `NULL` (stubbed), and the shipped `.uft` glyph caches don't cover the editor's
-default profile fonts (e.g. `monaco 12`). With the crash guarded, boot now reaches a
-HARD requirement: `guiTypes.cc:768` `AssertFatal` "GuiControlProfile: unable return
-requested font monaco 12!" → `exit(1)`. The canvas stays black (engine halted during
-editor GUI construction; no "Exception thrown" — it exits cleanly, runtime kept alive
-by the RAF). There is no graceful path past this: the GUI fundamentally needs fonts.
-**Next round** = give Emscripten real fonts, either (a) compile FreeType to wasm and
-implement `EmscriptenFont` like `AndroidFont`, or (b) wire the shipped `.uft` glyph
-cache so `GFont::create` finds them. This is the SAME root cause as the open Android
-font crash — fix them together.
+### Fonts round — DONE: the editor renders TEXT on the web (cache-first, no FreeType)
+The web build has **no font backend** (`EmscriptenFont::createPlatformFont()` is stubbed),
+so it can't synthesize glyphs at runtime. But the engine's `.uft` files are **fully
+self-contained** (glyph bitmaps + metrics + texture sheets via `GFont::read`) and load
+with no platform font — and the editor already ships ~125 MB of them. So fonts were wired
+**cache-first** (the `.uft` already in the preload), no FreeType, no extra download. Result:
+the Project Manager UI renders with real text ("TORQUE2D", version, project-tile labels)
+plus sprites, stable, no crash. This was also the first end-to-end exercise of the GL
+**draw** path on web (text quads + sprite batches under `LEGACY_GL_EMULATION`) — it works.
 
-Also noted (not yet fixed; non-fatal):
-- **`Con::init should only be called once`** assert at boot — console is initialized
-  twice on Emscripten (boot-time double-init; same "boot only once" class as the macOS
-  fix). Non-fatal (boot continues once the assert is dismissed/suppressed).
-- For automated/headless boot the assert dialogs should default to "don't break,
-  continue" without prompting (a web build shouldn't pop blocking assert dialogs at
-  all).
+Fixes (most are cross-platform robustness; the asset-path ones are web-specific):
+- **Blocking assert dialogs wedged the tab.** `PlatformAssert::process` showed a native
+  `AlertRetry`/`AlertOKCancel` (→ blocking `confirm()`) for every non-Warning assert and
+  `forceShutdown(1)` on Cancel — fatal inside the rAF main loop, and a per-frame assert
+  produced an un-dismissable dialog storm. On `TORQUE_OS_EMSCRIPTEN` the assert is now
+  logged-and-continued (no modal, no shutdown) — the only sane web behavior. This is what
+  unblocked boot past the (still-present, non-fatal) `Con::init should only be called once`
+  double-init assert.
+- **Frame allocator too small.** Emscripten was grouped with Android at 512 KB, but it
+  boots the SAME desktop-class editor iOS needed 3 MB for — moved Emscripten to the 3 MB
+  branch (`defaultGame.cc`); only Android keeps the small budget.
+- **`GuiControlProfile::getFont()` hard-asserted on a missing font** (`guiTypes.cc:768`),
+  and text-render sites deref the result. Now it falls back to another loaded size in the
+  profile and returns NULL only if the profile has no usable font (cross-platform).
+- **Web font selection + cache dir.** `AppCore`/`EditorCore` `SetProfileFont` picked
+  "monaco" on web (`$platform=="x86UNIX"`, no `.uft`, no system font). Added a web branch
+  (`$platformUnixType=="emscripten"`) → "share tech mono". The base `GuiDefaultProfile`
+  also hardcoded a **non-existent** `^EditorCore/gui/fonts` dir (desktop only survived via
+  `createPlatformFont`); pointed it at an **expanded** real dir under the registered
+  `^EditorCore` expando that actually ships the face — `^EditorCore/Themes/LabCoat/fonts`
+  (the resource manager does NOT resolve the `^Module` expando for cache lookups, and
+  `^AppCore` isn't even loaded at editor boot, so the path must be pre-`expandPath`'d).
+- **`GFont::getTextureHandle(index)` did an unguarded `mTextureSheets[index]`** — an
+  out-of-range sheet index returned a garbage `TextureHandle` whose non-NULL `object` was
+  then dereferenced by `lock()` → fatal wasm "memory access out of bounds" in `dglDrawText`.
+  Bounds-checked to return a NULL handle (lock-safe), so an unrenderable glyph is skipped
+  (cross-platform robustness; gFont.h).
+
+**SCRIPT-CHANGE GOTCHA (build):** the `--preload-file` asset trees are NOT tracked as CMake
+dependencies (same as `--js-library platform.js`), so editing a `.cs`/asset does NOT trigger
+a repackage. After a script edit, force it: `rm build/emscripten/Torque2D_DEBUG.{html,js,wasm,data}`
+then rebuild. (TODO: add a CMake custom-command dependency on the preload trees, or a clean
+target, so script edits repackage automatically.)
+
+Residual (minor, non-fatal):
+- A couple of editor title sizes aren't pre-baked (`black ops one` 21/28 in BaseTheme),
+  so those specific strings log a **non-fatal** `Vector out of bounds` per frame (the
+  fatal text-draw crash is fixed; these are debug-only — `AssertFatal` compiles out of
+  Shipping). Fix by baking the missing sizes or tracking down the last unguarded font-render
+  index. The editor renders and is responsive regardless.
+- **`Con::init should only be called once`** still fires at boot (console double-init);
+  now harmless (logged-and-continued). Root cause not yet chased.
+- Fonts render at the pre-baked `.uft` sizes only; arbitrary faces/sizes / dynamic text
+  still want a real backend → **FreeType-to-wasm** remains the eventual upgrade (and would
+  let us drop most of the 125 MB `.uft` for a far smaller download). The shared **Android**
+  font *rendering* (valid `getFontPath` / a bundled `.ttf`) is still open — this round only
+  made Android *not crash* (`AndroidFont::create` now propagates `FT_New_Face` failure +
+  `getCharInfo` is guarded).
 
 ## Cross-cutting notes
 

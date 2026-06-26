@@ -765,7 +765,27 @@ GFont* GuiControlProfile::getFont(F32 fontAdjust)
 		addFont(size);
 	}
 	GFont* font = mFontMap[size];
-	AssertFatal(font != nullptr, avar("GuiControlProfile: unable return requested font %s %d!", mFontType, size));
+
+	// The requested face/size couldn't be loaded — no cached .uft/.fnt AND no
+	// platform font backend could synthesize it (e.g. the web build has no font
+	// backend, or a font is missing on Android). Don't AssertFatal: that hard-
+	// crashes the whole engine over a single missing font, and every text-render
+	// site here dereferences the result. Degrade gracefully instead — fall back to
+	// any other size already loaded for this profile so text still renders (at a
+	// near size); if the profile has no usable font at all, return NULL and let the
+	// text-render paths skip drawing (they tolerate a NULL font). addFont() above
+	// already declines to insert a failed font, so this mirrors that contract.
+	if (font == nullptr)
+	{
+		for (HashMap<S32, GFont*>::iterator itr = mFontMap.begin(); itr != mFontMap.end(); ++itr)
+		{
+			if (itr->value != nullptr)
+			{
+				font = itr->value;
+				break;
+			}
+		}
+	}
 
 	return font;
 }

@@ -36,6 +36,12 @@ function AppCore::SetProfileFont(%this)
 		%this.platformFontType = "share tech mono";
 	else if ($platform $= "Android")
 		%this.platformFontType = "Droid";
+	else if ($platformUnixType $= "emscripten")
+		// Web build: the browser has no system fonts and there's no font backend,
+		// so use a face that ships a pre-baked .uft glyph cache ("share tech mono"
+		// at sizes 12/14/16/18/24 under ^AppCore/fonts). $platform is "x86UNIX" on
+		// the web build (same as desktop Linux), so key off $platformUnixType.
+		%this.platformFontType = "share tech mono";
 	else
 		%this.platformFontType = "monaco";
 	if ($platform $= "ios")

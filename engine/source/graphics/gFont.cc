@@ -135,7 +135,7 @@ Resource<GFont> GFont::create(const char *faceName, U32 size, const char *cacheD
       // so failing gracefully here lets the GUI keep rendering (just without this
       // font's text) rather than aborting the engine.
       Con::warnf("GFont::create - no cached font for '%s' %d and no platform font backend; "
-                 "text in this font will not render.", faceName, size);
+                 "text in this font will not render. (looked for: '%s')", faceName, size, buf);
       return ret;  // empty Resource<GFont> -> converts to a null GFont*
    }
 

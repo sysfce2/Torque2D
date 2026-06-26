@@ -36,6 +36,10 @@ function EditorCore::SetProfileFont(%this)
 		%this.platformFontType = "share tech mono";
 	else if ($platform $= "Android")
 		%this.platformFontType = "Droid";
+	else if ($platformUnixType $= "emscripten")
+		// Web build: no system fonts; use a face that ships a pre-baked .uft cache.
+		// ($platform is "x86UNIX" on web, same as Linux, so key off $platformUnixType.)
+		%this.platformFontType = "share tech mono";
 	else
 		%this.platformFontType = "monaco";
 	if ($platform $= "ios")
@@ -44,6 +48,19 @@ function EditorCore::SetProfileFont(%this)
 		%this.platformFontSize = 14;
 	else
 		%this.platformFontSize = 12;
+
+	// Where GuiDefaultProfile looks for its pre-baked .uft glyph cache. The legacy
+	// default "^EditorCore/gui/fonts" does NOT exist on disk — desktop survives only
+	// because createPlatformFont() synthesizes the font from a system face. The web
+	// build has no font backend, so the cache lookup must point at a real, resolvable
+	// dir that actually ships the requested .uft. Use an EXPANDED path (the resource
+	// manager does not resolve the ^Module expando for cache lookups), under the
+	// ^EditorCore module (the only expando registered at editor boot — ^AppCore is
+	// not loaded), to the LabCoat theme's fonts, which bundle "share tech mono".
+	if ($platformUnixType $= "emscripten")
+		%this.platformFontDirectory = expandPath("^EditorCore/Themes/LabCoat/fonts");
+	else
+		%this.platformFontDirectory = "^EditorCore/gui/fonts";
 }
 
 function EditorCore::AdjustColorValue(%this, %color, %percent)
@@ -137,7 +154,7 @@ function EditorCore::createGuiProfiles(%this)
 
 	    // font
 	    fontType = %this.platformFontType;
-		fontDirectory = "^EditorCore/gui/fonts";
+		fontDirectory = %this.platformFontDirectory;
 	    fontSize = %this.platformFontSize;
 	    fontColor = "255 255 255 255";
 		align = center;

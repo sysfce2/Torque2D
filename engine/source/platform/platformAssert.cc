@@ -117,6 +117,15 @@ bool PlatformAssert::process(Type         assertType,
       if(Con::getBoolVariable("$FP::DisableAsserts", false) == true)
          Platform::forceShutdown(1);
 
+#if defined(TORQUE_OS_EMSCRIPTEN)
+      // On the web there is no debugger and no safe way to show a blocking modal
+      // from inside the requestAnimationFrame main loop: a native confirm()/alert()
+      // wedges the browser tab, and the "Cancel" path here used to forceShutdown(1)
+      // the whole engine. The assert is already logged to the console above, so
+      // treat non-shipping asserts as non-fatal on web — log and continue rather
+      // than prompting or aborting. (Genuine fatals still surface in the console.)
+      ret = false;  // do not attempt to enter a (nonexistent) debugger
+#else
       char buffer[2048];
       dSprintf(buffer, 2048, "%s: (%s @ %ld)", typeName[assertType], filename, lineNumber);
 
@@ -128,8 +137,9 @@ bool PlatformAssert::process(Type         assertType,
 #endif
       if(!retry)
          Platform::forceShutdown(1);
-      
+
       ret = askToEnterDebugger(message);
+#endif
    }
 
    processing = false;
