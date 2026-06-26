@@ -35,7 +35,9 @@ function EditorCore::SetProfileFont(%this)
 	if ($platform $= "windows")
 		%this.platformFontType = "share tech mono";
 	else if ($platform $= "Android")
-		%this.platformFontType = "Droid";
+		// "Droid" is gone from modern Android (Roboto since ~2014); request "Roboto",
+		// which is the system face AND the bundled assets/fonts/Roboto-Regular.ttf.
+		%this.platformFontType = "Roboto";
 	else if ($platformUnixType $= "emscripten")
 		// Web build: no system fonts; use a face that ships a pre-baked .uft cache.
 		// ($platform is "x86UNIX" on web, same as Linux, so key off $platformUnixType.)

@@ -172,3 +172,33 @@ target_include_directories(libvorbis
             ${CMAKE_CURRENT_SOURCE_DIR}/libvorbis/lib)
 target_link_libraries(libvorbis PUBLIC libogg)
 torque_thirdparty_lib(libvorbis)
+
+# --- freetype (built from source for the Web/WASM build only) ------------------
+# Desktop platforms use their system font APIs (Win32 GDI / CoreText / X11 Xft) and
+# Linux links the system FreeType via find_package; Android links the prebuilt
+# static .a. ONLY the Emscripten build needs FreeType compiled from source — the
+# browser has no system fonts, so EmscriptenFont rasterizes a bundled .ttf with it.
+# The vendored 2.4.12 tree ships one "aggregator" .c per module (each #includes that
+# module's translation units), so a minimal TrueType + anti-aliased-raster build is
+# just these files. FT2_BUILD_LIBRARY is REQUIRED to compile FreeType's internals
+# (its private headers #error without it).
+if(EMSCRIPTEN)
+    set(_ft ${CMAKE_CURRENT_SOURCE_DIR}/freetype/android/freetype-2.4.12)
+    add_library(freetype STATIC
+        ${_ft}/src/base/ftbase.c       # core (ftobjs/ftstream/ftoutln/ftcalc/...)
+        ${_ft}/src/base/ftinit.c       # FT_Init_FreeType + module registration
+        ${_ft}/src/base/ftsystem.c     # ANSI memory/stream layer
+        ${_ft}/src/base/ftdebug.c      # debug/trace layer
+        ${_ft}/src/sfnt/sfnt.c         # SFNT tables (cmap/hmtx/...) — TrueType needs it
+        ${_ft}/src/truetype/truetype.c # TrueType font driver
+        ${_ft}/src/smooth/smooth.c     # anti-aliased (grayscale) rasterizer
+        ${_ft}/src/raster/raster.c     # monochrome rasterizer (FT_RENDER_MODE_MONO)
+        ${_ft}/src/autofit/autofit.c   # auto-hinter (better small-size output)
+        ${_ft}/src/psnames/psnames.c   # PostScript glyph-name service
+        ${_ft}/src/psaux/psaux.c       # PostScript aux (CFF/Type1 support)
+        ${_ft}/src/pshinter/pshinter.c # PostScript hinter
+    )
+    target_include_directories(freetype PUBLIC ${_ft}/include)
+    target_compile_definitions(freetype PRIVATE FT2_BUILD_LIBRARY)
+    torque_thirdparty_lib(freetype)
+endif()

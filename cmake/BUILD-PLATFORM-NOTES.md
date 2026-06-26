@@ -16,7 +16,7 @@ project files from it.
 | iOS (arm64 simulator) | ✅ | ✅ | ✅ Debug (.app, full bundle) | ✅ editor renders + touch works (user-confirmed) |
 | iOS (arm64 device) | ✅ | ✅ | ✅ Debug (.app, code-signed) | ✅ runs on a real iPad — perfect FPS, touch good (user-confirmed) |
 | Android (Gradle+CMake) | ✅ | ✅ (CI) | ✅ APK (CI) | ⏳ (runs via Firebase Test Lab; registers all modules, then crashes in font init — see Android round) |
-| Web (Emscripten/WASM) | ✅ | ✅ | ✅ Debug (.html/.js/.wasm/.data) | ✅ editor renders in-browser — Project Manager UI with TEXT (from .uft cache) + sprites; stable, no crash (a few un-baked title font sizes log non-fatal warnings) |
+| Web (Emscripten/WASM) | ✅ | ✅ | ✅ Debug (.html/.js/.wasm/.data) | ✅ editor renders in-browser — Project Manager UI with full TEXT (.uft cache + a FreeType-rasterized Roboto fallback for any uncached face/size) + sprites; stable, no crash |
 
 **Linux (32 & 64-bit) builds and links** (verified in WSL/Ubuntu 22.04). The
 **64-bit Debug GUI runtime is verified under WSLg** (`./build-linux.sh` →
@@ -622,20 +622,56 @@ a repackage. After a script edit, force it: `rm build/emscripten/Torque2D_DEBUG.
 then rebuild. (TODO: add a CMake custom-command dependency on the preload trees, or a clean
 target, so script edits repackage automatically.)
 
-Residual (minor, non-fatal):
-- A couple of editor title sizes aren't pre-baked (`black ops one` 21/28 in BaseTheme),
-  so those specific strings log a **non-fatal** `Vector out of bounds` per frame (the
-  fatal text-draw crash is fixed; these are debug-only — `AssertFatal` compiles out of
-  Shipping). Fix by baking the missing sizes or tracking down the last unguarded font-render
-  index. The editor renders and is responsive regardless.
-- **`Con::init should only be called once`** still fires at boot (console double-init);
-  now harmless (logged-and-continued). Root cause not yet chased.
-- Fonts render at the pre-baked `.uft` sizes only; arbitrary faces/sizes / dynamic text
-  still want a real backend → **FreeType-to-wasm** remains the eventual upgrade (and would
-  let us drop most of the 125 MB `.uft` for a far smaller download). The shared **Android**
-  font *rendering* (valid `getFontPath` / a bundled `.ttf`) is still open — this round only
-  made Android *not crash* (`AndroidFont::create` now propagates `FT_New_Face` failure +
-  `getCharInfo` is guarded).
+Residual after the cache-first round (since RESOLVED by the FreeType round below):
+- The un-baked editor title sizes (`black ops one` 21/28) that logged a non-fatal per-frame
+  `Vector out of bounds` now rasterize via FreeType — gone.
+- **`Con::init should only be called once`** still fires at boot (console double-init); now
+  harmless (logged-and-continued). Root cause not yet chased.
+
+### FreeType round — DONE: a real rasterizer (web behaves like the desktop)
+The cache-first round rendered only the pre-baked `.uft` sizes; anything else degraded to a
+near size or nothing (Windows' GDI is a universal backstop — the web had none). This round
+restores that backstop: **FreeType (the vendored 2.4.12) is compiled to wasm** and
+`EmscriptenFont` rasterizes a bundled **Roboto** `.ttf` for any face/size not in the `.uft`
+cache. Result: the editor renders ALL its text (the previously-blank "New Project" heading /
+body now draw), the per-frame OOB is gone, and web matches the desktop font behavior. `.uft`
+is kept (designed faces still use it at baked sizes; FreeType only fills gaps).
+
+- **FreeType static lib** (`engine/lib/CMakeLists.txt`, gated `if(EMSCRIPTEN)` — desktop uses
+  system fonts / `find_package(Freetype)`, Android the prebuilt `.a`): the vendored
+  `freetype/android/freetype-2.4.12/` tree built from its per-module **aggregator** `.c`
+  (`ftbase/ftinit/ftsystem/ftdebug`, `sfnt`, `truetype`, `smooth`, `raster`, `autofit`,
+  `psnames/psaux/pshinter`), `FT2_BUILD_LIBRARY` defined, `torque_thirdparty_lib`. Linked in
+  the root EMSCRIPTEN block (its PUBLIC include propagates `<ft2build.h>`). +~1 MB wasm.
+- **Trimmed `ftmodule.h`** — `ftinit.c` registers every driver listed there, so the default
+  full list produced undefined-symbol link errors (`bdf/pcf/t42/winfnt/type1/cff/cid/pfr`).
+  Trimmed to the TrueType path we compile (the file's whole purpose is to list built-in
+  modules). Edited in the vendored tree — safe, since that source is ONLY consumed by this
+  from-source Emscripten build (Android links the prebuilt `.a`).
+- **`EmscriptenFont`** (`platformEmscripten/EmscriptenFont.{h,cpp}`) — mirrors `AndroidFont`:
+  `FT_Init_FreeType`; `create` resolves the `.ttf` from `$pref::Web::fallbackFont`,
+  `FT_New_Face(path)` (the path is a preloaded MEMFS file — FreeType's ANSI stdio reads it),
+  `FT_Set_Pixel_Sizes`, metrics from `face->size->metrics`; `getCharInfo` does
+  `FT_Load_Char(FT_LOAD_RENDER)` and copies the 8-bit alpha bitmap. Uses the rendered
+  **bitmap** dims (`slot->bitmap.width/rows`, stride `bitmap.pitch`) for the CharInfo — keeps
+  alloc/copy/size consistent (metrics width can be a pixel narrower → would overrun).
+- **Fallback resolution + app/editor separation.** `EmscriptenFont` only gets the face NAME,
+  so the `.ttf` path comes from `$pref::Web::fallbackFont`, which each core registers to its
+  OWN copy: `library/AppCore/scripts/defaultPreferences.cs` →
+  `^AppCore/fonts/Roboto-Regular.ttf` (ships with games; self-contained), and
+  `editor/EditorCore/scripts/defaultPreferences.cs` → `^EditorCore/gui/fonts/Roboto-Regular.ttf`
+  (overrides while the editor is loaded). Removing `editor/` falls back to AppCore's — the
+  editor never reaches into the app. `Roboto-Regular.ttf` (SIL OFL) is bundled in both dirs
+  (preloaded into the web `.data`) and in `android-studio/.../assets/fonts/`.
+- **Android (wired, NOT tested this round).** `guiProfiles.cs` (both cores) request `"Roboto"`
+  instead of the long-gone `"Droid"`, and `Roboto-Regular.ttf` is in `assets/fonts/` so
+  `FontManager` resolves it → `AndroidFont` (already FreeType, failure now propagated)
+  rasterizes it. No new Android code; APK run deferred.
+
+Residual (minor): the `Con::init` double-init still logs (harmless); a single non-fatal OOB
+remains at boot (down from thousands). FOLLOW-UPS: per-face `.ttf` resolution
+(`<dir>/<face>.ttf` before the generic fallback) for exact typography without baking `.uft`;
+then drop most `.uft` for a much smaller web download; and run the Android APK to confirm text.
 
 ## Cross-cutting notes
 

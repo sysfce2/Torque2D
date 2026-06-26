@@ -517,6 +517,12 @@ if(EMSCRIPTEN)
     # for both compile (headers: #include <SDL/SDL.h>) and link.
     target_compile_options(Torque2D PRIVATE "-sUSE_SDL=1")
 
+    # FreeType (built from source in engine/lib for the web build only) — the
+    # rasterizer EmscriptenFont uses to synthesize glyphs from a bundled .ttf when a
+    # font isn't in the .uft cache. Its PUBLIC include dir propagates here, so
+    # EmscriptenFont.cpp sees <ft2build.h> / FT_FREETYPE_H.
+    target_link_libraries(Torque2D PRIVATE freetype)
+
     # Keep the web bundle (.html/.js/.wasm/.data) in the build tree rather than the
     # repo root — unlike a desktop exe it isn't run from the cwd (assets come from
     # the MEMFS preload below), so there's no reason to drop four files at the root.

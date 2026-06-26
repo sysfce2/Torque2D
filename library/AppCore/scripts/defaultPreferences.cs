@@ -57,3 +57,10 @@ $pref::OpenGL::gammaCorrection = 0.5;
 
 /// Fonts.
 $Gui::fontCacheDirectory = expandPath( "^AppCore/fonts" );
+
+/// Generic fallback font (a .ttf rasterized by FreeType) used by platforms that
+/// have no system fonts to synthesize a missing face/size from -- currently the
+/// web (Emscripten) build. Kept inside AppCore so a shipped game is self-contained
+/// (nothing here depends on the removable editor/). The editor registers its OWN
+/// copy of this var when it loads (editor/EditorCore/scripts/defaultPreferences.cs).
+$pref::Web::fallbackFont = expandPath( "^AppCore/fonts/Roboto-Regular.ttf" );
