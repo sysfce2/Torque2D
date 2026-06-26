@@ -16,7 +16,7 @@ project files from it.
 | iOS (arm64 simulator) | ✅ | ✅ | ✅ Debug (.app, full bundle) | ✅ editor renders + touch works (user-confirmed) |
 | iOS (arm64 device) | ✅ | ✅ | ✅ Debug (.app, code-signed) | ✅ runs on a real iPad — perfect FPS, touch good (user-confirmed) |
 | Android (Gradle+CMake) | ✅ | ✅ (CI) | ✅ APK (CI) | ⏳ (runs via Firebase Test Lab; registers all modules, then crashes in font init — see Android round) |
-| Web (Emscripten/WASM) | ✅ | ✅ | ✅ Debug (.html/.js/.wasm/.data) | ✅ editor renders in-browser — Project Manager UI with full TEXT (.uft cache + a FreeType-rasterized Roboto fallback for any uncached face/size) + sprites; stable, no crash |
+| Web (Emscripten/WASM) | ✅ | ✅ | ✅ Debug (.html/.js/.wasm/.data) | ✅ editor renders in-browser — Project Manager UI with full TEXT (.uft cache + a FreeType-rasterized Roboto fallback for any uncached face/size) + sprites; toys render incl. blended/lit draws (PyramidToy light); stable, no crash |
 
 **Linux (32 & 64-bit) builds and links** (verified in WSL/Ubuntu 22.04). The
 **64-bit Debug GUI runtime is verified under WSLg** (`./build-linux.sh` →
@@ -42,8 +42,10 @@ CMake-runtime-verified, the hand-maintained project files were deleted from
 `Make-32bit`/`Make-64bit` Makefiles, and the `Xcode_iOS` project) — CMake is now their
 single source of truth. What remains under `engine/compilers/` is intentionally kept:
 `android-studio` (the Gradle shell that *drives* CMake via the NDK) and `emscripten`
-(a reference recipe until the Web target is CMake-runtime-verified). (`cmake-modules`
-is retained because `emscripten/CMakeLists.txt` includes `CopyFiles` from it.)
+(the legacy reference recipe — now superseded since the Web target is CMake-runtime-verified
+via `emcmake` + the shared `PlatformSources.cmake`; kept for reference and a candidate for
+retirement). (`cmake-modules` is retained because `emscripten/CMakeLists.txt` includes
+`CopyFiles` from it.)
 
 ## How the build is structured
 
@@ -457,7 +459,7 @@ Remaining iteration notes:
   `gradle wrapper --gradle-version 8.7` if it doesn't.
 - Other ABIs (armeabi-v7a/x86/x86_64) are a later round — need freetype/openal built from source.
 
-## Emscripten / Web round (build with emsdk) — BOOTS in-browser; render blocked on fonts
+## Emscripten / Web round (build with emsdk) — DONE: editor + toys render in-browser
 
 Emscripten builds the engine to **WebAssembly** (`emcc`), emitting
 `Torque2D_DEBUG.{html,js,wasm,data}`. The browser owns the event loop, so
@@ -672,6 +674,57 @@ Residual (minor): the `Con::init` double-init still logs (harmless); a single no
 remains at boot (down from thousands). FOLLOW-UPS: per-face `.ttf` resolution
 (`<dir>/<face>.ttf` before the generic fallback) for exact typography without baking `.uft`;
 then drop most `.uft` for a much smaller web download; and run the Android APK to confirm text.
+
+### Interaction round — DONE: navigate the editor, open toys, type in the console
+With text rendering, the next step was making the UI actually usable (find/open a project,
+keyboard input). Four fixes:
+- **Project selector found no projects** (only the "New Project" placeholder). `Platform::
+  dumpDirectories` started recursion at `currentDepth 0`, but the child-recursion guard is
+  `currentDepth < recurseDepth`, so the common `getDirectoryList()` (depth 0) call evaluated
+  `0 < 0` == false and descended into NO children → empty list. The editor enumerates
+  `getMainDotCsDir()` to find project folders, so the Toy Box (the only default project) never
+  listed. Fixed by starting recursion at `-1`, matching Win32/x86UNIX (the SAME fix was made
+  to x86UNIX in the Linux round but never propagated here). `EmscriptenFileio.cpp`.
+- **Typing crashed the tab (hard wasm trap).** `_StringTable::hashString/hashStringn` indexed
+  the 256-entry hash table with a signed `char`; any byte ≥ 0x80 → negative index → read
+  before the array. Harmless wrong-hash on desktop, a hard "memory access out of bounds" on
+  wasm. Reproduced by pressing Ctrl with a text field focused (the bogus high ascii got
+  inserted, then hashed on `StringTable::insert`). Cast the index to `(U8)` in both hashers
+  (`string/stringTable.cc`) — a latent CROSS-PLATFORM bug; fixes all high-bit/accented input.
+- **Phantom glyphs from modifier keys.** `EmscriptenInputManager::MapKey` assigned the raw SDL
+  keysym as each key's `ascii`, so modifiers/function/arrow/keypad keys all carried a bogus
+  non-zero ascii and got inserted as (unrenderable) characters. Desktop x86UNIX avoids this via
+  `X11_KeyToUnicode()` (returns 0 for non-character keys), but emscripten's SDL1 port has no
+  working `X11_KeyToUnicode`. Filtered the default assignment: only printable ASCII (0x20-0x7E)
+  carries a character ascii; SDL specials (≥0x100), 0x7F-0xFF, and control keys (<0x20) map to
+  0 and stay handled by keycode (`EmscriptenInputManager.cpp`).
+- **Event-list re-entrancy OOB.** `ProcessMessages()` cached the size of the shared
+  `gPlatState.eventList` then indexed it in the loop, but handling `SDL_USEREVENT`
+  (SETVIDEOMODE) → `SetAppState` → `Input::reactivate` re-enters `ProcessMessages` and
+  clears+refills that same list → the outer loop read past the now-smaller vector (the two red
+  `vector.h:578` fatals on every toybox load). Iterate a LOCAL copy of the frame's events so
+  re-entrancy can't corrupt iteration (`EmscriptenWindow.cpp`). Root-caused with a temporary
+  `emscripten_log(EM_LOG_C_STACK)` in the assert path.
+
+### Blending / immediate-mode round — DONE: toys render correctly (e.g. PyramidToy light)
+First exercise of the toys' raw `glBegin`/`glEnd` draw path on the web (the editor uses the
+batched array path; toys reach further into legacy GL). The PyramidToy `LightObject` rendered
+as an opaque dark "umbrella" fading to BLACK instead of a soft light fading OUT.
+
+- **Root cause — GL state changed *inside* glBegin/glEnd.** `LightObject::sceneRender`
+  (`2d/sceneobject/LightObject.cc`) called `glDisable(GL_BLEND)` before `glEnd()`. On desktop
+  GL that call is illegal between glBegin/glEnd (`GL_INVALID_OPERATION`) and is silently
+  IGNORED, so the fan still draws with the additive blend it set up — fades out correctly.
+  But the web's immediate-mode shim (`EmscriptenGL2ES.cpp`, compiled by `PlatformSources.cmake`
+  — its `glBegin`/`glEnd` override emscripten's `LEGACY_GL_EMULATION` ones) only BUFFERS the
+  vertices and defers the real `glDrawArrays` to `glEnd()`. So the `glDisable(GL_BLEND)` runs
+  immediately and the deferred draw happens with blending OFF → opaque fan whose per-vertex
+  colors fade to black. Fixed by moving the disable AFTER `glEnd()`.
+- **General rule (web immediate mode):** only emit vertex/color/texcoord between glBegin/glEnd;
+  do every enable/disable/blendfunc OUTSIDE the block. A sweep of `engine/source/2d` found
+  `LightObject` was the only offender — `DebugDraw.cc` already disables blend after `glEnd()`,
+  and BatchRender/SceneWindow/SceneObject use direct vertex arrays (no deferral). Watch for
+  this when porting any other legacy-GL toy/sample to the web.
 
 ## Cross-cutting notes
 
