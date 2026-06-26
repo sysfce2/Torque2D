@@ -123,9 +123,22 @@ Resource<GFont> GFont::create(const char *faceName, U32 size, const char *cacheD
    }
 
    PlatformFont *platFont = createSafePlatformFont(faceName, size, charset);
-   
-   AssertFatal(platFont, "platFont is null");
-    
+
+   if (platFont == NULL)
+   {
+      // No cached .fnt/.uft for this face+size AND the platform can't synthesize a
+      // font at runtime (e.g. the Emscripten/web build has no system font backend
+      // yet — createPlatformFont() is stubbed). Return a null Resource instead of
+      // dereferencing platFont below: that deref traps the wasm runtime ("memory
+      // access out of bounds") and crashes hard on every platform. The sole caller,
+      // GuiControlProfile::addFont(), already tolerates a null return and logs it,
+      // so failing gracefully here lets the GUI keep rendering (just without this
+      // font's text) rather than aborting the engine.
+      Con::warnf("GFont::create - no cached font for '%s' %d and no platform font backend; "
+                 "text in this font will not render.", faceName, size);
+      return ret;  // empty Resource<GFont> -> converts to a null GFont*
+   }
+
    GFont *resFont = new GFont;
    resFont->mPlatformFont = platFont;
    resFont->addSheet();

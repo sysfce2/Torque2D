@@ -19,7 +19,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //-----------------------------------------------------------------------------
-#if defined(TORQUE_OS_EMSCRIPTEN)
+// Guard on bare EMSCRIPTEN (a build-level define, set globally by the root
+// CMakeLists), NOT TORQUE_OS_EMSCRIPTEN: the latter is only defined by
+// platform/types.gcc.h, which is included on the NEXT line — so guarding the whole
+// file on it would leave TORQUE_OS_EMSCRIPTEN undefined here and compile the file
+// to nothing, leaving every Net:: symbol undefined at link.
+#if defined(EMSCRIPTEN)
 #include "platform/platformNet.h"
 #include "platform/event.h"
 #include "console/console.h"

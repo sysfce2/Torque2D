@@ -7,9 +7,9 @@
 # filesystem or a hand-maintained .sln — is the single source of truth. Add a
 # source file there once, then regenerate the per-platform project files.
 #
-# Windows (VS), macOS (arm64), Linux (32/64-bit), iOS (arm64 simulator), and
-# Android are wired and build; Emscripten is stubbed. See cmake/PlatformSources.cmake
-# and cmake/BUILD-PLATFORM-NOTES.md for per-platform status and recipes.
+# Windows (VS), macOS (arm64), Linux (32/64-bit), iOS (arm64 simulator), Android,
+# and Emscripten (Web/WASM) are all wired. See cmake/PlatformSources.cmake and
+# cmake/BUILD-PLATFORM-NOTES.md for per-platform status and recipes.
 # -----------------------------------------------------------------------------
 cmake_minimum_required(VERSION 3.21)
 
@@ -69,6 +69,15 @@ foreach(_cfg Debug Release Shipping)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${_CFG} "${CMAKE_SOURCE_DIR}")
 endforeach()
 
+# Emscripten: define EMSCRIPTEN=1 GLOBALLY (before any target). emcc only
+# predefines __EMSCRIPTEN__, but the engine (platform/types.gcc.h) AND several
+# vendored libs (e.g. ljpeg/jconfig.h's platform dispatcher) key off bare
+# EMSCRIPTEN. The legacy engine/compilers/emscripten recipe did the same via a
+# global ADD_DEFINITIONS — without it ljpeg fails with "No jconfig.h was included".
+if(EMSCRIPTEN)
+    add_compile_definitions(EMSCRIPTEN=1)
+endif()
+
 # ----------------------------------------------------------------------------
 # Third-party static libraries (libogg, libvorbis, lpng, ljpeg, zlib)
 # ----------------------------------------------------------------------------
@@ -77,10 +86,10 @@ add_subdirectory(engine/lib)
 # ----------------------------------------------------------------------------
 # GoogleTest — build the vendored distribution and link gtest into the engine so
 # the in-engine unit tests (runAllUnitTests) actually have a framework to run.
-# Not built on Android (no on-device test framework; the testing/* sources are
-# also excluded from the Android build below).
+# Not built on Android or Emscripten (no on-device/in-browser test framework; the
+# testing/* sources are also excluded from those builds below).
 # ----------------------------------------------------------------------------
-if(NOT ANDROID)
+if(NOT ANDROID AND NOT EMSCRIPTEN)
     set(gtest_force_shared_crt OFF CACHE BOOL "" FORCE)  # use the static CRT we selected
     set(BUILD_GMOCK   OFF CACHE BOOL "" FORCE)
     set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
@@ -102,12 +111,14 @@ if(CMAKE_SYSTEM_NAME STREQUAL "iOS")
     set(TORQUE_IOS TRUE)
 endif()
 
-# Select the active platform's OS-specific back-end sources. Note ANDROID is also
-# UNIX, so it must be matched before the UNIX (Linux) branch.
+# Select the active platform's OS-specific back-end sources. Note ANDROID and
+# EMSCRIPTEN are also UNIX, so they must be matched before the UNIX (Linux) branch.
 if(WIN32)
     set(TORQUE_PLATFORM_SOURCES ${TORQUE_PLATFORM_SOURCES_WINDOWS})
 elseif(ANDROID)
     set(TORQUE_PLATFORM_SOURCES ${TORQUE_PLATFORM_SOURCES_ANDROID})
+elseif(EMSCRIPTEN)
+    set(TORQUE_PLATFORM_SOURCES ${TORQUE_PLATFORM_SOURCES_EMSCRIPTEN})
 elseif(TORQUE_IOS)
     set(TORQUE_PLATFORM_SOURCES ${TORQUE_PLATFORM_SOURCES_IOS})
 elseif(APPLE)
@@ -118,9 +129,19 @@ else()
     message(FATAL_ERROR "Unsupported platform: no PlatformSources list for this OS.")
 endif()
 
-# The in-engine unit tests need gtest, which we don't build on Android.
-if(ANDROID)
+# The in-engine unit tests need gtest, which we don't build on Android/Emscripten.
+if(ANDROID OR EMSCRIPTEN)
     list(FILTER TORQUE_ENGINE_SOURCES EXCLUDE REGEX "/testing/")
+endif()
+
+# Emscripten uses a dedicated networking back-end (platformNet_Emscripten.cpp, all
+# stubs — browsers can't open raw sockets) INSTEAD of the desktop BSD-socket
+# implementation. Swap it into the engine source list (the platform back-end list
+# in PlatformSources.cmake deliberately omits it). platformNet_ScriptBinding.cc
+# (the script API) is shared and stays.
+if(EMSCRIPTEN)
+    list(FILTER TORQUE_ENGINE_SOURCES EXCLUDE REGEX "platformNet(Async)?\\.cpp$")
+    list(APPEND TORQUE_ENGINE_SOURCES ${TORQUE_SRC}/platform/platformNet_Emscripten.cpp)
 endif()
 
 # Android builds a shared library (libtorque2d.so) loaded by the NativeActivity;
@@ -173,7 +194,7 @@ if(MSVC)
     target_compile_definitions(Torque2D PRIVATE
         _CRT_SECURE_NO_WARNINGS _CRT_SECURE_NO_DEPRECATE _HAS_STD_BYTE=0)
 endif()
-if(UNIX AND NOT APPLE AND NOT ANDROID)
+if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
     target_compile_definitions(Torque2D PRIVATE LINUX)
 endif()
 
@@ -193,9 +214,13 @@ endif()
 # Link: third-party libs built from source (transitively bring their includes).
 target_link_libraries(Torque2D PRIVATE libogg libvorbis lpng ljpeg)
 if(NOT ANDROID)
-    # zlib is built from source on desktop; on Android the NDK system libz is used.
+    # zlib is built from source everywhere except Android (which uses the NDK's
+    # system libz). Emscripten compiles the vendored zlib to wasm just fine.
+    target_link_libraries(Torque2D PRIVATE zlib)
+endif()
+if(NOT ANDROID AND NOT EMSCRIPTEN)
     # gtest provides the in-engine unit-test framework (desktop only).
-    target_link_libraries(Torque2D PRIVATE zlib gtest)
+    target_link_libraries(Torque2D PRIVATE gtest)
 endif()
 
 if(WIN32)
@@ -406,7 +431,7 @@ if(TORQUE_IOS)
     endforeach()
 endif()
 
-if(UNIX AND NOT APPLE AND NOT ANDROID)
+if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
     # Linux / X11 desktop build (platformX86UNIX). NOTES for the on-platform
     # (WSL/Linux) session:
     #   * SDL 1.2 is REQUIRED, not optional: the platform back-end calls 1.2-only
@@ -477,6 +502,59 @@ if(ANDROID)
     target_link_libraries(Torque2D PRIVATE
         android_freetype android_openal
         log android EGL GLESv1_CM OpenSLES z)
+endif()
+
+if(EMSCRIPTEN)
+    # WebAssembly build (configure via `emcmake cmake`, which points CMake at the
+    # Emscripten toolchain and sets EMSCRIPTEN=1). See cmake/BUILD-PLATFORM-NOTES.md.
+
+    # (EMSCRIPTEN=1 is defined GLOBALLY above, before the third-party libs — the
+    # engine's types.gcc.h and some vendored libs both key off bare EMSCRIPTEN.
+    # That's what makes the engine select TORQUE_OS_EMSCRIPTEN / platformEmscripten.)
+
+    # SDL 1.2 (input/video back-end, like the desktop X11 build) is provided by
+    # emscripten's bundled SDL1 port; USE_SDL=1 is the default but set it explicitly
+    # for both compile (headers: #include <SDL/SDL.h>) and link.
+    target_compile_options(Torque2D PRIVATE "-sUSE_SDL=1")
+
+    # Keep the web bundle (.html/.js/.wasm/.data) in the build tree rather than the
+    # repo root — unlike a desktop exe it isn't run from the cwd (assets come from
+    # the MEMFS preload below), so there's no reason to drop four files at the root.
+    set_target_properties(Torque2D PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY          "${CMAKE_BINARY_DIR}"
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG    "${CMAKE_BINARY_DIR}"
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE  "${CMAKE_BINARY_DIR}"
+        RUNTIME_OUTPUT_DIRECTORY_SHIPPING "${CMAKE_BINARY_DIR}")
+
+    # Script/asset trees packaged into the MEMFS virtual filesystem by the emcc file
+    # packager (--preload-file SRC@DST -> a .data sidecar). The engine runs from cwd
+    # "/" in the browser, so main.cs lands at /main.cs and the trees under /editor,
+    # /library, /toybox. Everything a web build can touch must be preloaded (there's
+    # no host FS to lazy-load from), so the runtime content trees are all bundled.
+    # NOTE: tools/ is deliberately EXCLUDED — unlike the iOS bundle it is not shipped,
+    # because it is build-time-only tooling (TexturePacker, and ~90 MB of generated
+    # doxygen HTML under tools/doxygen/output) that the engine never loads at runtime.
+    # (SHELL: keeps each option+path pair together and unde-duplicated by CMake.)
+    set(_emPreload
+        "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/main.cs@/main.cs"
+        "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/editor@/editor"
+        "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/library@/library"
+        "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/toybox@/toybox")
+
+    target_link_options(Torque2D PRIVATE
+        "-sUSE_SDL=1"
+        "-sLEGACY_GL_EMULATION=1"      # fixed-function GL over WebGL (at-risk flag; see notes)
+        "-sINITIAL_MEMORY=134217728"   # 128 MB initial heap (was the legacy TOTAL_MEMORY)
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-sEXIT_RUNTIME=0"
+        "-sFORCE_FILESYSTEM=1"
+        "$<$<CONFIG:Debug>:-sASSERTIONS=1>"
+        "SHELL:--js-library ${TORQUE_SRC}/platformEmscripten/platform.js"
+        ${_emPreload})
+
+    # emcc picks the output format from the target suffix: .html emits the HTML
+    # shell + .js + .wasm (+ .data from the preload). -> Torque2D_DEBUG.html etc.
+    set_target_properties(Torque2D PROPERTIES SUFFIX ".html")
 endif()
 
 # Output name. On Android the NativeActivity loads "torque2d" -> libtorque2d.so.

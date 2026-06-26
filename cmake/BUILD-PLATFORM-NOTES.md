@@ -16,7 +16,7 @@ project files from it.
 | iOS (arm64 simulator) | ✅ | ✅ | ✅ Debug (.app, full bundle) | ✅ editor renders + touch works (user-confirmed) |
 | iOS (arm64 device) | ✅ | ✅ | ✅ Debug (.app, code-signed) | ✅ runs on a real iPad — perfect FPS, touch good (user-confirmed) |
 | Android (Gradle+CMake) | ✅ | ✅ (CI) | ✅ APK (CI) | ⏳ (runs via Firebase Test Lab; registers all modules, then crashes in font init — see Android round) |
-| Web (Emscripten) | stubbed | — | — | — |
+| Web (Emscripten/WASM) | ✅ | ✅ | ✅ Debug (.html/.js/.wasm/.data) | ⏳ boots in-browser (WebGL up, modules load, main loop runs); editor render blocked on fonts |
 
 **Linux (32 & 64-bit) builds and links** (verified in WSL/Ubuntu 22.04). The
 **64-bit Debug GUI runtime is verified under WSLg** (`./build-linux.sh` →
@@ -52,12 +52,14 @@ is retained because `emscripten/CMakeLists.txt` includes `CopyFiles` from it.)
 - `cmake/EngineSources.cmake` — explicit cross-platform engine sources (the
   `platform/` abstraction is here; it compiles on every OS).
 - `cmake/PlatformSources.cmake` — OS-specific back-ends: `..._WINDOWS`,
-  `..._MACOS` (Objective-C++ `.mm`), `..._LINUX`.
+  `..._MACOS` (Objective-C++ `.mm`), `..._LINUX`, `..._IOS`, `..._ANDROID`,
+  `..._EMSCRIPTEN`.
 - `engine/lib/CMakeLists.txt` — third-party static libs (platform-neutral; MSVC
   flags are guarded by `if(MSVC)`).
 - Generator scripts at repo root: `generate-vs2022.bat`, `generate-vs2026.bat`,
   `generate-xcode.command` (macOS), `generate-xcode-ios.command` (iOS simulator),
-  `generate-xcode-ios-device.command` (iOS device, code-signed), `generate-make.sh`.
+  `generate-xcode-ios-device.command` (iOS device, code-signed), `generate-make.sh`,
+  `generate-emscripten.sh` (Web/WASM via `emcmake`).
 
 ## macOS round (run on a Mac) — DONE (builds, signs, runs; arm64)
 
@@ -454,6 +456,148 @@ Remaining iteration notes:
 - **Gradle wrapper jar** is old (5.4.1-era) but should bootstrap 8.7; regenerate with
   `gradle wrapper --gradle-version 8.7` if it doesn't.
 - Other ABIs (armeabi-v7a/x86/x86_64) are a later round — need freetype/openal built from source.
+
+## Emscripten / Web round (build with emsdk) — BOOTS in-browser; render blocked on fonts
+
+Emscripten builds the engine to **WebAssembly** (`emcc`), emitting
+`Torque2D_DEBUG.{html,js,wasm,data}`. The browser owns the event loop, so
+`platformEmscripten/main.cpp` drives the engine with
+`emscripten_set_main_loop(_EmscriptenGameInnerLoop, 60, false)` → `Game->mainLoop()`
+once per animation frame — the SAME callback model as iOS/Android (no blocking
+`while`). The back-end (`engine/source/platformEmscripten/*`) existed but was years
+bit-rotted and had never been CMake-built; the legacy `engine/compilers/emscripten`
+recipe was a hand-maintained flat source list (it still compiled the dead `spine/*`
+tree). This round wires Emscripten into the **shared** `EngineSources.cmake` (the
+Android pattern: one list + guards), NOT the legacy list.
+
+### Build (Windows host; works from any host with emsdk)
+1. Install the Emscripten SDK once and activate it:
+   `git clone https://github.com/emscripten-core/emsdk && cd emsdk && ./emsdk install latest && ./emsdk activate latest`,
+   then `source ./emsdk_env.sh` (or `emsdk_env.bat`). Verified with **emsdk 6.0.1**.
+   - **Windows/Git-Bash gotcha:** `emsdk_env.sh` shells out to `python`, which on
+     Windows hits the Microsoft-Store `python` stub and silently fails to export
+     `EMSDK`/PATH. Work around it by driving the tools directly:
+     `export EM_CONFIG=/c/Users/<you>/emsdk/.emscripten` and prepend
+     `.../emsdk/upstream/emscripten` and `.../emsdk/node/<ver>/bin` to `PATH`. Then
+     `emcc`/`emcmake` work.
+2. Configure + build (a `make` program must be on PATH — `mingw32-make`, MSYS make,
+   or the chocolatey `make` all work):
+   `./generate-emscripten.sh` (= `emcmake cmake -S . -B build/emscripten -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug`)
+   then `cmake --build build/emscripten -j`. `emcmake` injects the Emscripten
+   toolchain and sets the CMake `EMSCRIPTEN` variable, which selects the
+   `platformEmscripten` back-end.
+3. **Run:** serve over HTTP (NOT `file://`) and open the page:
+   `cd build/emscripten && python -m http.server 8000` → `http://localhost:8000/Torque2D_DEBUG.html`.
+
+### How it's wired (root `CMakeLists.txt` + `PlatformSources.cmake`)
+- `TORQUE_PLATFORM_SOURCES_EMSCRIPTEN` lists the `platformEmscripten/*.cpp` back-end
+  (incl. `EmscriptenGL2ES.cpp`, the fixed-function→GLES immediate-mode shim, which
+  the legacy list wrongly omitted).
+- The `EMSCRIPTEN` branch is matched **before** `UNIX` in the platform dispatch (the
+  Emscripten toolchain sets `UNIX=1`, exactly like Android).
+- **`EMSCRIPTEN=1` is defined GLOBALLY** (before `add_subdirectory(engine/lib)`) — emcc
+  only predefines `__EMSCRIPTEN__`, but the engine (`types.gcc.h`, which then defines
+  `TORQUE_OS_EMSCRIPTEN`) AND vendored libs (`ljpeg/jconfig.h`) key off bare
+  `EMSCRIPTEN`. Without it ljpeg fails with "No jconfig.h was included". The legacy
+  recipe did the same via a global `ADD_DEFINITIONS`.
+- **Net swap:** the engine list filters out `platformNet.cpp`/`platformNetAsync.cpp`
+  and adds `platform/platformNet_Emscripten.cpp` (all stubs — browsers can't open raw
+  sockets). `platformNet_ScriptBinding.cc` (the script API) is shared and stays.
+- **emcc link flags:** `-sUSE_SDL=1` (SDL 1.2 input/video via emscripten's bundled
+  port), `-sLEGACY_GL_EMULATION=1` (fixed-function GL over WebGL 1.0 — works on emsdk
+  6.0.1; this was the flagged "at-risk" flag and it's fine), `-sINITIAL_MEMORY=128MB`
+  `-sALLOW_MEMORY_GROWTH=1` `-sEXIT_RUNTIME=0` `-sFORCE_FILESYSTEM=1`,
+  `--js-library platformEmscripten/platform.js`.
+- **Assets** are packaged into MEMFS with `--preload-file SRC@/DST` (no host FS to
+  lazy-load from in a browser → a `.data` sidecar). `main.cs` + `editor/`, `library/`,
+  `toybox/` are bundled at the VFS root (engine cwd is `/`). **`tools/` is deliberately
+  NOT bundled** — it's build-time-only (TexturePacker + ~90 MB of generated doxygen
+  HTML under `tools/doxygen/output`), which cut the `.data` from 272 MB to ~186 MB.
+  (Heads-up: the iOS bundle still ships `tools/` and carries that same dead ~90 MB —
+  worth trimming there too.)
+- No gtest / no `testing/*` on Emscripten (like Android). zlib is still built from
+  source (compiles fine to wasm). Output suffix is `.html` (drives emcc to emit the
+  HTML shell); the bundle is kept in `build/emscripten`, NOT the repo root (it's a web
+  bundle, not run from cwd).
+
+### Compile/link fixes (the back-end had drifted from the engine interfaces)
+All were bit-rot in `platformEmscripten/*`, surfaced once it compiled against current
+headers:
+- **ljpeg** "No jconfig.h" — the global `EMSCRIPTEN=1` (above).
+- `EmscriptenStrings.cpp` — `dStrlen`/`dStrspn`/`dStrcspn` returned `dsize_t`, but
+  `platformString.h` (and every other platform) declares them `U32`; on wasm32
+  `dsize_t != U32` → "functions differ only in return type". Changed to `U32`.
+- `EmscriptenGL.cpp` — dropped a stale `AssertFatal(platState.engine, ...)`
+  (`EmscriptenPlatState` has no `engine` member; macOS-derived leftover).
+- `EmscriptenOutlineGL.cpp` — fixed include typo `platformEmscriptenplatformGL.h` →
+  `platformEmscripten/platformGL.h`.
+- `EmscriptenOGLVideo.{h,cpp}` — added the missing `getVerticalSync()` override
+  (`DisplayDevice` declares it pure-virtual → the class was abstract → `new
+  OpenGLDevice()` failed). Stub mirrors x86UNIX.
+- `platformGL.h` — `#include "platform/types.h"` so the `gluProject`/`gluUnProject`
+  prototypes' `F64` resolves regardless of include order.
+- `platform/platformNet_Emscripten.cpp` — the whole file was guarded
+  `#if defined(TORQUE_OS_EMSCRIPTEN)` but `#include "platformNet.h"` (which *defines*
+  that macro) was the NEXT line, INSIDE the guard → the file compiled to nothing and
+  every `Net::` symbol was undefined at link. Guard now keys on bare `EMSCRIPTEN`
+  (a build-level define available before any include). Same chicken-and-egg class as
+  the iOS `TORQUE_OS_IOS` predefine.
+- `EmscriptenOutlineGL.cpp` — `glArrayElement` (legacy immediate-mode indexed draw)
+  is undefined: emscripten's `LEGACY_GL_EMULATION` provides `glBegin/glEnd/glDrawArrays`
+  but NOT `glArrayElement`. Added an `extern "C"` no-op (this debug-only wireframe
+  overlay is off by default — same graceful-degradation choice as iOS's
+  `NO_REDEFINE_GL_FUNCS`).
+
+### Runtime fixes (browser-driven via Playwright + `python -m http.server`)
+Debugged headless by driving Chromium at the page, reading the JS console, and
+screenshotting. Boot reaches: all subsystems init → **WebGL 1.0 context up**
+(`Renderer: WebKit WebGL`, extensions, `Max Texture Size 16384`, screen mode
+1024×768) → **EditorCore module loads** → main loop runs. Fixes:
+- **Directory scan dropped the first char of each entry** — module registration
+  reported scanning `/editor/ssetAdmin` (should be `AssetAdmin`), so editor modules
+  never loaded. `EmscriptenFileio.cpp recurseDumpDirectories()` built the child
+  `subPath` WITHOUT a leading slash when `basePath` ended in `/`, but the path-assembly
+  unconditionally did `&subPath[1]` (assuming a leading slash to strip) → dropped a
+  real filename char. Fixed to join with exactly one `/`, only stripping `subPath`'s
+  leading slash when it actually has one. (Same FAMILY as the Android leading-slash
+  path off-by-one — Emscripten runs from cwd `/` too, but has its own Fileio.)
+- **`platform.js` showed pointer addresses, not messages** — `js_AlertOK` etc. did
+  `alert(message)` where `message` is the raw wasm heap POINTER (e.g. "363333"), not a
+  JS string. Decode with `UTF8ToString()`. Also routed informational `AlertOK` to
+  `console.error` instead of a blocking native `alert()`: the engine's assert handler
+  calls a Platform alert per failed assert, and a blocking dialog wedges the browser
+  tab in an un-dismissable storm (a web game must never block on `alert()`). Decision
+  dialogs (OKCancel/Retry/YesNo) keep a real `confirm()` since the engine needs the
+  boolean.
+- **`GFont::create` hard-crashed on a missing font** — `gFont.cc` did
+  `AssertFatal(platFont, ...)` then dereferenced the null `platFont` anyway
+  (`getFontHeight()`), which TRAPS the wasm runtime ("memory access out of bounds").
+  Its sole caller `GuiControlProfile::addFont()` ALREADY null-checks the return, so
+  `GFont::create` now returns a null `Resource<GFont>` on a missing font instead of
+  crashing. Cross-platform robustness fix; directly analogous to the open Android
+  font-robustness bug (`AndroidFont::create` returning true on failure + unguarded
+  deref).
+
+### Open: FONTS are the hard blocker between "boots" and "editor renders"
+The web build has **no font backend** — `EmscriptenFont.cpp createPlatformFont()`
+returns `NULL` (stubbed), and the shipped `.uft` glyph caches don't cover the editor's
+default profile fonts (e.g. `monaco 12`). With the crash guarded, boot now reaches a
+HARD requirement: `guiTypes.cc:768` `AssertFatal` "GuiControlProfile: unable return
+requested font monaco 12!" → `exit(1)`. The canvas stays black (engine halted during
+editor GUI construction; no "Exception thrown" — it exits cleanly, runtime kept alive
+by the RAF). There is no graceful path past this: the GUI fundamentally needs fonts.
+**Next round** = give Emscripten real fonts, either (a) compile FreeType to wasm and
+implement `EmscriptenFont` like `AndroidFont`, or (b) wire the shipped `.uft` glyph
+cache so `GFont::create` finds them. This is the SAME root cause as the open Android
+font crash — fix them together.
+
+Also noted (not yet fixed; non-fatal):
+- **`Con::init should only be called once`** assert at boot — console is initialized
+  twice on Emscripten (boot-time double-init; same "boot only once" class as the macOS
+  fix). Non-fatal (boot continues once the assert is dismissed/suppressed).
+- For automated/headless boot the assert dialogs should default to "don't break,
+  continue" without prompting (a web build shouldn't pop blocking assert dialogs at
+  all).
 
 ## Cross-cutting notes
 

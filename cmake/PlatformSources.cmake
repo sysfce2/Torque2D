@@ -2,8 +2,8 @@
 # PlatformSources.cmake
 #
 # Per-platform translation units. The root CMakeLists selects the active
-# platform's list and adds it to the Torque2D target. Windows, macOS, Linux, iOS
-# and Android are populated and build; Emscripten is stubbed for a later round.
+# platform's list and adds it to the Torque2D target. Windows, macOS, Linux, iOS,
+# Android and Emscripten (Web/WASM) are all populated.
 #
 # The cross-platform engine sources live in EngineSources.cmake. The generic
 # `platform/` abstraction (compiled on every platform) is part of that list;
@@ -203,5 +203,43 @@ set(TORQUE_PLATFORM_SOURCES_ANDROID
     ${TORQUE_SRC}/platformAndroid/menus/popupMenu.cpp
 )
 
-# === Stub for a later round (not yet wired/verified) =========================
-# set(TORQUE_PLATFORM_SOURCES_EMSCRIPTEN ...)  # engine/source/platformEmscripten/* (incl platformNet_Emscripten.cpp)
+# === Emscripten / Web (platformEmscripten) ==================================
+# WebAssembly back-end built by emcc (configure via `emcmake cmake`). The browser
+# owns the event loop, so main.cpp drives the engine through
+# emscripten_set_main_loop(_EmscriptenGameInnerLoop, ...) -> Game->mainLoop() once
+# per animation frame (same callback model as iOS/Android). GL is GLES via the
+# EmscriptenGL2ES fixed-function shim over WebGL. The root CMakeLists' EMSCRIPTEN
+# block defines EMSCRIPTEN=1 (the engine's types.gcc.h keys TORQUE_OS_EMSCRIPTEN
+# off it), swaps in platformNet_Emscripten.cpp, and sets the emcc link flags.
+# Networking back-end (platformNet_Emscripten.cpp) is swapped in from the engine
+# list in the root CMakeLists, not listed here. See cmake/BUILD-PLATFORM-NOTES.md.
+set(TORQUE_PLATFORM_SOURCES_EMSCRIPTEN
+    # ---- platformEmscripten ----
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenAlerts.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenAudio.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenConsole.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenCPUInfo.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenDialogs.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenEvents.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenFileio.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenFont.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenGL.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenGL2ES.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenInput.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenInputManager.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenMath.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenMemory.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenMutex.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenOGLVideo.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenOutlineGL.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenPlatform.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenProcessControl.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenSemaphore.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenStrings.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenThread.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenTime.cpp
+    ${TORQUE_SRC}/platformEmscripten/EmscriptenWindow.cpp
+    ${TORQUE_SRC}/platformEmscripten/main.cpp
+    # ---- platformEmscripten/menus ----
+    ${TORQUE_SRC}/platformEmscripten/menus/popupMenu.cpp
+)
