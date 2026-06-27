@@ -69,11 +69,14 @@ public:
 
 	  static bool sIncreasing;
 
-	  // Compare Functions
+	  // Compare Functions. These are std::sort predicates, so they MUST be a
+	  // strict weak ordering: equal elements compare false, and reversing the
+	  // order swaps the operands rather than negating the result (negating makes
+	  // equal elements compare true in the descending case). Getting this wrong
+	  // is undefined behaviour and aborts under libc++'s hardened sort.
 	  static bool compByID(const LBItem *a, const LBItem *b)
 	  {
-		  bool res = a->ID < b->ID;
-		  return (sIncreasing ? res : !res);
+		  return sIncreasing ? (a->ID < b->ID) : (b->ID < a->ID);
 	  }
 	  static bool compByText(const LBItem *a, const LBItem *b)
 	  {
@@ -84,8 +87,7 @@ public:
 		  dSprintf(bufB, 512, "%s", b->itemText);
 
 		  S32 res = dStricmp(buf, bufB);
-		  bool result = res <= 0;
-		  return (sIncreasing ? result : !result);
+		  return sIncreasing ? (res < 0) : (res > 0);
 	  }
    };
 

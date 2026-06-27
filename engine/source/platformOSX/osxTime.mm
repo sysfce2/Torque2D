@@ -102,7 +102,15 @@ U32 Platform::getTime()
 // absolute time. Storing milisec in a U32 overflows every 49.71 days.
 U32 Platform::getRealMilliseconds()
 {
-    return (U32)([NSDate timeIntervalSinceReferenceDate] * 1000);
+    // timeIntervalSinceReferenceDate is seconds since 2001; *1000 is ~8e11 ms in
+    // 2026, which is far larger than U32_MAX. Casting an out-of-range double
+    // straight to U32 is undefined behaviour: arm64's fcvtzu SATURATES to
+    // 0xFFFFFFFF, so every call returned the same value, every time delta was 0,
+    // and the simulation clock never advanced (schedule()/animations froze).
+    // Go through U64 first — a well-defined truncation that wraps mod 2^32
+    // (~every 49 days, which the engine's unsigned-delta math already handles),
+    // matching how the old x86 build happened to behave.
+    return (U32)(U64)([NSDate timeIntervalSinceReferenceDate] * 1000.0);
 }
 
 //------------------------------------------------------------------------------

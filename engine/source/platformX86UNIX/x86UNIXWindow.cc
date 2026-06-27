@@ -302,10 +302,22 @@ static bool ProcessMessages()
       SDL_EVENTMASK(SDL_USEREVENT);
    static SDL_Event events[MaxEvents];
  
+   // Debounced window-resize state. Under SDL 1.2 the only way to resize the GL
+   // surface is SDL_SetVideoMode, which recreates the GL context and forces a
+   // full texture reload -- unlike the Win32 back-end, where the GL drawable
+   // follows the window for free (WM_SIZE just calls Platform::setWindowSize).
+   // Rebuilding on every SDL_VIDEORESIZE during a live drag is painfully laggy,
+   // so we remember the latest requested size and rebuild the surface only once
+   // the user stops resizing for ResizeSettleMs (one texture reload per resize
+   // gesture instead of one per frame).
+   static bool      sResizePending = false;
+   static S32       sResizeW = 0, sResizeH = 0;
+   static U32       sLastResizeMs = 0;
+   static const U32 ResizeSettleMs = 150;
+
    SDL_PumpEvents();
    S32 numEvents = SDL_PeepEvents(events, MaxEvents, SDL_GETEVENT, Mask);
-   if (numEvents == 0)
-      return true;
+
    for (int i = 0; i < numEvents; ++i)
    {
       SDL_Event& event = events[i];
@@ -315,6 +327,16 @@ static bool ProcessMessages()
             return false;
             break;
          case SDL_VIDEORESIZE:
+            // Record the requested size; the surface is rebuilt once the drag
+            // settles (see below).
+            if (event.resize.w > 0 && event.resize.h > 0)
+            {
+               sResizePending = true;
+               sResizeW = event.resize.w;
+               sResizeH = event.resize.h;
+               sLastResizeMs = Platform::getRealMilliseconds();
+            }
+            break;
          case SDL_VIDEOEXPOSE:
             Game->refreshWindow();
             break;
@@ -327,19 +349,36 @@ static bool ProcessMessages()
                if (x86UNIXState->windowLocked())
                {
                   SDL_Event tempEvent;
-                  SDL_PeepEvents(&tempEvent, 1, SDL_GETEVENT, 
+                  SDL_PeepEvents(&tempEvent, 1, SDL_GETEVENT,
                      SDL_MOUSEMOTIONMASK);
                }
             }
             break;
          case SDL_ACTIVEEVENT:
             SetAppState();
-            break;          
+            break;
          case SDL_SYSWMEVENT:
             ProcessSYSWMEvent(event);
             break;
       }
    }
+
+   // Once the drag has settled, rebuild the GL surface at the final size. This
+   // runs every frame (not gated on events) so it still fires after the resize
+   // events stop. setScreenMode also updates Platform::getWindowSize(), which
+   // drives the canvas extent (GuiCanvas::maintainSizing) and GL viewport
+   // (dglSetClipRect). Windowed sizes bypass the resolution-list check in
+   // OpenGLDevice::setScreenMode.
+   if (sResizePending &&
+       (Platform::getRealMilliseconds() - sLastResizeMs) >= ResizeSettleMs)
+   {
+      sResizePending = false;
+      Point2I cur = Platform::getWindowSize();
+      if (sResizeW != cur.x || sResizeH != cur.y)
+         Video::setScreenMode(sResizeW, sResizeH, Video::getResolution().bpp, false);
+      Game->refreshWindow();
+   }
+
    return true;
 }
 

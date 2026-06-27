@@ -737,6 +737,18 @@ void GuiCanvas::rootScreenTouchUp(const GuiEvent &event)
     mPrevMouseTime = Platform::getVirtualMilliseconds();
     mMouseButtonDown = false;
 
+    // A control that captured the touch on down (e.g. a button calls mouseLock() in
+    // onTouchDown) MUST receive the matching up — even if the release lands outside
+    // its bounds — or it stays locked and "depressed" with no way to release. The
+    // desktop rootMouseUp routes to the captured control first; the touch path did
+    // NOT, so on iOS a press could stick (no exact re-hit of the control on release,
+    // especially in the simulator). Mirror rootMouseUp here.
+    if (bool(mMouseCapturedControl))
+    {
+        mMouseCapturedControl->onTouchUp(event);
+        return;
+    }
+
     iterator i;
     i = end();
     while (i != begin())

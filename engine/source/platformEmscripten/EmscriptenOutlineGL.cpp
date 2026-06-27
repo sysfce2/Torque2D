@@ -28,8 +28,17 @@
 
 #define NO_REDEFINE_GL_FUNCS
 
-#include "platformEmscriptenplatformGL.h"
+#include "platformEmscripten/platformGL.h"
 #include "console/console.h"
+
+// WebGL/GLES has no immediate-mode glArrayElement, and emscripten's
+// LEGACY_GL_EMULATION runtime (which does provide glBegin/glEnd/glDrawArrays)
+// doesn't implement it either, so it's undefined at link. The debug wireframe
+// overlay below is its only caller; supply a no-op so this (off-by-default,
+// TORQUE_DEBUG-only) feature links. Indexed-primitive outlines simply won't draw
+// on the web build — acceptable for a debug-only helper. extern "C" to match the
+// C-linkage declaration pulled in from <GL/gl.h>.
+extern "C" void glArrayElement(GLint) {}
 
 bool gOutlineEnabled = false;
 

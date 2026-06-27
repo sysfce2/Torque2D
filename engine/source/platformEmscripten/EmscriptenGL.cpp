@@ -47,7 +47,9 @@ bool gOpenGLNoDrawArraysAlpha  = false;
 // Find out which extensions are available for this renderer. 
 void getGLCapabilities( )
 {
-   AssertFatal(platState.engine, "getGLCapabilities() was called before a monitor was chosen!");
+   // (No per-monitor GL context to guard on here: the web build renders into a
+   // single WebGL canvas. The macOS-derived platState.engine check was stale —
+   // EmscriptenPlatState has no such member — so it's dropped.)
 
    // silently create an opengl context on the current display,
    // so that we can get valid renderer and capability info.

@@ -115,6 +115,15 @@ public:
 
    TextureHandle getTextureHandle(S32 index)
    {
+       // Guard against an out-of-range sheet index — e.g. a glyph whose bitmapIndex
+       // points at a texture sheet that never loaded (seen on the web build when a
+       // cached .uft's sheet upload is incomplete, or for a partially-built font).
+       // The OOB Vector read otherwise returns a garbage TextureHandle whose object
+       // pointer is non-NULL but invalid, and TextureHandle::lock() then dereferences
+       // it and crashes. A default (NULL) handle is lock-safe (lock() no-ops on NULL),
+       // so the glyph is simply skipped instead.
+       if (index < 0 || index >= (S32)mTextureSheets.size())
+           return TextureHandle();
        return mTextureSheets[index];
    }
 

@@ -6,6 +6,7 @@
 /tmp/*
 /preferences.cs
 /engine/**/preferences.cs
+/console.log
 *.dso
 *.edso
 *.user
@@ -83,10 +84,13 @@ engine/compilers/android-studio/app/src/main/obj/
 engine/compilers/android-studio/app/src/main/libs/
 engine/compilers/android-studio/app/src/main/game/
 engine/compilers/android-studio/app/.externalNativeBuild/
+engine/compilers/android-studio/app/.cxx/
 
-# Linux build files #
-#####################
-engine/compilers/Make-32bit/Debug/
-engine/compilers/Make-32bit/Release/
-engine/compilers/Make-64bit/Debug/
-engine/compilers/Make-64bit/Release/
+# CMake out-of-source build directory #
+#######################################
+/build/
+
+# Vendored prebuilt Android libraries (override the global *.a / *.so ignore) #
+##############################################################################
+!engine/lib/freetype/android/lib/**/*.a
+!engine/lib/openal/Android/**/*.so

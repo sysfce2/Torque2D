@@ -22,6 +22,7 @@
 
 #include "platform/platform.h"
 #include "platform/platformFileIO.h"
+#include "math/mMathFn.h"
 #include "collection/vector.h"
 #include "console/console.h"
 #include "string/stringTable.h"
@@ -193,6 +194,12 @@ bool Platform::isExcludedDirectory(const char *pDir)
 
 inline void catPath(char *dst, const char *src, U32 len)
 {
+   // Defensive: the caller clamps the available length, but guard anyway. We need
+   // room for at least a separator, one source character, and a null terminator;
+   // with less than that, appending would write past the buffer, so do nothing.
+   if(len < 3)
+      return;
+
    if(*dst != '/')
    {
       ++dst; --len;
@@ -276,7 +283,11 @@ char * Platform::makeFullPathName(const char *path, char *buffer, U32 size, cons
          }
          else if(endptr)
          {
-            catPath(endptr, ptr, (U32)(size - (endptr - buffer)));
+            // Clamp the remaining buffer space to a non-negative length. Once the
+            // accumulated path reaches the end of the buffer this difference goes
+            // negative; passing it to catPath as an unsigned length would underflow
+            // to a huge value and overrun the buffer. getMax(...,0) keeps it safe.
+            catPath(endptr, ptr, (U32)getMax((S32)(size - (endptr - buffer)), 0));
             endptr += dStrlen(endptr) - 1;
          }
          
@@ -286,7 +297,7 @@ char * Platform::makeFullPathName(const char *path, char *buffer, U32 size, cons
       {
          // File
 
-         catPath(endptr, ptr, (U32)(size - (endptr - buffer)));
+         catPath(endptr, ptr, (U32)getMax((S32)(size - (endptr - buffer)), 0));
          endptr += dStrlen(endptr) - 1;
       }
 

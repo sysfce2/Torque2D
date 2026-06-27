@@ -299,7 +299,10 @@ bool OpenGLDevice::setScreenMode( U32 width, U32 height, U32 bpp,
          }
       }
 
-      if ( !IsInList )
+      // The resolution list only constrains fullscreen modes. A windowed surface
+      // can be any size (e.g. an arbitrary window-manager drag resize), so don't
+      // reject windowed sizes that aren't in the list.
+      if ( !IsInList && fullScreen )
       {
          Con::printf( "Selected resolution not available: %d %d %d",
             width, height, bpp);
@@ -338,6 +341,12 @@ bool OpenGLDevice::setScreenMode( U32 width, U32 height, U32 bpp,
    U32 flags = SDL_OPENGL;
    if (fullScreen)
       flags |= SDL_FULLSCREEN;
+   else
+      // Let the window manager resize the window; without this SDL fixes the
+      // window size and never emits SDL_VIDEORESIZE, so the canvas could not
+      // follow a resize. The resize handler in x86UNIXWindow.cc picks up the
+      // new size from the event.
+      flags |= SDL_RESIZABLE;
 
    Con::printf( "Setting screen mode to %dx%dx%d (%s)...", width, height,
       bpp, ( fullScreen ? "fs" : "w" ) );

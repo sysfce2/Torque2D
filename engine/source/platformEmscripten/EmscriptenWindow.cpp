@@ -178,16 +178,21 @@ static bool ProcessMessages()
       gPlatState.eventList.push_back(e);
    }
 
-   S32 numEvents = gPlatState.eventList.size();
-   //if (numEvents > 0)
-   //   Con::printf("ProcessMessages: %i events pending", numEvents);
+   // Iterate a LOCAL copy of this frame's events. Handling some events re-enters
+   // ProcessMessages -- e.g. SDL_USEREVENT(SETVIDEOMODE) -> SetAppState() ->
+   // Input::reactivate() pumps/clears+refills the SHARED gPlatState.eventList. The
+   // old loop cached numEvents and indexed the shared list, so after a re-entrant
+   // clear it read past the now-smaller vector (Vector<SDL_Event>::operator[] OOB,
+   // twice per toybox load). A local copy is stable across re-entrancy.
+   Vector<SDL_Event> events = gPlatState.eventList;
+   S32 numEvents = events.size();
 
    if (numEvents == 0)
       return true;
 
    for (int i = 0; i < numEvents; ++i)
    {
-      SDL_Event& event = gPlatState.eventList[i];
+      SDL_Event& event = events[i];
       //Con::printf("Event.type == %u", event.type);
       switch (event.type)
       {

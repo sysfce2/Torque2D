@@ -210,9 +210,14 @@ class TTFAnalyzer
                         int platformID = getWord( table, nameid_offset );
                         int nameid_value = getWord( table, nameid_offset + 6 );
  
-                        // Table 42 lists the valid name Identifiers. We're interested in 4 but not in Unicode encoding (for simplicity).
-                        // The encoding is stored as PlatformID and we're interested in Mac encoding
-                        if ( nameid_value == 4 && platformID == 1 )
+                        // Table 42 lists the valid name Identifiers. We want nameID 4 (the full
+                        // font name). PlatformID gives the encoding: 1 = Macintosh (single-byte
+                        // Mac Roman / ASCII), 3 = Windows and 0 = Unicode (both big-endian UTF-16).
+                        // Modern TTFs -- including the bundled Roboto-Regular.ttf and the Pixel's
+                        // own system fonts -- ship ONLY the Windows record, so accepting just the
+                        // Mac record (platformID == 1) left the enumerated font map empty;
+                        // getFont("Roboto") then returned null and the font failed to load.
+                        if ( nameid_value == 4 && ( platformID == 1 || platformID == 3 || platformID == 0 ) )
                         {
                             // We need the string offset and length, which are the word 6 and 5 respectively
                             int name_length = getWord( table, nameid_offset + 8 );
@@ -223,7 +228,13 @@ class TTFAnalyzer
  
                             // Make sure it is inside the array
                             if ( name_offset >= 0 && name_offset + name_length < table.length )
-                                return new String( table, name_offset, name_length );
+                            {
+                                // Decode with the charset that matches the platformID above.
+                                if ( platformID == 1 )
+                                    return new String( table, name_offset, name_length, java.nio.charset.StandardCharsets.ISO_8859_1 );
+                                else
+                                    return new String( table, name_offset, name_length, java.nio.charset.StandardCharsets.UTF_16BE );
+                            }
                         }
                     }
                 }

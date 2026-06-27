@@ -31,16 +31,28 @@ If you do not wish to compile the source code yourself, precompiled binary files
 
 ### Building the Source
 
-After downloading a copy of the source code, the following project files for each platform are provided for you and can be found in the `engine/compilers` folder.
+**CMake is the single source of truth for the build.** You generate a project for your platform/toolchain from the root `CMakeLists.txt` and build it; the compiled executable is written to the repository root. Convenience generator scripts live at the repo root:
 
-* **Windows:** Visual Studio 2019 and 2022 (works with the free Community Edition)
-* **OSX:** Xcode
-* **Linux:** Make
-* **iOS:** Xcode_iOS
-* **Android:** Android Studio
-* **Web:** Emscripten/CMake
+* **Windows:** `generate-vs2022.bat` (or `generate-vs2026.bat`) → a Visual Studio solution
+* **macOS:** `generate-xcode.command` → an Xcode project
+* **Linux:** `build-linux.sh` (configures and builds; 32- and 64-bit)
+* **iOS:** `generate-xcode-ios.command` (simulator) or `generate-xcode-ios-device.command` (device)
+* **Android:** open `engine/compilers/android-studio` in Android Studio — its Gradle build drives CMake via the NDK
+* **Web:** `generate-emscripten.sh` → a WebAssembly build via `emcmake` (requires the Emscripten SDK)
 
-Additionally, a **CMake** build system is now available as a cross-platform alternative to the platform-specific project files.
+The hand-maintained per-platform project files that used to live in `engine/compilers/` have been removed — CMake replaces them. For full step-by-step build instructions on every platform, see the [Torque2D wiki](https://github.com/TorqueGameEngines/Torque2D/wiki) (the *Building from Source* guide).
+
+#### Generating a Visual Studio 2022 solution with CMake
+
+Generating a fresh, always-up-to-date Visual Studio solution from CMake takes just a few steps. You do **not** need to know anything about CMake to do this.
+
+1. **Install Visual Studio 2022** (the free Community Edition is fine). In the Visual Studio Installer, make sure the **"Desktop development with C++"** workload is checked.
+2. **Install CMake** from [cmake.org/download](https://cmake.org/download/). On the *Install Options* screen, choose **"Add CMake to the system PATH for all users"** (or for the current user). This one-time step is what lets the generator find CMake.
+3. In the root of the repository, **double-click `generate-vs2022.bat`**. It will create the solution under `build\vs2022\` and open `Torque2D.sln` in Visual Studio. (If CMake or the C++ workload is missing, the script tells you what to fix.)
+4. In Visual Studio, choose a configuration (**Debug** or **Release**) at the top, then build with **Build → Build Solution** (`Ctrl+Shift+B`).
+5. The compiled executable is written to the repository root (`Torque2D_DEBUG.exe` for Debug, `Torque2D.exe` for Release). Run it from there (press **F5** in Visual Studio, which is already set to launch from the repo root).
+
+Whenever the engine's source file list changes (for example after pulling new changes), just **re-run `generate-vs2022.bat`** to regenerate the solution.
 
 See the [wiki](https://github.com/TorqueGameEngines/Torque2D/wiki) for available guides on platform setup and development.
 

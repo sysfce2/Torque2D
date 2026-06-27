@@ -1084,10 +1084,20 @@ static bool recurseDumpDirectories(const char *basePath, const char *subPath, Ve
       {
         char szPath[1024];
         dMemset(szPath, 0, 1024);
-        if ( (basePath[dStrlen(basePath) - 1]) != '/')
-      dSprintf(szPath, 1024, "%s%s", basePath, subPath);
+        // Join basePath + subPath with exactly ONE '/' between them. subPath is
+        // built WITHOUT a leading '/' when basePath already ends in '/' (see the
+        // child-construction below), so the old code's unconditional &subPath[1]
+        // (assuming subPath always led with '/') dropped a real filename char:
+        // "/editor/" + "AssetAdmin" became "/editor/ssetAdmin". Only strip
+        // subPath's leading slash when BOTH sides carry one.
+        const bool baseHasSlash = (basePath[dStrlen(basePath) - 1] == '/');
+        const bool subHasSlash  = (subPath[0] == '/');
+        if (baseHasSlash && subHasSlash)
+            dSprintf(szPath, 1024, "%s%s", basePath, &subPath[1]);
+        else if (!baseHasSlash && !subHasSlash)
+            dSprintf(szPath, 1024, "%s/%s", basePath, subPath);
         else
-      dSprintf(szPath, 1024, "%s%s", basePath, &subPath[1]);
+            dSprintf(szPath, 1024, "%s%s", basePath, subPath);
         directoryVector.push_back(StringTable->insert(szPath));
       }
     else
@@ -1154,7 +1164,14 @@ static bool recurseDumpDirectories(const char *basePath, const char *subPath, Ve
 bool Platform::dumpDirectories(const char *path, Vector<StringTableEntry> &directoryVector, S32 depth, bool noBasePath)
 {
  ResourceManager->initExcludedDirectories();
- bool retVal = recurseDumpDirectories(path, "", directoryVector, 0, depth, noBasePath);
+ // Start the recursion at currentDepth = -1 (NOT 0) to match the Win32/x86UNIX
+ // back-ends: the child-recursion guard is `currentDepth < recurseDepth`, so with
+ // the common depth==0 call (e.g. getDirectoryList) a start of 0 gives `0 < 0` ==
+ // false and descends into NO children, returning an empty list. Starting at -1
+ // makes depth==0 enumerate the immediate child directories as intended. (Without
+ // this, the editor's project selector finds no folders under "/" and never lists
+ // the toybox as a project.)
+ bool retVal = recurseDumpDirectories(path, "", directoryVector, -1, depth, noBasePath);
  clearExcludedDirectories();
  return retVal;
 }

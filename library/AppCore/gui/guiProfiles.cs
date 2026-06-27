@@ -35,7 +35,15 @@ function AppCore::SetProfileFont(%this)
 	if ($platform $= "windows")
 		%this.platformFontType = "share tech mono";
 	else if ($platform $= "Android")
-		%this.platformFontType = "Droid";
+		// "Droid" is gone from modern Android (Roboto since ~2014); request "Roboto",
+		// which is the system face AND the bundled assets/fonts/Roboto-Regular.ttf.
+		%this.platformFontType = "Roboto";
+	else if ($platformUnixType $= "emscripten")
+		// Web build: the browser has no system fonts and there's no font backend,
+		// so use a face that ships a pre-baked .uft glyph cache ("share tech mono"
+		// at sizes 12/14/16/18/24 under ^AppCore/fonts). $platform is "x86UNIX" on
+		// the web build (same as desktop Linux), so key off $platformUnixType.
+		%this.platformFontType = "share tech mono";
 	else
 		%this.platformFontType = "monaco";
 	if ($platform $= "ios")

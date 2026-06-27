@@ -1,2 +1,9 @@
-$ cat .gitattributes
+# Keep the vendored third-party libraries out of GitHub language statistics.
 engine/lib/* linguist-vendored
+
+# Line endings for the cross-platform generator scripts:
+#   shell scripts must stay LF (CRLF breaks the shebang on macOS/Linux),
+#   batch files stay CRLF for cmd.exe.
+*.sh        text eol=lf
+*.command   text eol=lf
+*.bat       text eol=crlf

@@ -448,6 +448,13 @@ bool OpenGLDevice::setGammaCorrection(F32 g)
 }
 
 //------------------------------------------------------------------------------
+bool OpenGLDevice::getVerticalSync()
+{
+   Con::printf("WARNING: OpenGLDevice::getVerticalSync is unimplemented %s %d\n", __FILE__, __LINE__);
+   return false;
+}
+
+//------------------------------------------------------------------------------
 bool OpenGLDevice::setVerticalSync( bool on )
 {
    Con::printf("WARNING: OpenGLDevice::setVerticalSync is unimplemented %s %d\n", __FILE__, __LINE__);
