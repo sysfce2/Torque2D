@@ -38,13 +38,13 @@ If you do not wish to compile the source code yourself, precompiled binary files
 * **Linux:** `build-linux.sh` (configures and builds; 32- and 64-bit)
 * **iOS:** `generate-xcode-ios.command` (simulator) or `generate-xcode-ios-device.command` (device)
 * **Android:** open `engine/compilers/android-studio` in Android Studio — its Gradle build drives CMake via the NDK
-* **Web:** Emscripten support is being migrated to CMake and is not yet available
+* **Web:** `generate-emscripten.sh` → a WebAssembly build via `emcmake` (requires the Emscripten SDK)
 
 The hand-maintained per-platform project files that used to live in `engine/compilers/` have been removed — CMake replaces them. For full step-by-step build instructions on every platform, see the [Torque2D wiki](https://github.com/TorqueGameEngines/Torque2D/wiki) (the *Building from Source* guide).
 
 #### Generating a Visual Studio 2022 solution with CMake
 
-If you would rather generate a fresh, always-up-to-date Visual Studio solution instead of using the checked-in one, you can do so in a few steps. You do **not** need to know anything about CMake to do this.
+Generating a fresh, always-up-to-date Visual Studio solution from CMake takes just a few steps. You do **not** need to know anything about CMake to do this.
 
 1. **Install Visual Studio 2022** (the free Community Edition is fine). In the Visual Studio Installer, make sure the **"Desktop development with C++"** workload is checked.
 2. **Install CMake** from [cmake.org/download](https://cmake.org/download/). On the *Install Options* screen, choose **"Add CMake to the system PATH for all users"** (or for the current user). This one-time step is what lets the generator find CMake.

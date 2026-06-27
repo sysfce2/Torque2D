@@ -17,16 +17,16 @@ The executable is dropped at the **repository root** (`Torque2D.exe` /
 
 - **Configure + build:** e.g. `cmake -S . -B build -G "Visual Studio 17 2022" -A x64` then `cmake --build build --config Debug` (also `Release`/`Shipping`). Single-config generators (Make/Ninja) use `-DCMAKE_BUILD_TYPE=` instead of `--config`. Convenience generator scripts live at the repo root (`generate-vs2022.bat`, `generate-vs2026.bat`, `generate-xcode.command`, `generate-make.sh`, `build-linux.sh`).
 - **Per-platform recipes & status** (configure flags for macOS/iOS/Linux 32-bit/Android, runtime-verification state) are documented in `cmake/BUILD-PLATFORM-NOTES.md`.
-- Engine sources are listed **explicitly** in `cmake/EngineSources.cmake` (cross-platform) and `cmake/PlatformSources.cmake` (per-platform back-ends: Windows, macOS, Linux, iOS, Android wired; Emscripten stubbed) — these are the authoritative file lists, **not** globs.
+- Engine sources are listed **explicitly** in `cmake/EngineSources.cmake` (cross-platform) and `cmake/PlatformSources.cmake` (per-platform back-ends: Windows, macOS, Linux, iOS, Android wired; Emscripten stubbed) — these are the authoritative file lists, **not** globs. (All six back-ends — Windows, macOS, Linux, iOS, Android, and Emscripten — are wired and runtime-verified.)
 - Third-party libs (libogg, libvorbis, lpng, ljpeg, zlib) are built as static targets from `engine/lib/CMakeLists.txt`; GoogleTest is built via `add_subdirectory` and linked for the in-engine unit tests (desktop only).
 - **Windows specifics that are load-bearing:** static non-debug runtime `/MT` for all configs (avoids `_DEBUG`, which would make tinyXML `#define DEBUG` and break Box2D), `/Zc:wchar_t-` (so `wchar_t` == the engine's `UTF16`), C++17, and `_HAS_STD_BYTE=0`.
 
-The few remaining items under `engine/compilers/` are **not** standalone build
-systems: `android-studio` is the Android app shell whose Gradle native step *invokes*
-the root CMake via the NDK, and `emscripten` is a reference recipe kept until the Web
-target is CMake-runtime-verified. The legacy hand-maintained projects (the VS
-solutions, the macOS and iOS Xcode projects, and the Linux Makefiles) have all been
-**retired** — CMake replaces them.
+The only remaining item under `engine/compilers/` is **not** a standalone build
+system: `android-studio` is the Android app shell whose Gradle native step *invokes*
+the root CMake via the NDK. The legacy hand-maintained projects — the VS solutions,
+the macOS and iOS Xcode projects, the Linux Makefiles, and the Emscripten reference
+recipe — have all been **retired** (the Web target is now CMake-runtime-verified);
+CMake replaces them.
 
 The built executable must run from the repo root because it loads `main.cs` and the script/asset trees (`editor/`, `library/`, `toybox/`, `tools/`) relative to the working directory.
 

@@ -72,8 +72,8 @@ endforeach()
 # Emscripten: define EMSCRIPTEN=1 GLOBALLY (before any target). emcc only
 # predefines __EMSCRIPTEN__, but the engine (platform/types.gcc.h) AND several
 # vendored libs (e.g. ljpeg/jconfig.h's platform dispatcher) key off bare
-# EMSCRIPTEN. The legacy engine/compilers/emscripten recipe did the same via a
-# global ADD_DEFINITIONS — without it ljpeg fails with "No jconfig.h was included".
+# EMSCRIPTEN — without it ljpeg fails with "No jconfig.h was included". (The
+# retired hand-maintained Emscripten recipe set this the same way, globally.)
 if(EMSCRIPTEN)
     add_compile_definitions(EMSCRIPTEN=1)
 endif()
