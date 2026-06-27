@@ -474,13 +474,31 @@ shared (already applied), and `AndroidTime::getRealMilliseconds` is **safe** —
 mac/iOS code that cast a huge raw time, it subtracts a startup baseline (`android_StartupTime()`
 at boot, `T2DActivity.cpp:1194`), so the value stays in U32 range. No frozen clock.
 
-Cosmetic follow-up (NOT a crash): un-baked **decorative faces with no `.uft` cache** (e.g.
-the editor title font **`black ops one`** 21/28) still render blank — `getFont` for them
-falls back to `Helvetica`, which doesn't exist on Android, so `createSafePlatformFont`
+Cosmetic follow-up (NOT a crash, DEFERRED): un-baked **decorative faces with no `.uft`
+cache** (e.g. the editor title font **`black ops one`** 21/28) render blank — `getFont` for
+them falls back to `Helvetica`, which doesn't exist on Android, so `createSafePlatformFont`
 "utterly fails". This is the exact gap the web build had before its per-face FreeType
-fallback. Fix later by giving `AndroidFont` a per-face → bundled-Roboto fallback (mirror the
-Emscripten `EmscriptenFont` approach) so any unresolved face rasterizes from Roboto instead
-of disappearing.
+fallback. The intended fix is a per-face → bundled-Roboto fallback (so any unresolved face
+rasterizes from Roboto instead of disappearing), mirroring the Emscripten `EmscriptenFont`
+approach.
+
+**Two fallback attempts were made and BOTH reverted — deferred pending better runtime
+evidence.** (1) In `AndroidFont::create` (C++): on a failed face, call `getFontPath("Roboto")`
+and retry — this adds a SECOND `getFontPath` JNI call (extra `AttachCurrentThread`/`Detach`
+on the engine thread). (2) In `FontManager.getFont` (Java): return the Roboto path instead of
+null when no face matches (no new JNI). **Both** FTL runs showed the engine thread going
+**silent right after the `FileWalker` "time in dir java" log** — no crash, no further GL/frame
+activity, and **zero `Torque2D`-tagged lines for the whole run** (even ones that precede
+`FileWalker`, like `Input Init`, which DID appear in the good `ewrz` run). No `logd` "chatty"
+drop markers tie to the app, so it's **ambiguous**: either FTL's logcat capture silently lost
+the high-volume `Torque2D` tag (plausible — `ewrz` captured it, these didn't) OR boot really
+hangs there. The two attempts use entirely different mechanisms (C++ JNI vs pure-Java map
+lookup), and code review finds **no plausible deterministic hang** in the Java path, which
+points at FTL flakiness — but it couldn't be proven from lossy n=1 FTL logs. Since this is
+purely cosmetic and the verified-working state (`ewrz`: full boot, all modules, no crash) is
+already shipped, the fallback was reverted. **Re-attempt on a local arm64 device with reliable
+`adb logcat`** (not FTL) to disambiguate before committing; if it's confirmed flaky, the Java
+`getFont` → Roboto fallback is the cleaner of the two (single JNI call).
 
 Remaining iteration notes:
 - **Engine source set under GLES/NDK:** the unified `EngineSources.cmake` will surface files that
