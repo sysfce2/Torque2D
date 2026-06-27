@@ -126,24 +126,18 @@ bool initializeLibraries()
     // Create the stock colors.
     StockColor::create();
     
-#if defined(TORQUE_OS_ANDROID)
-   //3MB default is way too big for iPhone!!!
-#ifdef	TORQUE_SHIPPING
-    FrameAllocator::init(256 * 1024);	//256KB for now... but let's test and see!
-#else
-    FrameAllocator::init(512 * 1024);	//512KB for now... but let's test and see!
-#endif	//TORQUE_SHIPPING
-#else
-    // iOS AND Emscripten use the full 3MB like desktop. main.cs boots the same
-    // desktop-class editor, which is sized for the 3MB budget; the historical
-    // 256/512KB iPhone limit (a 2013, ~256MB-RAM-era value) is far too small and a
-    // single editor-boot allocation overruns it, tripping the FrameAllocator "alloc
-    // too large" AssertFatal -> the app halts to a black screen (the web build hits
-    // this identically — it runs the same editor). Modern devices and the browser
-    // heap have plenty of RAM, so 3MB is negligible. (Only Android keeps the small
-    // budget above, for its own constraints / separate round.)
+    // Every target — desktop, iOS, Emscripten AND Android — boots the SAME
+    // desktop-class editor (main.cs), which is sized for the 3MB frame-allocator
+    // budget. The historical 256/512KB mobile limit (a 2013, ~256MB-RAM-era iPhone
+    // value) is far too small: a single editor-boot allocation overruns it, tripping
+    // the FrameAllocator "alloc too large" path -> the app halts (a black screen, or a
+    // hard SEGV in FrameAllocator::alloc on Android). In particular, once a font
+    // actually resolves on Android, GFont::read() allocates a FrameTemp to decompress
+    // the .uft glyph table that exceeds 512KB (GuiListBoxCtrl::updateSize -> getFont ->
+    // GFont::create -> GFont::read). iOS and Emscripten were already bumped to 3MB for
+    // exactly this; Android is the same editor, so it gets the same budget. 3MB is
+    // negligible on any modern device or the browser heap.
     FrameAllocator::init(3 << 20);      // 3 meg frame allocator buffer
-#endif	//TORQUE_OS_ANDROID
 
     TextureManager::create();
     ResManager::create();

@@ -15,7 +15,7 @@ project files from it.
 | Linux x86 32-bit (Make, -m32) | ✅ | ✅ | ✅ Debug+Release | ✅ (boots+GL init under WSLg via llvmpipe) |
 | iOS (arm64 simulator) | ✅ | ✅ | ✅ Debug (.app, full bundle) | ✅ editor renders + touch works (user-confirmed) |
 | iOS (arm64 device) | ✅ | ✅ | ✅ Debug (.app, code-signed) | ✅ runs on a real iPad — perfect FPS, touch good (user-confirmed) |
-| Android (Gradle+CMake) | ✅ | ✅ (CI) | ✅ APK (CI) | ⏳ (runs via Firebase Test Lab; registers all modules, then crashes in font init — see Android round) |
+| Android (Gradle+CMake) | ✅ | ✅ (CI) | ✅ APK (CI) | ✅ editor boots, renders & runs on a real Pixel 7 Pro via Firebase Test Lab — main UI (Roboto) text renders; only un-baked decorative faces (e.g. "black ops one") stay blank. See Android round |
 | Web (Emscripten/WASM) | ✅ | ✅ | ✅ Debug (.html/.js/.wasm/.data) | ✅ editor renders in-browser — Project Manager UI with full TEXT (.uft cache + a FreeType-rasterized Roboto fallback for any uncached face/size) + sprites; toys render incl. blended/lit draws (PyramidToy light); stable, no crash |
 
 **Linux (32 & 64-bit) builds and links** (verified in WSL/Ubuntu 22.04). The
@@ -414,18 +414,24 @@ freetype/openal). Build it with the CI job (`./gradlew assembleDebug`) or open
 - Added `platformAndroid` to the Android include path (`T2DActivity.h` includes the vendored
   `<android_native_app_glue.h>`).
 
-**Runtime — IN PROGRESS (debugged via Firebase Test Lab).** With no local arm64 device,
-the APK is run on a **real Pixel 7** through Firebase Test Lab (Robo test, free Spark
-tier). The local x86_64 emulator *can* run the arm64 APK via NDK ARM translation, but a
-crash there lands in an anonymous translated-code region that can't be symbolicated — so
-use a real device. Debug loop: build → FTL Robo run → download the logcat →
+**Runtime — DONE (verified on a real Pixel 7 Pro via Firebase Test Lab).** With no local
+arm64 device, the APK is run on a **real Pixel 7 / 7 Pro** through Firebase Test Lab (Robo
+test, free Spark tier). The local x86_64 emulator *can* run the arm64 APK via NDK ARM
+translation, but a crash there lands in an anonymous translated-code region that can't be
+symbolicated — so use a real device. Debug loop: build → FTL Robo run → download the logcat →
 `ndk-stack -sym <app/build/intermediates/cxx/Debug/.../obj/arm64-v8a> -dump <logcat>`
-(the unstripped lib keeps full symbols + line numbers).
+(the unstripped lib keeps full symbols + line numbers). The logcat tag for the engine's own
+`Con::printf` output is **`Torque2D`** (filter on it to read the boot narrative).
 
-What works so far: APK installs, EGL + GLESv1/v2 and OpenAL initialize, the
-android_native_app_glue lifecycle runs, and **all editor modules register**.
+What works: the editor **boots, renders, and runs**. The logcat shows the full boot —
+EGL + GLESv1/v2 + OpenAL init, GL up on **Mali-G710 / OpenGL ES-CM 1.1** (screen mode
+2232×1080×32, Max Texture Size 16383), **all five editor modules register** (EditorCore,
+EditorConsole, ProjectManager, AssetAdmin, GuiEditor), Android logs
+`Displayed …MyNativeActivity: +297ms` (first frame drawn), the app runs ~35 s and Robo
+crawls the live window — **zero native crashes**. Main UI text (Roboto) renders.
 
-Fixed to get there:
+Fixed to get there (each crash surfaced the next, the same crash-by-crash bring-up the
+other platforms went through):
 - **Empty main.cs dir (the module-registration crash).** Android's process cwd is `/`, so
   `defaultGame.cc` resolved `main.cs` to `/main.cs`, then chopped the filename at the
   *leading* slash, leaving an **empty** main.cs dir. That empty string became the `cwd`
@@ -435,18 +441,46 @@ Fixed to get there:
   rather than truncating to `""`. Also hardened `platformFileIO.cc` `makeFullPathName` /
   `catPath` (signed remaining-length via `getMax(...,0)` + a `len<3` guard) so a
   degenerate cwd can't overrun the buffer again — a latent cross-platform bug.
+- **Font init crash #1 (`AndroidFont::getCharInfo`, null deref, fault 0x98).** Two layers,
+  both fixed earlier: the editor's font failed to load (`FT_New_Face` errored), AND
+  `AndroidFont::create()` returned `true` even on failure so `getCharInfo` dereferenced an
+  invalid `FT_Face`. Now `create()` propagates the real result (→ `createPlatformFont()`
+  returns NULL, which `GFont::create`/`GuiControlProfile::getFont` already tolerate) and
+  `getCharInfo` guards `!fontFaceCreated || face == NULL`. This stopped the crash *inside*
+  AndroidFont but exposed the next one — the font still wasn't loading.
+- **Font init crash #2 — the font never resolved (`GFont::isValidChar` null-`this`, fault
+  0x1e0 ← `GuiMenuBarCtrl::calculateMenus`).** Root cause was the **Java** side:
+  `FontManager.TTFAnalyzer.getTtfFontName()` only read Macintosh (`platformID == 1`) name
+  records, but the bundled `Roboto-Regular.ttf` *and* the Pixel's own system fonts ship
+  **only** Windows (`platformID == 3`, UTF-16BE) records. So the enumerated font map came up
+  empty, `getFont("Roboto")` returned null, `AndroidFont` failed, `GFont::create` returned
+  NULL, and `GuiMenuBarCtrl` (one of ~30 GUI sites that deref `getFont()` unguarded)
+  crashed. Fixed by accepting `platformID` 1/3/0 and decoding UTF-16BE for 3/0
+  (`FontManager.java`). Roboto now resolves → the main UI renders text. (We chose the
+  root-cause fix over hardening all ~30 `getFont()->` deref sites; those stay reliant on the
+  font loading, which now holds. The unguarded sites remain a latent cross-platform
+  robustness gap if a font is ever genuinely missing.)
+- **Frame-allocator overflow (`FrameAllocator::alloc` SEGV ← `GFont::read` of a `.uft` ←
+  `GuiListBoxCtrl::updateSize`).** Once fonts actually loaded, reading a cached `.uft` glyph
+  table allocates a `FrameTemp` larger than Android's **512 KB** frame allocator and
+  overran it. This is the SAME class already fixed for iOS/Emscripten (the desktop-class
+  editor boot needs 3 MB); Android was the last platform left on the small budget. Collapsed
+  `defaultGame.cc` to give **every** platform the 3 MB buffer (negligible on any modern
+  device). This was the last boot crash.
 
-NEXT bug (not yet fixed): **font loading.** Once the editor draws its first text it
-crashes in `AndroidFont::getCharInfo` (null deref, fault 0x98) ← `GFont::getStrNWidth`.
-Two layers: (1) the editor's font fails to load — `FT_New_Face` errors on the path from
-`T2DActivity::getFontPath` (`AndroidFont.cpp` / `T2DActivity.cpp:1072`); (2) latent
-robustness bug — `AndroidFont::create()` returns `true` even when the face fails, and
-`getCharInfo` dereferences `face` with no null check. The fix needs the font to actually
-resolve on Android AND the failure propagated/guarded.
+**Checked, NOT a bug on Android: the arm64 float→unsigned saturation class** (frozen clock /
+frozen fades; fixed on macOS/iOS in `osxTime.mm` / `iOSTime.mm` / `mFluid.h`). `mFluid.h` is
+shared (already applied), and `AndroidTime::getRealMilliseconds` is **safe** — unlike the
+mac/iOS code that cast a huge raw time, it subtracts a startup baseline (`android_StartupTime()`
+at boot, `T2DActivity.cpp:1194`), so the value stays in U32 range. No frozen clock.
 
-Also still expect the **arm64 float→unsigned saturation** class (frozen clock / frozen
-fades; fixed on macOS/iOS in `osxTime.mm` / `iOSTime.mm` / `mFluid.h`) once it reaches the
-sim/render loop — `AndroidTime` / `AndroidMath` likely carry the same trap.
+Cosmetic follow-up (NOT a crash): un-baked **decorative faces with no `.uft` cache** (e.g.
+the editor title font **`black ops one`** 21/28) still render blank — `getFont` for them
+falls back to `Helvetica`, which doesn't exist on Android, so `createSafePlatformFont`
+"utterly fails". This is the exact gap the web build had before its per-face FreeType
+fallback. Fix later by giving `AndroidFont` a per-face → bundled-Roboto fallback (mirror the
+Emscripten `EmscriptenFont` approach) so any unresolved face rasterizes from Roboto instead
+of disappearing.
 
 Remaining iteration notes:
 - **Engine source set under GLES/NDK:** the unified `EngineSources.cmake` will surface files that
