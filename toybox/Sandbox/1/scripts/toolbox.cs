@@ -290,6 +290,10 @@ function RestartToyOverlayButton::onClick(%this)
     // Reset the toy.
     if ( Sandbox.ActiveToy.ScopeSet.isMethod("reset") )
         Sandbox.ActiveToy.ScopeSet.reset();
+
+    // reset() re-applies the toy's fixed-aspect camera size, so re-fit it to the
+    // current window (otherwise restarting on a resized window stretches the scene).
+    SandboxWindow.updateCameraAspect();
 }
 
 //-----------------------------------------------------------------------------

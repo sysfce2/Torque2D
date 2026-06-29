@@ -1,0 +1,7 @@
+<ImageAsset
+    AssetName="torqueBrick"
+    ImageFile="torqueBrick.png"
+    CellWidth="64"
+    CellCountX="4"
+    CellHeight="32"
+    CellCountY="4" />
