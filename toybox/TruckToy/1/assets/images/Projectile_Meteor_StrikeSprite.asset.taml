@@ -1,0 +1,7 @@
+<ImageAsset
+    AssetName="Projectile_Meteor_StrikeSprite"
+    ImageFile="Projectile_Meteor_Strike.png"
+    CellCountX="4"
+    CellCountY="4"
+    CellWidth="64"
+    CellHeight="96" />
