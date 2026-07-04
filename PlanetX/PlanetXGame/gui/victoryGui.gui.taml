@@ -1,0 +1,36 @@
+<GuiControl
+	Name="VictoryGui"
+	Profile="GuiWindowProfile"
+	HorizSizing="center"
+	VertSizing="center"
+	Position="312 254"
+	Extent="400 260">
+	<GuiControl
+		Name="VictoryHeading"
+		Profile="GuiLabelProfile"
+		HorizSizing="center"
+		VertSizing="bottom"
+		Position="0 36"
+		Extent="400 40"
+		Text="CRYSTAL SECURED"
+		Align="center"
+		OverrideFontColor="1"
+		FontColor="33 191 132 255" />
+	<GuiControl
+		Profile="GuiTextProfile"
+		HorizSizing="center"
+		VertSizing="bottom"
+		Position="0 84"
+		Extent="400 24"
+		Text="Mission complete. Time to head home."
+		Align="center" />
+	<GuiButtonCtrl
+		Name="VictoryTitleButton"
+		Profile="GuiButtonProfile"
+		HorizSizing="center"
+		VertSizing="bottom"
+		Position="80 150"
+		Extent="240 44"
+		Text="RETURN TO TITLE"
+		Command="PlanetXGame.dialogToTitle();" />
+</GuiControl>

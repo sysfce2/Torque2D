@@ -1,0 +1,8 @@
+<ImageAsset
+    AssetName="burst"
+    ImageFile="burst.png"
+    FilterMode="NEAREST"
+    CellCountX="8"
+    CellCountY="1"
+    CellWidth="128"
+    CellHeight="128" />

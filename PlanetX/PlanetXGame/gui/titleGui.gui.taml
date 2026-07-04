@@ -1,0 +1,52 @@
+<GuiSpriteCtrl
+	Name="PlanetXTitle"
+	Profile="GuiDefaultProfile"
+	HorizSizing="relative"
+	VertSizing="relative"
+	Position="0 0"
+	Extent="1024 768"
+	Image="PlanetXGame:torqueBG"
+	SingleFrameBitmap="1"
+	TileImage="0"
+	FullSize="1"
+	ConstrainProportions="1"
+	ImageColor="255 255 255 255">
+	<GuiSpriteCtrl
+		Name="TitleLogo"
+		Profile="GuiDefaultProfile"
+		HorizSizing="center"
+		VertSizing="relative"
+		Position="212 96"
+		Extent="600 165"
+		Image="PlanetXGame:planetxLogo"
+		SingleFrameBitmap="1"
+		FullSize="1" />
+	<GuiButtonCtrl
+		Name="TitleStartButton"
+		Profile="GuiButtonProfile"
+		HorizSizing="center"
+		VertSizing="relative"
+		Position="372 430"
+		Extent="280 52"
+		Text="START MISSION"
+		Command="PlanetXGame.startGame();" />
+	<GuiButtonCtrl
+		Name="TitleQuitButton"
+		Profile="GuiButtonProfile"
+		HorizSizing="center"
+		VertSizing="relative"
+		Position="372 502"
+		Extent="280 52"
+		Text="QUIT"
+		Command="quit();" />
+	<GuiControl
+		Name="TitleVersionLabel"
+		Profile="GuiTextProfile"
+		HorizSizing="left"
+		VertSizing="top"
+		Position="804 736"
+		Extent="200 24"
+		Align="right"
+		OverrideFontColor="1"
+		FontColor="33 191 132 255" />
+</GuiSpriteCtrl>

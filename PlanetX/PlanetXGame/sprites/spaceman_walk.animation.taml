@@ -1,0 +1,5 @@
+<AnimationAsset
+    AssetName="spacemanWalkAnim"
+    Image="@asset=PlanetXGame:spacemanWalk"
+    animationFrames="0 1 2 3"
+    animationTime="0.4" />

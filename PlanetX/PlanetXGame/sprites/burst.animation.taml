@@ -1,0 +1,6 @@
+<AnimationAsset
+    AssetName="burstAnim"
+    Image="@asset=PlanetXGame:burst"
+    animationFrames="0 1 2 3 4 5 6 7"
+    animationTime="0.5"
+    animationCycle="0" />
