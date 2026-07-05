@@ -32,6 +32,11 @@ function PlanetXGame::createBulletPools(%this)
 		%bullet.setCollisionGroups($PlanetX::AlienGroup SPC $PlanetX::WallGroup);
 		%bullet.setCollisionCallback(true);
 		%bullet.setBullet(true);
+
+		// Bolts fly at the angle they were fired at. Without this, a
+		// collision gives the body angular velocity which survives park()
+		// and recycling - pooled bullets came back visibly spinning.
+		%bullet.setFixedAngle(true);
 		PlanetXScene.add(%bullet);
 		%bullet.park();
 
