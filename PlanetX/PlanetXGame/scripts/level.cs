@@ -44,6 +44,7 @@ function PlanetXGame::buildLevel(%this)
 
 	new SceneWindow(PlanetXWindow)
 	{
+		class = "PlanetXSceneWindow";
 		Profile = "GuiDefaultProfile";
 		HorizSizing = "relative";
 		VertSizing = "relative";
@@ -54,6 +55,12 @@ function PlanetXGame::buildLevel(%this)
 
 	PlanetXWindow.setScene(PlanetXScene);
 	PlanetXWindow.setCameraSize(40, 30);
+
+	// The camera size above assumes a 4:3 window; refit it to whatever shape
+	// the window actually has right now (it may have been resized while the
+	// title screen was up).
+	PlanetXWindow.updateCameraAspect();
+
 	PlanetXWindow.setViewLimitOn(-$PlanetX::WorldHalfWidth, -$PlanetX::WorldHalfHeight,
 		$PlanetX::WorldHalfWidth, $PlanetX::WorldHalfHeight);
 
@@ -74,6 +81,28 @@ function PlanetXGame::buildLevel(%this)
 	%this.spawnAliens();
 	%this.buildHud();
 	%this.pushControls();
+}
+
+//-----------------------------------------------------------------------------
+// Window resizing. Keep the camera height fixed and fit its width to the
+// window's aspect ratio, so resizing the window widens or narrows the view
+// instead of stretching it (same pattern as the Sandbox's scene.cs).
+//-----------------------------------------------------------------------------
+
+function PlanetXSceneWindow::updateCameraAspect(%this)
+{
+	%extent = Canvas.extent;
+	%aspect = %extent.x / %extent.y;
+
+	%camera = %this.getCameraSize();
+	%camera.x = %camera.y * %aspect;
+	%this.setCameraSize(%camera);
+}
+
+/// Engine callback: fires on every live window resize.
+function PlanetXSceneWindow::onExtentChange(%this)
+{
+	%this.updateCameraAspect();
 }
 
 //-----------------------------------------------------------------------------
