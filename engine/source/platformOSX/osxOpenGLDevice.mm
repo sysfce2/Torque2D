@@ -466,7 +466,7 @@ bool osxOpenGLDevice::enumMonitors()
     nAllDevs = 0;
 
     CGDirectDisplayID _displayIDs[32];
-    uint32_t _displayCount;
+    uint32_t _displayCount = 0;
 
     CGGetActiveDisplayList (32, _displayIDs, &_displayCount);
 
@@ -474,6 +474,16 @@ bool osxOpenGLDevice::enumMonitors()
     {
         mMonitorList.push_back(_displayIDs[ii]);
         allDevs[nAllDevs++] = _displayIDs[ii];
+    }
+
+    // The active list is empty while the display is asleep or the screen is
+    // locked. Honor the "at least the main device" guarantee above -
+    // chooseMonitor() indexes this list unconditionally in Release builds.
+    if ( mMonitorList.empty() )
+    {
+        const CGDirectDisplayID mainDisplay = CGMainDisplayID();
+        mMonitorList.push_back(mainDisplay);
+        allDevs[nAllDevs++] = mainDisplay;
     }
 
     return true;
