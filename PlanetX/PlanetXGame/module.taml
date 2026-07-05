@@ -23,6 +23,10 @@
 			Extension="image.taml"
 			Recurse="true"/>
 		<DeclaredAssets
+			Path="particles"
+			Extension="particle.taml"
+			Recurse="true"/>
+		<DeclaredAssets
 			Path="music"
 			Extension="audio.taml"
 			Recurse="true"/>

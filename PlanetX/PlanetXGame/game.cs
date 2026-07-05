@@ -190,4 +190,5 @@ function PlanetXGame::teardownLevel(%this)
 	%this.player = "";
 	%this.tileMap = "";
 	%this.crosshair = "";
+	%this.steamPlayer = "";
 }

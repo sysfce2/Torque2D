@@ -56,6 +56,21 @@ function PlanetXGame::createBulletPools(%this)
 		%this.burst[%i] = %burst;
 	}
 	%this.nextBurst = 0;
+
+	// One reusable steam vent for gun overheats.
+	%steam = new ParticlePlayer()
+	{
+		Particle = "PlanetXGame:steam";
+		SceneLayer = $PlanetX::EffectLayer;
+		ParticleInterpolation = true;
+		SizeScale = 1.3;
+	};
+	%steam.setBodyType("static");
+	%steam.setCollisionSuppress(true);
+	PlanetXScene.add(%steam);
+	%steam.stop();
+
+	%this.steamPlayer = %steam;
 }
 
 //-----------------------------------------------------------------------------
@@ -117,6 +132,14 @@ function PlanetXGame::addGunHeat(%this, %amount)
 	{
 		%this.gunHeat = 1;
 		%this.overheated = true;
+
+		// Vent: a steam plume off the gun and a hiss.
+		if (isObject(%this.steamPlayer))
+		{
+			%this.steamPlayer.setPosition(%this.player.getMuzzlePosition());
+			%this.steamPlayer.play(true);
+		}
+		Audio.PlaySound("PlanetXGame:steam");
 	}
 
 	%this.updateHeatBar();
@@ -138,8 +161,21 @@ function PlanetXGame::heatTick(%this)
 	if (%this.gunHeat < 0)
 		%this.gunHeat = 0;
 
-	if (%this.overheated && %this.gunHeat <= $PlanetX::HeatResumeThreshold)
-		%this.overheated = false;
+	if (%this.overheated)
+	{
+		// The vent plume follows the gun while it cools.
+		if (isObject(%this.steamPlayer))
+			%this.steamPlayer.setPosition(%this.player.getMuzzlePosition());
+
+		if (%this.gunHeat <= $PlanetX::HeatResumeThreshold)
+		{
+			%this.overheated = false;
+
+			// Let the last puffs finish rather than vanishing.
+			if (isObject(%this.steamPlayer))
+				%this.steamPlayer.stop(true, false);
+		}
+	}
 
 	%this.updateHeatBar();
 }
