@@ -52,11 +52,12 @@ bool osxOpenGLDevice::enumDisplayModes( CGDirectDisplayID display )
     // Clear the resolution list.
     mResolutionList.clear();
 
-    // Fetch a list of all available modes for the specified display.
+    // Fetch a list of all available modes for the specified display. This can
+    // be NULL while the display is asleep or reconfiguring.
     CFArrayRef modeArray = CGDisplayCopyAllDisplayModes(display, NULL);
 
     // Fetch the mode count.
-    const S32 modeCount = (const S32)CFArrayGetCount(modeArray);
+    const S32 modeCount = modeArray != NULL ? (const S32)CFArrayGetCount(modeArray) : 0;
 
     // Iterate the modes.
     for( S32 modeIndex = 0; modeIndex < modeCount; modeIndex++ )
@@ -70,12 +71,18 @@ bool osxOpenGLDevice::enumDisplayModes( CGDirectDisplayID display )
         // Get the mode height.
         const S32 height = (const S32)CGDisplayModeGetHeight(mode);
 
-        // Get the pixel encoding.
+        // Get the pixel encoding. CGDisplayModeCopyPixelEncoding is deprecated
+        // (macOS 10.11+) and returns NULL for modes it cannot describe.
         CFStringRef pixelEncoding = CGDisplayModeCopyPixelEncoding(mode);
 
         // Is it a 32 bpp?
         S32 bitDepth;
-        if ( CFStringCompare( pixelEncoding, CFSTR(IO32BitDirectPixels), 0 ) == kCFCompareEqualTo )
+        if ( pixelEncoding == NULL )
+        {
+            // Modern macOS displays are effectively always 32 bpp.
+            bitDepth = 32;
+        }
+        else if ( CFStringCompare( pixelEncoding, CFSTR(IO32BitDirectPixels), 0 ) == kCFCompareEqualTo )
         {
             bitDepth = 32;
         }
@@ -86,8 +93,12 @@ bool osxOpenGLDevice::enumDisplayModes( CGDirectDisplayID display )
         else
         {
             // Skip the mode.
+            CFRelease( pixelEncoding );
             continue;
         }
+
+        if ( pixelEncoding != NULL )
+            CFRelease( pixelEncoding );
 
         // Prepare the resolution.
         Resolution foundResolution( width, height, bitDepth );
@@ -109,6 +120,17 @@ bool osxOpenGLDevice::enumDisplayModes( CGDirectDisplayID display )
 
         // Store the resolution.
         mResolutionList.push_back( Resolution( width, height, bitDepth ) );
+    }
+
+    if ( modeArray != NULL )
+        CFRelease( modeArray );
+
+    // Never leave the list empty - later code indexes it. Fall back to the
+    // display's current bounds.
+    if ( mResolutionList.size() == 0 )
+    {
+        const CGRect bounds = CGDisplayBounds( display );
+        mResolutionList.push_back( Resolution( (S32)bounds.size.width, (S32)bounds.size.height, 32 ) );
     }
 
     return true;
