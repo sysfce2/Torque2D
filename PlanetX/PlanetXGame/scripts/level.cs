@@ -65,23 +65,94 @@ function PlanetXGame::buildLevel(%this)
 	PlanetXWindow.setViewLimitOn(-$PlanetX::WorldHalfWidth, -$PlanetX::WorldHalfHeight,
 		$PlanetX::WorldHalfWidth, $PlanetX::WorldHalfHeight);
 
+	// One seeded generator drives the terrain colors, the objective
+	// placements, and the alien nests, so a level is fully described by
+	// its seed.
+	%this.generator = new NoiseGenerator();
+	%this.generator.setSeed(getRandom(1, 999999));
+
 	%this.buildTileMap();
 	%this.buildBarriers();
 	%this.buildRocks();
-	%this.buildRocket("-86 -52");
+
+	// Drop the rocket and the crystal at noise-chosen spots, pushed apart
+	// if they landed too close together.
+	%rocketPosition = %this.noiseWorldPoint(101.3, 897.7);
+	%crystalPosition = %this.noiseWorldPoint(431.9, 213.1);
+
+	%delta = Vector2Sub(%crystalPosition, %rocketPosition);
+	%distance = Vector2Length(%delta);
+	if (%distance < $PlanetX::MinObjectiveDistance)
+	{
+		// Push both away from their midpoint along the line between them.
+		// Degenerate overlap: pick an arbitrary separation axis.
+		%angle = %distance < 0.1 ? 0 : mAtan(%delta);
+
+		%mid = (getWord(%rocketPosition, 0) + getWord(%crystalPosition, 0)) / 2 SPC
+		       (getWord(%rocketPosition, 1) + getWord(%crystalPosition, 1)) / 2;
+		%half = $PlanetX::MinObjectiveDistance / 2;
+
+		%rocketPosition = %this.clampToWorld(Vector2Add(%mid, Vector2Direction(%angle + 180, %half)));
+		%crystalPosition = %this.clampToWorld(Vector2Add(%mid, Vector2Direction(%angle, %half)));
+
+		// Clamping can eat the separation when the push line runs into a
+		// world edge. Fall back to the corner diagonally opposite the
+		// rocket, which is always far enough.
+		%delta = Vector2Sub(%crystalPosition, %rocketPosition);
+		if (Vector2Length(%delta) < $PlanetX::MinObjectiveDistance)
+		{
+			%rangeX = $PlanetX::WorldHalfWidth - $PlanetX::PlacementMargin;
+			%rangeY = $PlanetX::WorldHalfHeight - $PlanetX::PlacementMargin;
+			%crystalPosition = (getWord(%rocketPosition, 0) < 0 ? %rangeX : -%rangeX) SPC
+			                   (getWord(%rocketPosition, 1) < 0 ? %rangeY : -%rangeY);
+		}
+	}
+
+	echo("PlanetX: objectives" SPC Vector2Length(Vector2Sub(%crystalPosition, %rocketPosition)) SPC "apart");
+
+	%this.buildRocket(%rocketPosition);
+	%this.buildCrystal(%crystalPosition);
 
 	%this.createBulletPools();
 	%this.buildCrosshair();
 
-	%this.player = %this.spawnPlayer("-78 -58");
+	// The spaceman steps out beside his rocket.
+	%spawn = %this.clampToWorld(Vector2Add(%rocketPosition, "6 -3"));
+	%this.player = %this.spawnPlayer(%spawn);
 
 	// Rigid camera follow, no rotation.
 	PlanetXWindow.mount(%this.player, "0 0", 0, true, false);
 
-	%this.buildCrystal("80 58");
 	%this.spawnAliens();
 	%this.buildHud();
 	%this.pushControls();
+
+	%this.generator.delete();
+}
+
+/// A noise-derived point inside the world bounds. %cx/%cy select a sampling
+/// spot in the noise field, far from the terrain's own samples; the two
+/// coordinates use offset spots so they are decorrelated.
+function PlanetXGame::noiseWorldPoint(%this, %cx, %cy)
+{
+	// Stretch the mid-clustered noise toward the full 0..1 range.
+	%vx = mClamp((%this.generator.getNoise(%cx, %cy) - 0.25) / 0.5, 0, 1);
+	%vy = mClamp((%this.generator.getNoise(%cx + 57.3, %cy + 91.7) - 0.25) / 0.5, 0, 1);
+
+	%rangeX = $PlanetX::WorldHalfWidth - $PlanetX::PlacementMargin;
+	%rangeY = $PlanetX::WorldHalfHeight - $PlanetX::PlacementMargin;
+
+	return -%rangeX + %vx * 2 * %rangeX SPC -%rangeY + %vy * 2 * %rangeY;
+}
+
+/// Clamp a point to the world bounds, respecting the placement margin.
+function PlanetXGame::clampToWorld(%this, %point)
+{
+	%rangeX = $PlanetX::WorldHalfWidth - $PlanetX::PlacementMargin;
+	%rangeY = $PlanetX::WorldHalfHeight - $PlanetX::PlacementMargin;
+
+	return mClamp(getWord(%point, 0), -%rangeX, %rangeX) SPC
+	       mClamp(getWord(%point, 1), -%rangeY, %rangeY);
 }
 
 //-----------------------------------------------------------------------------
@@ -118,6 +189,11 @@ $PlanetX::NoiseZoom = 0.06;
 $PlanetX::NoiseOctaves = 4;
 $PlanetX::NoisePersistence = 0.5;
 
+// Objective placement: margin from the world edge and the minimum distance
+// the crystal must be from the rocket.
+$PlanetX::PlacementMargin = 10;
+$PlanetX::MinObjectiveDistance = 100;
+
 /// The terrain: near-white tiles tinted per-corner from a Perlin noise field.
 /// Noise is sampled once per grid VERTEX ((N+1)x(M+1) samples); each tile's
 /// four corners take the color of the vertices it shares with its neighbors,
@@ -130,20 +206,16 @@ function PlanetXGame::buildTileMap(%this)
 	%countY = $PlanetX::TileCountY;
 
 	// Pass 1: one ramp color per grid vertex.
-	%generator = new NoiseGenerator();
-	%generator.setSeed(getRandom(1, 999999));
-
 	for (%cy = 0; %cy <= %countY; %cy++)
 	{
 		for (%cx = 0; %cx <= %countX; %cx++)
 		{
-			%value = %generator.getComplexNoise(%cx * $PlanetX::NoiseZoom,
+			%value = %this.generator.getComplexNoise(%cx * $PlanetX::NoiseZoom,
 				%cy * $PlanetX::NoiseZoom, $PlanetX::NoiseOctaves,
 				$PlanetX::NoisePersistence);
 			%corner[%cx, %cy] = %this.rocketRampColor(%value);
 		}
 	}
-	%generator.delete();
 
 	// Pass 2: the tile batch, one shared corner color per touching tile.
 	%map = new CompositeSprite()
