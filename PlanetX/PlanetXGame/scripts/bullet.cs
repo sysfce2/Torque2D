@@ -8,7 +8,6 @@ $PlanetX::BulletLifeMs     = 1200;
 $PlanetX::FireCooldownMs   = 200;
 $PlanetX::BulletPoolSize   = 16;
 $PlanetX::BurstPoolSize    = 8;
-$PlanetX::BulletMuzzleGap  = 1.8;
 
 function PlanetXGame::createBulletPools(%this)
 {
@@ -17,12 +16,12 @@ function PlanetXGame::createBulletPools(%this)
 		%bullet = new Sprite()
 		{
 			class = "PlanetXBullet";
-			Size = "1.5 0.75";
+			Size = "1 0.5";
 			SceneLayer = $PlanetX::BulletLayer;
 			SceneGroup = $PlanetX::BulletGroup;
 			Image = "PlanetXGame:bolt";
 		};
-		%bullet.createCircleCollisionShape(0.4);
+		%bullet.createCircleCollisionShape(0.25);
 		%bullet.setCollisionGroups($PlanetX::AlienGroup SPC $PlanetX::WallGroup);
 		%bullet.setCollisionCallback(true);
 		%bullet.setBullet(true);
@@ -38,7 +37,7 @@ function PlanetXGame::createBulletPools(%this)
 		%burst = new Sprite()
 		{
 			class = "PlanetXBurst";
-			Size = "4 4";
+			Size = "2.5 2.5";
 			SceneLayer = $PlanetX::EffectLayer;
 			Image = "PlanetXGame:burst";
 		};
@@ -69,9 +68,8 @@ function PlanetXGame::fireBullet(%this)
 	%bullet = %this.bullet[%this.nextBullet];
 	%this.nextBullet = (%this.nextBullet + 1) % $PlanetX::BulletPoolSize;
 
-	%angle = %this.player.getAngle();
-	%muzzle = Vector2Add(%this.player.getPosition(),
-		Vector2Direction(%angle, $PlanetX::BulletMuzzleGap));
+	%angle = %this.player.aimAngle;
+	%muzzle = %this.player.getMuzzlePosition();
 
 	if (isEventPending(%bullet.recycleEvent))
 		cancel(%bullet.recycleEvent);

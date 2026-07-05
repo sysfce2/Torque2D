@@ -9,14 +9,15 @@ function PlanetXGame::buildCrystal(%this, %position)
 	{
 		class = "PlanetXCrystal";
 		Position = %position;
-		Size = "3 3";
-		SceneLayer = $PlanetX::CrystalLayer;
+		Size = "2.5 2.5";
+		SceneLayer = $PlanetX::EntityLayer;
 		SceneGroup = $PlanetX::PickupGroup;
 		Image = "PlanetXGame:crystal";
 	};
 
 	%crystal.setBodyType("static");
-	%crystal.createCircleCollisionShape(1.5);
+	%crystal.createCircleCollisionShape(1.2);
+	%crystal.setSortPoint(0, -1);
 
 	// A sensor detects contacts without physically blocking them.
 	%crystal.setCollisionShapeIsSensor(0, true);

@@ -4,5 +4,5 @@
     FilterMode="NEAREST"
     CellCountX="8"
     CellCountY="1"
-    CellWidth="128"
-    CellHeight="128" />
+    CellWidth="40"
+    CellHeight="40" />

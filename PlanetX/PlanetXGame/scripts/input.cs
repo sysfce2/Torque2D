@@ -10,7 +10,7 @@
 // even when the mouse doesn't.
 //-----------------------------------------------------------------------------
 
-$PlanetX::AimTickMs = 50;
+$PlanetX::AimTickMs = 32;
 
 function PlanetXGame::pushControls(%this)
 {
@@ -167,7 +167,7 @@ function PlanetXGame::updateAim(%this)
 	if (isObject(%this.crosshair))
 		%this.crosshair.setPosition(%world);
 
-	%this.player.setAngle(mAtan(Vector2Sub(%world, %this.player.getPosition())));
+	%this.player.setAim(mAtan(Vector2Sub(%world, %this.player.getPosition())));
 }
 
 function PlanetXGame::aimTick(%this)

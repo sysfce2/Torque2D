@@ -14,15 +14,13 @@ $PlanetX::BulletGroup = 3;
 $PlanetX::WallGroup   = 4;
 $PlanetX::PickupGroup = 5;
 
-// Scene layers, back (high) to front (low).
-$PlanetX::TileLayer    = 30;
-$PlanetX::RockLayer    = 25;
-$PlanetX::CrystalLayer = 24;
-$PlanetX::RocketLayer  = 21;
-$PlanetX::AlienLayer   = 20;
-$PlanetX::PlayerLayer  = 15;
-$PlanetX::BulletLayer  = 12;
-$PlanetX::EffectLayer  = 10;
+// Scene layers, back (high) to front (low). Everything that stands on the
+// ground shares EntityLayer, which is depth-sorted by -Y (lower on screen =
+// drawn in front) for the beat-em-up look.
+$PlanetX::TileLayer   = 30;
+$PlanetX::EntityLayer = 20;
+$PlanetX::BulletLayer = 12;
+$PlanetX::EffectLayer = 10;
 
 $PlanetX::WorldHalfWidth  = 96;
 $PlanetX::WorldHalfHeight = 72;
@@ -31,6 +29,9 @@ function PlanetXGame::buildLevel(%this)
 {
 	new Scene(PlanetXScene);
 	PlanetXScene.setGravity(0, 0);
+
+	// Y-sort the ground entities: higher world-Y renders first (behind).
+	PlanetXScene.setLayerSortMode($PlanetX::EntityLayer, "-Y");
 
 	// Root GUI control so HUD elements can overlay the scene window.
 	new GuiControl(PlanetXRoot)
@@ -54,7 +55,7 @@ function PlanetXGame::buildLevel(%this)
 	PlanetXRoot.add(PlanetXWindow);
 
 	PlanetXWindow.setScene(PlanetXScene);
-	PlanetXWindow.setCameraSize(40, 30);
+	PlanetXWindow.setCameraSize(60, 45);
 
 	// The camera size above assumes a 4:3 window; refit it to whatever shape
 	// the window actually has right now (it may have been resized while the
@@ -107,8 +108,44 @@ function PlanetXSceneWindow::onExtentChange(%this)
 
 //-----------------------------------------------------------------------------
 
+// Tile grid: 96x72 tiles of 2 units, spanning -96..96 x -72..72.
+$PlanetX::TileSize   = 2;
+$PlanetX::TileCountX = 96;
+$PlanetX::TileCountY = 72;
+
+// Perlin terrain tuning.
+$PlanetX::NoiseZoom = 0.06;
+$PlanetX::NoiseOctaves = 4;
+$PlanetX::NoisePersistence = 0.5;
+
+/// The terrain: near-white tiles tinted per-corner from a Perlin noise field.
+/// Noise is sampled once per grid VERTEX ((N+1)x(M+1) samples); each tile's
+/// four corners take the color of the vertices it shares with its neighbors,
+/// so the Gouraud interpolation lines up seamlessly across tile seams.
 function PlanetXGame::buildTileMap(%this)
 {
+	%startTime = getRealTime();
+
+	%countX = $PlanetX::TileCountX;
+	%countY = $PlanetX::TileCountY;
+
+	// Pass 1: one ramp color per grid vertex.
+	%generator = new NoiseGenerator();
+	%generator.setSeed(getRandom(1, 999999));
+
+	for (%cy = 0; %cy <= %countY; %cy++)
+	{
+		for (%cx = 0; %cx <= %countX; %cx++)
+		{
+			%value = %generator.getComplexNoise(%cx * $PlanetX::NoiseZoom,
+				%cy * $PlanetX::NoiseZoom, $PlanetX::NoiseOctaves,
+				$PlanetX::NoisePersistence);
+			%corner[%cx, %cy] = %this.rocketRampColor(%value);
+		}
+	}
+	%generator.delete();
+
+	// Pass 2: the tile batch, one shared corner color per touching tile.
 	%map = new CompositeSprite()
 	{
 		SceneLayer = $PlanetX::TileLayer;
@@ -116,19 +153,34 @@ function PlanetXGame::buildTileMap(%this)
 
 	// Layout must be set before any sprite is added.
 	%map.setBatchLayout("rect");
-	%map.setDefaultSpriteStride(4, 4);
-	%map.setDefaultSpriteSize(4, 4);
+	%map.setBatchCulling(true);
+	%map.setBatchSortMode("Batch");
+	%map.setDefaultSpriteStride($PlanetX::TileSize, $PlanetX::TileSize);
+	%map.setDefaultSpriteSize($PlanetX::TileSize, $PlanetX::TileSize);
 
 	// Logical coords are scaled by the stride; offsetting the composite by
-	// half a tile makes the 48x36 grid span exactly -96..96 x -72..72.
-	%map.setPosition(2, 2);
+	// half a tile keeps the grid span exactly on the world bounds.
+	%map.setPosition($PlanetX::TileSize / 2, $PlanetX::TileSize / 2);
 
-	for (%x = -24; %x < 24; %x++)
+	%halfX = %countX / 2;
+	%halfY = %countY / 2;
+
+	for (%x = -%halfX; %x < %halfX; %x++)
 	{
-		for (%y = -18; %y < 18; %y++)
+		for (%y = -%halfY; %y < %halfY; %y++)
 		{
 			%map.addSprite(%x SPC %y);
 			%map.setSpriteImage("PlanetXGame:tiles", %this.pickTileFrame());
+
+			// This tile's bottom-left grid vertex.
+			%cx = %x + %halfX;
+			%cy = %y + %halfY;
+
+			// Corner order is TL, TR, BR, BL; world +Y is up.
+			%map.setSpriteUseComplexColor(true);
+			%map.setSpriteComplexColor(
+				%corner[%cx, %cy + 1], %corner[%cx + 1, %cy + 1],
+				%corner[%cx + 1, %cy], %corner[%cx, %cy]);
 		}
 	}
 
@@ -137,22 +189,67 @@ function PlanetXGame::buildTileMap(%this)
 
 	PlanetXScene.add(%map);
 	%this.tileMap = %map;
+
+	echo("PlanetX: terrain built in" SPC getRealTime() - %startTime SPC "ms");
 }
 
-/// Weighted pick over the 16-frame tile sheet: mostly plain ground with
-/// occasional dark patches, cracks, crystal veins, and rubble.
+/// Map a 0..1 noise value onto the Rocket Edition palette, dark to light.
+/// Returns an "r g b 1" float color string for setSpriteComplexColor.
+function PlanetXGame::rocketRampColor(%this, %value)
+{
+	// Multi-octave noise clusters around 0.5; stretch for contrast.
+	%value = mClamp((%value - 0.2) / 0.6, 0, 1);
+
+	// Ramp stops: position, r, g, b (0..1 floats).
+	// #300022 -> #801946 -> #A62646 -> #C43C3E -> #F2D7DA
+	if (%value < 0.3)
+	{
+		%t = %value / 0.3;
+		%from = "0.188 0.0 0.133";
+		%to = "0.502 0.098 0.275";
+	}
+	else if (%value < 0.55)
+	{
+		%t = (%value - 0.3) / 0.25;
+		%from = "0.502 0.098 0.275";
+		%to = "0.651 0.149 0.275";
+	}
+	else if (%value < 0.8)
+	{
+		%t = (%value - 0.55) / 0.25;
+		%from = "0.651 0.149 0.275";
+		%to = "0.769 0.235 0.243";
+	}
+	else
+	{
+		%t = (%value - 0.8) / 0.2;
+		%from = "0.769 0.235 0.243";
+		%to = "0.949 0.843 0.855";
+	}
+
+	%r = getWord(%from, 0) + (getWord(%to, 0) - getWord(%from, 0)) * %t;
+	%g = getWord(%from, 1) + (getWord(%to, 1) - getWord(%from, 1)) * %t;
+	%b = getWord(%from, 2) + (getWord(%to, 2) - getWord(%from, 2)) * %t;
+
+	return %r SPC %g SPC %b SPC "1";
+}
+
+/// Weighted pick over the 16-frame tile sheet: mostly plain white with
+/// occasional speckle, cracks, pebbles, and rubble details.
 function PlanetXGame::pickTileFrame(%this)
 {
 	%roll = getRandom(0, 99);
 
-	if (%roll < 80)
-		return getRandom(0, 5);   // red ground
-	if (%roll < 87)
-		return getRandom(6, 9);   // darker magenta patches
+	if (%roll < 50)
+		return getRandom(0, 2);   // plain
+	if (%roll < 75)
+		return getRandom(3, 5);   // barely-there speckle
+	if (%roll < 88)
+		return getRandom(6, 9);   // speckle
 	if (%roll < 93)
-		return getRandom(10, 11); // cracked
+		return getRandom(10, 11); // hairline cracks
 	if (%roll < 97)
-		return getRandom(12, 13); // crystal veins
+		return getRandom(12, 13); // pebbles
 	return getRandom(14, 15);     // rubble
 }
 
@@ -189,10 +286,10 @@ function PlanetXGame::createBarrier(%this, %x, %y, %width, %height)
 /// Boulders, hand-placed to loosely channel the walk to the crystal corner.
 function PlanetXGame::buildRocks(%this)
 {
-	%rocks = "-60 -30 5" TAB "-40 -55 4" TAB "-30 -10 6" TAB "-55 20 5" TAB
-	         "-20 40 4" TAB "-5 -40 5" TAB "0 15 6" TAB "20 -20 4" TAB
-	         "25 55 5" TAB "40 -55 6" TAB "45 10 4" TAB "60 -30 5" TAB
-	         "60 40 6" TAB "75 20 4" TAB "35 30 5" TAB "-75 55 5";
+	%rocks = "-60 -30 3" TAB "-40 -55 2.5" TAB "-30 -10 3.5" TAB "-55 20 3" TAB
+	         "-20 40 2.5" TAB "-5 -40 3" TAB "0 15 3.5" TAB "20 -20 2.5" TAB
+	         "25 55 3" TAB "40 -55 3.5" TAB "45 10 2.5" TAB "60 -30 3" TAB
+	         "60 40 3.5" TAB "75 20 2.5" TAB "35 30 3" TAB "-75 55 3";
 
 	for (%i = 0; %i < getFieldCount(%rocks); %i++)
 	{
@@ -205,12 +302,15 @@ function PlanetXGame::buildRocks(%this)
 		{
 			Position = %x SPC %y;
 			Size = %size SPC %size;
-			SceneLayer = $PlanetX::RockLayer;
+			SceneLayer = $PlanetX::EntityLayer;
 			SceneGroup = $PlanetX::WallGroup;
 			Image = "PlanetXGame:rock" @ (1 + (%i % 2));
 		};
 		%rock.setBodyType("static");
-		%rock.createCircleCollisionShape(%size * 0.38);
+
+		// Feet-centric: collision and Y-sort key sit at the boulder's base.
+		%rock.createCircleCollisionShape(%size * 0.33, 0, -%size * 0.15);
+		%rock.setSortPoint(0, -%size * 0.4);
 		PlanetXScene.add(%rock);
 	}
 }
@@ -222,7 +322,7 @@ function PlanetXGame::buildCrosshair(%this)
 {
 	%crosshair = new Sprite()
 	{
-		Size = "2 2";
+		Size = "1.5 1.5";
 		SceneLayer = $PlanetX::EffectLayer;
 		Image = "PlanetXGame:crosshair";
 	};
@@ -240,12 +340,13 @@ function PlanetXGame::buildRocket(%this, %position)
 	%rocket = new Sprite()
 	{
 		Position = %position;
-		Size = "9 18";
-		SceneLayer = $PlanetX::RocketLayer;
+		Size = "6 12";
+		SceneLayer = $PlanetX::EntityLayer;
 		SceneGroup = $PlanetX::WallGroup;
 		Image = "PlanetXGame:rocket";
 	};
 	%rocket.setBodyType("static");
-	%rocket.createPolygonBoxCollisionShape(5, 4, "0 -6");
+	%rocket.createPolygonBoxCollisionShape(3.5, 2.5, "0 -4");
+	%rocket.setSortPoint(0, -5);
 	PlanetXScene.add(%rocket);
 }

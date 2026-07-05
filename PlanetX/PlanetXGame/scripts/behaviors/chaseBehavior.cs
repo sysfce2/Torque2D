@@ -59,7 +59,7 @@ function ChaseBehavior::updateChase(%this)
 		// Chase: head straight for the target.
 		%angle = mAtan(%toTarget);
 		%this.owner.setLinearVelocityPolar(%angle, %this.chaseSpeed);
-		%this.owner.setAngle(%angle);
+		%this.owner.setFlipX(getWord(Vector2Direction(%angle, 1), 0) < 0);
 		%this.wanderTicks = 0;
 		return;
 	}
@@ -71,6 +71,6 @@ function ChaseBehavior::updateChase(%this)
 		%this.wanderTicks = getRandom(4, 9);
 		%angle = getRandom(0, 359);
 		%this.owner.setLinearVelocityPolar(%angle, %this.wanderSpeed);
-		%this.owner.setAngle(%angle);
+		%this.owner.setFlipX(getWord(Vector2Direction(%angle, 1), 0) < 0);
 	}
 }

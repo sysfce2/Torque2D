@@ -7,7 +7,7 @@
 $PlanetX::AlienHealth = 3;
 $PlanetX::AlienChaseSpeed = 7;
 $PlanetX::AlienWanderSpeed = 3;
-$PlanetX::AlienAggroRadius = 18;
+$PlanetX::AlienAggroRadius = 20;
 $PlanetX::AlienContactDamage = 10;
 $PlanetX::AlienDamageCooldownMs = 500;
 
@@ -29,18 +29,20 @@ function PlanetXGame::spawnAlien(%this, %position)
 	{
 		class = "PlanetXAlien";
 		Position = %position;
-		Size = "3 3";
-		SceneLayer = $PlanetX::AlienLayer;
+		Size = "2 2";
+		SceneLayer = $PlanetX::EntityLayer;
 		SceneGroup = $PlanetX::AlienGroup;
 		Animation = "PlanetXGame:alienWalkAnim";
 	};
 
-	%alien.createCircleCollisionShape(1.3);
+	// Feet-centric collision, feet-centric Y-sort key.
+	%alien.createCircleCollisionShape(0.65, 0, -0.25);
 	%alien.setCollisionGroups($PlanetX::PlayerGroup SPC $PlanetX::AlienGroup SPC
 		$PlanetX::BulletGroup SPC $PlanetX::WallGroup);
 	%alien.setCollisionCallback(true);
+	%alien.setSortPoint(0, -0.9);
 
-	// The AI sets facing explicitly; contacts must not spin the body.
+	// The AI flips the sprite toward its heading; contacts must not spin it.
 	%alien.setFixedAngle(true);
 
 	%chase = ChaseBehavior.createInstance();
