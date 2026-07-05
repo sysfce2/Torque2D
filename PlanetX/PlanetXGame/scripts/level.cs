@@ -65,20 +65,27 @@ function PlanetXGame::buildLevel(%this)
 	PlanetXWindow.setViewLimitOn(-$PlanetX::WorldHalfWidth, -$PlanetX::WorldHalfHeight,
 		$PlanetX::WorldHalfWidth, $PlanetX::WorldHalfHeight);
 
-	// One seeded generator drives the terrain colors, the objective
-	// placements, and the alien nests, so a level is fully described by
-	// its seed.
+	// One seed describes the whole level. The Perlin generator handles the
+	// FIELDS (terrain colors, alien nests); the standard RNG - reseeded with
+	// the same level seed - handles the POINTS (placements, counts, tile
+	// variants). Sampling Perlin at a fixed coordinate is not a substitute
+	// for a uniform random number: across seeds its value at any one point
+	// clusters tightly around 0.5, which is why noise-picked positions kept
+	// landing in the middle of the map.
+	%this.levelSeed = getRandom(1, 999999);
 	%this.generator = new NoiseGenerator();
-	%this.generator.setSeed(getRandom(1, 999999));
+	%this.generator.setSeed(%this.levelSeed);
+	setRandomSeed(%this.levelSeed);
+	echo("PlanetX: level seed" SPC %this.levelSeed);
 
 	%this.buildTileMap();
 	%this.buildBarriers();
 	%this.buildRocks();
 
-	// Drop the rocket and the crystal at noise-chosen spots, pushed apart
-	// if they landed too close together.
-	%rocketPosition = %this.noiseWorldPoint(101.3, 897.7);
-	%crystalPosition = %this.noiseWorldPoint(431.9, 213.1);
+	// Drop the rocket and the crystal at random spots, pushed apart if they
+	// landed too close together.
+	%rocketPosition = %this.randomWorldPoint();
+	%crystalPosition = %this.randomWorldPoint();
 
 	%delta = Vector2Sub(%crystalPosition, %rocketPosition);
 	%distance = Vector2Length(%delta);
@@ -129,21 +136,20 @@ function PlanetXGame::buildLevel(%this)
 	%this.pushControls();
 
 	%this.generator.delete();
+
+	// Level generation is done: give the gameplay RNG (alien wander, the
+	// next level's seed) fresh time-based entropy so retries differ.
+	setRandomSeed();
 }
 
-/// A noise-derived point inside the world bounds. %cx/%cy select a sampling
-/// spot in the noise field, far from the terrain's own samples; the two
-/// coordinates use offset spots so they are decorrelated.
-function PlanetXGame::noiseWorldPoint(%this, %cx, %cy)
+/// A uniformly random point inside the world bounds (seeded RNG, so it is
+/// reproducible per level seed).
+function PlanetXGame::randomWorldPoint(%this)
 {
-	// Stretch the mid-clustered noise toward the full 0..1 range.
-	%vx = mClamp((%this.generator.getNoise(%cx, %cy) - 0.25) / 0.5, 0, 1);
-	%vy = mClamp((%this.generator.getNoise(%cx + 57.3, %cy + 91.7) - 0.25) / 0.5, 0, 1);
-
 	%rangeX = $PlanetX::WorldHalfWidth - $PlanetX::PlacementMargin;
 	%rangeY = $PlanetX::WorldHalfHeight - $PlanetX::PlacementMargin;
 
-	return -%rangeX + %vx * 2 * %rangeX SPC -%rangeY + %vy * 2 * %rangeY;
+	return getRandom(-%rangeX, %rangeX) SPC getRandom(-%rangeY, %rangeY);
 }
 
 /// Clamp a point to the world bounds, respecting the placement margin.

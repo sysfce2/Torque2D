@@ -68,15 +68,15 @@ function PlanetXGame::spawnAliens(%this)
 	echo("PlanetX:" SPC %count SPC "aliens spawned");
 }
 
-/// Three or four brutes at noise-chosen spots, nudged away from the landing
-/// site if the noise dropped one on it.
+/// Three or four brutes at random spots, nudged away from the landing site
+/// if one lands on it.
 function PlanetXGame::spawnBrutes(%this)
 {
-	%count = 3 + (%this.generator.getNoise(4321.7, 1234.3) > 0.5);
+	%count = getRandom(3, 4);
 
 	for (%i = 0; %i < %count; %i++)
 	{
-		%position = %this.noiseWorldPoint(1500.7 + %i * 37.3, 2200.1 + %i * 53.9);
+		%position = %this.randomWorldPoint();
 
 		%toPlayer = Vector2Sub(%position, %this.player.getPosition());
 		if (Vector2Length(%toPlayer) < $PlanetX::AlienSafeRadius * 2)
