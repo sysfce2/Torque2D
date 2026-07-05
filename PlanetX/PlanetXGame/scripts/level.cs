@@ -124,6 +124,7 @@ function PlanetXGame::buildLevel(%this)
 	PlanetXWindow.mount(%this.player, "0 0", 0, true, false);
 
 	%this.spawnAliens();
+	%this.spawnBrutes();
 	%this.buildHud();
 	%this.pushControls();
 

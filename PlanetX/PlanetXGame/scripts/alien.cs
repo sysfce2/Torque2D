@@ -19,6 +19,10 @@ $PlanetX::AlienNestStep = 6;
 $PlanetX::AlienSafeRadius = 26;
 $PlanetX::MaxAliens = 70;
 
+// The brute: a hulking dark-shelled variant with four times the health.
+$PlanetX::BruteHealth = 12;
+$PlanetX::BruteSize = 3.5;
+
 /// Populate the planet from the level's noise field: sample a coarse grid,
 /// spawn an alien wherever the nest channel runs hot. Clustered by nature -
 /// contiguous hot regions of the noise become nests.
@@ -62,6 +66,63 @@ function PlanetXGame::spawnAliens(%this)
 	}
 
 	echo("PlanetX:" SPC %count SPC "aliens spawned");
+}
+
+/// Three or four brutes at noise-chosen spots, nudged away from the landing
+/// site if the noise dropped one on it.
+function PlanetXGame::spawnBrutes(%this)
+{
+	%count = 3 + (%this.generator.getNoise(4321.7, 1234.3) > 0.5);
+
+	for (%i = 0; %i < %count; %i++)
+	{
+		%position = %this.noiseWorldPoint(1500.7 + %i * 37.3, 2200.1 + %i * 53.9);
+
+		%toPlayer = Vector2Sub(%position, %this.player.getPosition());
+		if (Vector2Length(%toPlayer) < $PlanetX::AlienSafeRadius * 2)
+		{
+			%angle = mAtan(%toPlayer);
+			%position = %this.clampToWorld(Vector2Add(%this.player.getPosition(),
+				Vector2Direction(%angle, $PlanetX::AlienSafeRadius * 2)));
+		}
+
+		%this.spawnBrute(%position);
+	}
+
+	echo("PlanetX:" SPC %count SPC "brutes spawned");
+}
+
+function PlanetXGame::spawnBrute(%this, %position)
+{
+	%brute = new Sprite()
+	{
+		class = "PlanetXAlien";
+		Position = %position;
+		Size = $PlanetX::BruteSize SPC $PlanetX::BruteSize;
+		SceneLayer = $PlanetX::EntityLayer;
+		SceneGroup = $PlanetX::AlienGroup;
+		Animation = "PlanetXGame:bruteWalkAnim";
+	};
+
+	// Feet-centric collision, feet-centric Y-sort key - scaled up.
+	%brute.createCircleCollisionShape(1.1, 0, -0.45);
+	%brute.setCollisionGroups($PlanetX::PlayerGroup SPC $PlanetX::AlienGroup SPC
+		$PlanetX::BulletGroup SPC $PlanetX::WallGroup);
+	%brute.setCollisionCallback(true);
+	%brute.setSortPoint(0, -1.6);
+	%brute.setFixedAngle(true);
+
+	%chase = ChaseBehavior.createInstance();
+	%chase.initialize(%this.player, $PlanetX::AlienChaseSpeed,
+		$PlanetX::AlienWanderSpeed, $PlanetX::AlienAggroRadius);
+	%brute.addBehavior(%chase);
+
+	%damage = TakesDamageBehavior.createInstance();
+	%damage.initialize($PlanetX::BruteHealth);
+	%brute.addBehavior(%damage);
+
+	PlanetXScene.add(%brute);
+	return %brute;
 }
 
 function PlanetXGame::spawnAlien(%this, %position)
