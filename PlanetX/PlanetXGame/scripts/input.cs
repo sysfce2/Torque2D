@@ -51,6 +51,9 @@ function PlanetXGame::pushControls(%this)
 	// the cursor being on).
 	Canvas.hideCursor();
 	%this.aimTick();
+
+	%this.resetGunHeat();
+	%this.heatTick();
 }
 
 function PlanetXGame::popControls(%this)
@@ -59,6 +62,8 @@ function PlanetXGame::popControls(%this)
 
 	if (isEventPending(%this.aimEvent))
 		cancel(%this.aimEvent);
+	if (isEventPending(%this.heatEvent))
+		cancel(%this.heatEvent);
 
 	if (isObject(PlanetXWindow) && isObject(PlanetXInput))
 		PlanetXWindow.removeInputListener(PlanetXInput);

@@ -9,6 +9,13 @@ $PlanetX::FireCooldownMs   = 200;
 $PlanetX::BulletPoolSize   = 16;
 $PlanetX::BurstPoolSize    = 8;
 
+// Gun heat: each shot adds heat, which bleeds off over time. Hitting full
+// heat locks the trigger until the gun cools back below the resume threshold.
+$PlanetX::HeatPerShot           = 0.13;
+$PlanetX::HeatDecayPerSecond    = 0.32;
+$PlanetX::HeatTickMs            = 100;
+$PlanetX::HeatResumeThreshold   = 0.35;
+
 function PlanetXGame::createBulletPools(%this)
 {
 	for (%i = 0; %i < $PlanetX::BulletPoolSize; %i++)
@@ -60,6 +67,10 @@ function PlanetXGame::fireBullet(%this)
 	if ($PlanetX::state !$= "playing" || !isObject(%this.player))
 		return;
 
+	// An overheated gun stays locked until it cools (see heatTick).
+	if (%this.overheated)
+		return;
+
 	%now = getSimTime();
 	if (%now - %this.lastFireTime < $PlanetX::FireCooldownMs)
 		return;
@@ -83,6 +94,54 @@ function PlanetXGame::fireBullet(%this)
 	%bullet.recycleEvent = %bullet.schedule($PlanetX::BulletLifeMs, "recycle");
 
 	Audio.PlaySound("PlanetXGame:laser");
+
+	%this.addGunHeat($PlanetX::HeatPerShot);
+}
+
+//-----------------------------------------------------------------------------
+// Gun heat.
+//-----------------------------------------------------------------------------
+
+function PlanetXGame::resetGunHeat(%this)
+{
+	%this.gunHeat = 0;
+	%this.overheated = false;
+	%this.updateHeatBar();
+}
+
+function PlanetXGame::addGunHeat(%this, %amount)
+{
+	%this.gunHeat += %amount;
+
+	if (%this.gunHeat >= 1)
+	{
+		%this.gunHeat = 1;
+		%this.overheated = true;
+	}
+
+	%this.updateHeatBar();
+}
+
+/// Bleed heat off over time; an overheated gun unlocks once it has cooled
+/// below the resume threshold.
+function PlanetXGame::heatTick(%this)
+{
+	if ($PlanetX::state !$= "playing")
+		return;
+
+	%this.heatEvent = %this.schedule($PlanetX::HeatTickMs, "heatTick");
+
+	if (%this.gunHeat <= 0)
+		return;
+
+	%this.gunHeat -= $PlanetX::HeatDecayPerSecond * $PlanetX::HeatTickMs / 1000;
+	if (%this.gunHeat < 0)
+		%this.gunHeat = 0;
+
+	if (%this.overheated && %this.gunHeat <= $PlanetX::HeatResumeThreshold)
+		%this.overheated = false;
+
+	%this.updateHeatBar();
 }
 
 /// Autofire loop while the mouse button is held.
