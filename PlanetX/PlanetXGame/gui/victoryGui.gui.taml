@@ -17,19 +17,29 @@
 		OverrideFontColor="1"
 		FontColor="33 191 132 255" />
 	<GuiControl
+		Name="VictorySubtitle"
 		Profile="GuiTextProfile"
 		HorizSizing="center"
 		VertSizing="bottom"
 		Position="0 84"
 		Extent="400 24"
-		Text="Mission complete. Time to head home."
+		Text="The next one is harder."
 		Align="center" />
+	<GuiButtonCtrl
+		Name="VictoryNextButton"
+		Profile="GuiButtonProfile"
+		HorizSizing="center"
+		VertSizing="bottom"
+		Position="80 130"
+		Extent="240 44"
+		Text="NEXT LEVEL"
+		Command="PlanetXGame.nextLevel();" />
 	<GuiButtonCtrl
 		Name="VictoryTitleButton"
 		Profile="GuiButtonProfile"
 		HorizSizing="center"
 		VertSizing="bottom"
-		Position="80 150"
+		Position="80 186"
 		Extent="240 44"
 		Text="RETURN TO TITLE"
 		Command="PlanetXGame.dialogToTitle();" />

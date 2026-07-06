@@ -75,17 +75,41 @@ function PlanetXGame::showTitle(%this, %instant)
 	Audio.PlayMusic("PlanetXGame:planetfall");
 }
 
+/// A fresh run from the title screen always begins at level 1.
 function PlanetXGame::startGame(%this)
 {
 	if ($PlanetX::state $= "playing")
 		return;
 
+	%this.level = 1;
+	%this.launchLevel();
+}
+
+/// Build and enter the current level (used by new runs, retries, and
+/// level-to-level advancement).
+function PlanetXGame::launchLevel(%this)
+{
 	$PlanetX::state = "playing";
 
+	%this.applyDifficulty();
 	%this.buildLevel();
 	ScreenFade.swapCanvas(PlanetXRoot, "48 0 34", 800);
 
-	echo("PlanetX: mission started -" SPC PlanetXScene.getCount() SPC "scene objects");
+	echo("PlanetX: level" SPC %this.level SPC "started -" SPC PlanetXScene.getCount() SPC "scene objects");
+}
+
+/// Crystal secured: tear the level down and build the next, harder one.
+function PlanetXGame::nextLevel(%this)
+{
+	%this.activeDialog.postEvent("dialogClose");
+
+	// Park the canvas on a blank control so the old level can be deleted.
+	Canvas.setContent(%this.blankGui);
+	$PlanetX::state = "";
+	%this.teardownLevel();
+
+	%this.level++;
+	%this.launchLevel();
 }
 
 function PlanetXGame::returnToTitle(%this)
@@ -127,6 +151,8 @@ function PlanetXGame::onWin(%this)
 	if (!isObject(%this.victoryGui))
 		%this.victoryGui = TamlRead(expandPath("^PlanetXGame/gui/victoryGui.gui.taml"));
 
+	VictoryHeading.setText("LEVEL" SPC %this.level SPC "CLEARED");
+
 	%this.activeDialog = %this.victoryGui;
 	ScreenFade.openDialog(%this.victoryGui, "48 0 34 220", 400);
 }
@@ -155,6 +181,7 @@ function PlanetXGame::onPlayerDeath(%this)
 	ScreenFade.openDialog(%this.gameOverGui, "48 0 34 220", 400);
 }
 
+/// Death retry: replay the CURRENT level (fresh seed, same difficulty).
 function PlanetXGame::retryMission(%this)
 {
 	%this.activeDialog.postEvent("dialogClose");
@@ -164,7 +191,7 @@ function PlanetXGame::retryMission(%this)
 	Canvas.setContent(%this.blankGui);
 	$PlanetX::state = "";
 	%this.teardownLevel();
-	%this.startGame();
+	%this.launchLevel();
 }
 
 function PlanetXGame::dialogToTitle(%this)

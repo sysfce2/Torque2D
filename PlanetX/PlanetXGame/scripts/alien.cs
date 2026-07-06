@@ -17,11 +17,32 @@ $PlanetX::AlienNestZoom = 0.08;
 $PlanetX::AlienNestThreshold = 0.7;
 $PlanetX::AlienNestStep = 6;
 $PlanetX::AlienSafeRadius = 26;
-$PlanetX::MaxAliens = 70;
+$PlanetX::MaxAliens = 90;
 
 // The brute: a hulking dark-shelled variant with four times the health.
-$PlanetX::BruteHealth = 12;
 $PlanetX::BruteSize = 3.5;
+
+/// Difficulty scaling. The base constants above describe level 1; each level
+/// up makes the swarm denser (lower nest threshold), adds a brute, and makes
+/// every alien tougher, faster, and harder-hitting. Caps keep late levels
+/// brutal but survivable. Called before buildLevel for every level.
+function PlanetXGame::applyDifficulty(%this)
+{
+	%step = %this.level - 1;
+
+	$PlanetX::CurAlienHealth   = $PlanetX::AlienHealth + mFloor(%step / 2);
+	$PlanetX::CurBruteHealth   = 4 * $PlanetX::CurAlienHealth;
+	$PlanetX::CurChaseSpeed    = mClamp($PlanetX::AlienChaseSpeed + 0.25 * %step, 0, 11);
+	$PlanetX::CurContactDamage = mClamp($PlanetX::AlienContactDamage + %step, 0, 25);
+	$PlanetX::CurNestThreshold = mClamp($PlanetX::AlienNestThreshold - 0.015 * %step, 0.62, 1);
+	$PlanetX::CurBruteBonus    = mClamp(%step, 0, 8);
+
+	echo("PlanetX: difficulty for level" SPC %this.level
+		SPC "- hp" SPC $PlanetX::CurAlienHealth
+		SPC "speed" SPC $PlanetX::CurChaseSpeed
+		SPC "damage" SPC $PlanetX::CurContactDamage
+		SPC "threshold" SPC $PlanetX::CurNestThreshold);
+}
 
 /// Populate the planet from the level's noise field: sample a coarse grid,
 /// spawn an alien wherever the nest channel runs hot. Clustered by nature -
@@ -41,7 +62,7 @@ function PlanetXGame::spawnAliens(%this)
 				%wx * $PlanetX::AlienNestZoom + 700.13,
 				%wy * $PlanetX::AlienNestZoom + 700.13);
 
-			if (%value < $PlanetX::AlienNestThreshold)
+			if (%value < $PlanetX::CurNestThreshold)
 				continue;
 
 			// Jitter off the grid using a second, finer noise channel.
@@ -72,7 +93,7 @@ function PlanetXGame::spawnAliens(%this)
 /// if one lands on it.
 function PlanetXGame::spawnBrutes(%this)
 {
-	%count = getRandom(3, 4);
+	%count = getRandom(3, 4) + $PlanetX::CurBruteBonus;
 
 	for (%i = 0; %i < %count; %i++)
 	{
@@ -113,12 +134,12 @@ function PlanetXGame::spawnBrute(%this, %position)
 	%brute.setFixedAngle(true);
 
 	%chase = ChaseBehavior.createInstance();
-	%chase.initialize(%this.player, $PlanetX::AlienChaseSpeed,
+	%chase.initialize(%this.player, $PlanetX::CurChaseSpeed,
 		$PlanetX::AlienWanderSpeed, $PlanetX::AlienAggroRadius);
 	%brute.addBehavior(%chase);
 
 	%damage = TakesDamageBehavior.createInstance();
-	%damage.initialize($PlanetX::BruteHealth);
+	%damage.initialize($PlanetX::CurBruteHealth);
 	%brute.addBehavior(%damage);
 
 	PlanetXScene.add(%brute);
@@ -148,12 +169,12 @@ function PlanetXGame::spawnAlien(%this, %position)
 	%alien.setFixedAngle(true);
 
 	%chase = ChaseBehavior.createInstance();
-	%chase.initialize(%this.player, $PlanetX::AlienChaseSpeed,
+	%chase.initialize(%this.player, $PlanetX::CurChaseSpeed,
 		$PlanetX::AlienWanderSpeed, $PlanetX::AlienAggroRadius);
 	%alien.addBehavior(%chase);
 
 	%damage = TakesDamageBehavior.createInstance();
-	%damage.initialize($PlanetX::AlienHealth);
+	%damage.initialize($PlanetX::CurAlienHealth);
 	%alien.addBehavior(%damage);
 
 	PlanetXScene.add(%alien);
@@ -174,5 +195,5 @@ function PlanetXAlien::onCollision(%this, %object, %collisionDetails)
 		return;
 	%this.lastContactDamage = %now;
 
-	%object.takeDamage($PlanetX::AlienContactDamage);
+	%object.takeDamage($PlanetX::CurContactDamage);
 }

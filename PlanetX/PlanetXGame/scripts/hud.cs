@@ -63,6 +63,18 @@ function PlanetXGame::buildHud(%this)
 	PlanetXRoot.add(%heatBar);
 	%heatBar.setProgress(0);
 
+	%levelLabel = new GuiControl(PlanetXLevelLabel)
+	{
+		Profile = "GuiLabelProfile";
+		HorizSizing = "left";
+		VertSizing = "bottom";
+		Position = "804 16";
+		Extent = "200 24";
+		Align = "right";
+	};
+	PlanetXRoot.add(%levelLabel);
+	%levelLabel.setText("LEVEL" SPC %this.level);
+
 	%hint = new GuiControl(PlanetXObjectiveHint)
 	{
 		Profile = "GuiTextProfile";
