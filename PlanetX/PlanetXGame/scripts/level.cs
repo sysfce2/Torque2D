@@ -83,37 +83,28 @@ function PlanetXGame::buildLevel(%this)
 	%this.buildBarriers();
 	%this.buildRocks();
 
-	// Drop the rocket and the crystal at random spots, pushed apart if they
-	// landed too close together.
+	// Drop the rocket at a random spot, then draw crystal spots until one
+	// lands far enough away, keeping the farthest candidate seen. When the
+	// rocket lands near the world center almost nowhere qualifies and the
+	// tries can run out - then "farthest seen" degrades gracefully to a
+	// crystal that is nearly-but-not-quite MinObjectiveDistance away.
 	%rocketPosition = %this.randomWorldPoint();
-	%crystalPosition = %this.randomWorldPoint();
 
-	%delta = Vector2Sub(%crystalPosition, %rocketPosition);
-	%distance = Vector2Length(%delta);
-	if (%distance < $PlanetX::MinObjectiveDistance)
+	%crystalPosition = %rocketPosition;
+	%bestDistance = 0;
+	for (%try = 0; %try < 20; %try++)
 	{
-		// Push both away from their midpoint along the line between them.
-		// Degenerate overlap: pick an arbitrary separation axis.
-		%angle = %distance < 0.1 ? 0 : mAtan(%delta);
+		%candidate = %this.randomWorldPoint();
+		%distance = Vector2Length(Vector2Sub(%candidate, %rocketPosition));
 
-		%mid = (getWord(%rocketPosition, 0) + getWord(%crystalPosition, 0)) / 2 SPC
-		       (getWord(%rocketPosition, 1) + getWord(%crystalPosition, 1)) / 2;
-		%half = $PlanetX::MinObjectiveDistance / 2;
-
-		%rocketPosition = %this.clampToWorld(Vector2Add(%mid, Vector2Direction(%angle + 180, %half)));
-		%crystalPosition = %this.clampToWorld(Vector2Add(%mid, Vector2Direction(%angle, %half)));
-
-		// Clamping can eat the separation when the push line runs into a
-		// world edge. Fall back to the corner diagonally opposite the
-		// rocket, which is always far enough.
-		%delta = Vector2Sub(%crystalPosition, %rocketPosition);
-		if (Vector2Length(%delta) < $PlanetX::MinObjectiveDistance)
+		if (%distance > %bestDistance)
 		{
-			%rangeX = $PlanetX::WorldHalfWidth - $PlanetX::PlacementMargin;
-			%rangeY = $PlanetX::WorldHalfHeight - $PlanetX::PlacementMargin;
-			%crystalPosition = (getWord(%rocketPosition, 0) < 0 ? %rangeX : -%rangeX) SPC
-			                   (getWord(%rocketPosition, 1) < 0 ? %rangeY : -%rangeY);
+			%bestDistance = %distance;
+			%crystalPosition = %candidate;
 		}
+
+		if (%bestDistance >= $PlanetX::MinObjectiveDistance)
+			break;
 	}
 
 	echo("PlanetX: objectives" SPC Vector2Length(Vector2Sub(%crystalPosition, %rocketPosition)) SPC "apart");
