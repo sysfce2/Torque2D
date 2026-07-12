@@ -89,8 +89,8 @@ function PlanetXGame::spawnAliens(%this)
 	echo("PlanetX:" SPC %count SPC "aliens spawned");
 }
 
-/// Three or four brutes at random spots, nudged away from the landing site
-/// if one lands on it.
+/// Three or four brutes - plus one more per level, capped by applyDifficulty -
+/// at random spots, nudged away from the landing site if one lands on it.
 function PlanetXGame::spawnBrutes(%this)
 {
 	%count = getRandom(3, 4) + $PlanetX::CurBruteBonus;

@@ -2,8 +2,9 @@
 // PlanetX level construction: scene, scene window, tile map, boundary walls,
 // rock obstacles, and the crashed rocket the spaceman arrived in.
 //
-// World is 192x144 units: a 48x36 rectilinear tile map of 4-unit tiles,
-// centered on the origin. The camera shows a 40x30 window onto it.
+// World is 192x144 units: a 96x72 rectilinear tile map of 2-unit tiles,
+// centered on the origin. The camera shows a 60x45 window onto it (the width
+// is refit to the window's aspect ratio; see updateCameraAspect below).
 //-----------------------------------------------------------------------------
 
 // Scene group ids. Collision groups are whitelists: a body only collides with
@@ -362,7 +363,7 @@ function PlanetXGame::createBarrier(%this, %x, %y, %width, %height)
 
 //-----------------------------------------------------------------------------
 
-/// Boulders, hand-placed to loosely channel the walk to the crystal corner.
+/// Boulders, hand-placed to break the open ground into loose lanes.
 function PlanetXGame::buildRocks(%this)
 {
 	%rocks = "-60 -30 3" TAB "-40 -55 2.5" TAB "-30 -10 3.5" TAB "-55 20 3" TAB

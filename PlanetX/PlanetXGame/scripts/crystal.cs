@@ -1,6 +1,7 @@
 //-----------------------------------------------------------------------------
-// The crystal the spaceman is here for. A static sensor in the far corner;
-// touching it wins the mission.
+// The crystal the spaceman is here for. A static sensor dropped at a random
+// spot each level (level.cs pushes it away from the rocket); touching it
+// clears the level.
 //-----------------------------------------------------------------------------
 
 function PlanetXGame::buildCrystal(%this, %position)
