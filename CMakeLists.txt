@@ -165,6 +165,23 @@ target_include_directories(Torque2D PRIVATE
 if(WIN32)
     # OpenAL headers (OpenAL itself is loaded dynamically at runtime — not linked).
     target_include_directories(Torque2D PRIVATE ${TORQUE_LIB}/openal/win32)
+
+    # Stage the architecture-matching OpenAL Soft runtime next to the executable.
+    # winOpenAL.cc loads OpenAL via LoadLibrary("OpenAL32.dll") from the app
+    # directory, so the DLL must sit beside Torque2D.exe. A 64-bit process cannot
+    # load a 32-bit DLL (and vice versa), so pick by the target's pointer size.
+    # The staged root-level OpenAL32.dll is a build artifact (git-ignored), same
+    # as Torque2D.exe. Sources live in engine/lib/openal/{win32,win64}.
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(TORQUE_OPENAL_DLL "${TORQUE_LIB}/openal/win64/OpenAL32.dll")
+    else()
+        set(TORQUE_OPENAL_DLL "${TORQUE_LIB}/openal/win32/OpenAL32.dll")
+    endif()
+    add_custom_command(TARGET Torque2D POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${TORQUE_OPENAL_DLL}" "$<TARGET_FILE_DIR:Torque2D>/OpenAL32.dll"
+        VERBATIM
+        COMMENT "Staging OpenAL Soft runtime (OpenAL32.dll) next to Torque2D")
 endif()
 if(ANDROID)
     # platformAndroid vendors android_native_app_glue.h (included as <...> by
