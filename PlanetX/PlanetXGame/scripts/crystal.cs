@@ -1,40 +1,39 @@
 //-----------------------------------------------------------------------------
-// The crystal the spaceman is here for. A static sensor dropped at a random
-// spot each level (level.cs pushes it away from the rocket); touching it
-// clears the level.
+// PlanetXCrystal: the crystal the spaceman is here for. A static sensor dropped
+// at a random spot each level (the level pushes it away from the rocket);
+// touching it clears the level. The level sets only its position; the crystal
+// configures its own look, collision, and glow pulse, and cancels the pulse
+// when it is deleted.
 //-----------------------------------------------------------------------------
 
-function PlanetXGame::buildCrystal(%this, %position)
+function PlanetXCrystal::onAdd(%this)
 {
-	%crystal = new Sprite()
-	{
-		class = "PlanetXCrystal";
-		Position = %position;
-		Size = "2.5 2.5";
-		SceneLayer = $PlanetX::EntityLayer;
-		SceneGroup = $PlanetX::PickupGroup;
-		Image = "PlanetXGame:crystal";
-	};
+	%this.setSize("2.5 2.5");
+	%this.setSceneLayer($PlanetX::EntityLayer);
+	%this.setSceneGroup($PlanetX::PickupGroup);
+	%this.setImage("PlanetXGame:crystal");
 
-	%crystal.setBodyType("static");
-	%crystal.createCircleCollisionShape(1.2);
-	%crystal.setSortPoint(0, -1);
+	%this.setBodyType("static");
+	%this.createCircleCollisionShape(1.2);
+	%this.setSortPoint(0, -1);
 
 	// A sensor detects contacts without physically blocking them.
-	%crystal.setCollisionShapeIsSensor(0, true);
-	%crystal.setCollisionCallback(true);
+	%this.setCollisionShapeIsSensor(0, true);
+	%this.setCollisionCallback(true);
 
-	PlanetXScene.add(%crystal);
-	%crystal.pulse();
-	%this.crystal = %crystal;
+	%this.pulse();
+}
+
+/// Cancel the self-rescheduling pulse so no orphaned event survives the crystal.
+function PlanetXCrystal::onRemove(%this)
+{
+	if (isEventPending(%this.pulseEvent))
+		cancel(%this.pulseEvent);
 }
 
 /// A slow glow pulse so the crystal reads as the goal from across the map.
 function PlanetXCrystal::pulse(%this)
 {
-	if (!isObject(%this))
-		return;
-
 	%this.bright = !%this.bright;
 
 	if (%this.bright)
@@ -42,7 +41,7 @@ function PlanetXCrystal::pulse(%this)
 	else
 		%this.setBlendColor(0.7, 0.85, 0.78);
 
-	%this.schedule(600, "pulse");
+	%this.pulseEvent = %this.schedule(600, "pulse");
 }
 
 function PlanetXCrystal::onCollision(%this, %object, %collisionDetails)

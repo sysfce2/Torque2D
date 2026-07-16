@@ -1,4 +1,4 @@
 <AudioAsset
-    AssetName="steam"
+    AssetName="steamHiss"
     AudioFile="steam.wav"
     VolumeChannel="1" />

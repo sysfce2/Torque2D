@@ -1,28 +1,41 @@
 //-----------------------------------------------------------------------------
 // PlanetX - a twin-stick demo game for Torque2D 4.0.
 //
-// Game flow: title -> playing -> won/lost -> title. This file owns the module
-// lifecycle and the state machine; the scripts folder owns the pieces.
+// Game flow: title -> playing -> won/lost -> title. This file is the module
+// singleton and owns ONLY the state machine and the two things that outlive a
+// single level: the title screen and the win/lose dialogs. Everything that
+// belongs to a running level lives on the PlanetXLevel object (%this.level),
+// which builds and tears down its own world. See TORQUE_SCRIPT.md.
 //-----------------------------------------------------------------------------
 
 function PlanetXGame::create(%this)
 {
+	// One class per file; each is named for the class it defines.
 	exec("./gui/titleScreen.cs");
 	exec("./scripts/level.cs");
-	exec("./scripts/player.cs");
-	exec("./scripts/input.cs");
-	exec("./scripts/bullet.cs");
-	exec("./scripts/alien.cs");
+	exec("./scripts/sceneWindow.cs");
+	exec("./scripts/tileMap.cs");
+	exec("./scripts/barrier.cs");
+	exec("./scripts/rock.cs");
+	exec("./scripts/rocket.cs");
 	exec("./scripts/crystal.cs");
+	exec("./scripts/crosshair.cs");
+	exec("./scripts/player.cs");
+	exec("./scripts/weapon.cs");
+	exec("./scripts/blaster.cs");
+	exec("./scripts/bullet.cs");
+	exec("./scripts/burst.cs");
+	exec("./scripts/enemy.cs");
+	exec("./scripts/bug.cs");
+	exec("./scripts/brute.cs");
 	exec("./scripts/hud.cs");
-	exec("./scripts/behaviors/chaseBehavior.cs");
-	exec("./scripts/behaviors/takesDamageBehavior.cs");
-
-	%this.createChaseBehaviorTemplate();
-	%this.createTakesDamageBehaviorTemplate();
+	exec("./scripts/input.cs");
 
 	// ScreenFade posts SwapComplete when a canvas transition finishes.
 	%this.startListening(ScreenFade);
+
+	// The title screen owns its own GUI; it lives for the whole session.
+	%this.titleScreen = new ScriptObject() { class = "PlanetXTitleScreen"; };
 
 	// Neutral placeholder shown while a level is being torn down and rebuilt.
 	%this.blankGui = new GuiControl()
@@ -42,10 +55,14 @@ function PlanetXGame::create(%this)
 function PlanetXGame::destroy(%this)
 {
 	%this.stopListening(ScreenFade);
-	%this.teardownLevel();
 
-	if (isObject(%this.titleGui))
-		%this.titleGui.delete();
+	// Deleting the level cascades teardown of its whole world (see
+	// PlanetXLevel::onRemove); the title screen frees its own GUI.
+	if (isObject(%this.level))
+		%this.level.delete();
+	if (isObject(%this.titleScreen))
+		%this.titleScreen.delete();
+
 	if (isObject(%this.victoryGui))
 		%this.victoryGui.delete();
 	if (isObject(%this.gameOverGui))
@@ -64,12 +81,7 @@ function PlanetXGame::showTitle(%this, %instant)
 {
 	$PlanetX::state = "title";
 
-	%title = %this.buildTitleScreen();
-
-	if (%instant)
-		Canvas.setContent(%title);
-	else
-		ScreenFade.swapCanvas(%title, "48 0 34", 800);
+	%this.titleScreen.open(%instant);
 
 	Canvas.showCursor();
 	Audio.PlayMusic("PlanetXGame:planetfall");
@@ -81,21 +93,26 @@ function PlanetXGame::startGame(%this)
 	if ($PlanetX::state $= "playing")
 		return;
 
-	%this.level = 1;
+	%this.levelNum = 1;
 	%this.launchLevel();
 }
 
 /// Build and enter the current level (used by new runs, retries, and
-/// level-to-level advancement).
+/// level-to-level advancement). Creating the PlanetXLevel builds its world in
+/// onAdd; we hold the object so deleting it later tears the world back down.
 function PlanetXGame::launchLevel(%this)
 {
 	$PlanetX::state = "playing";
 
-	%this.applyDifficulty();
-	%this.buildLevel();
+	%this.level = new ScriptObject()
+	{
+		class = "PlanetXLevel";
+		number = %this.levelNum;
+	};
+
 	ScreenFade.swapCanvas(PlanetXRoot, "48 0 34", 800);
 
-	echo("PlanetX: level" SPC %this.level SPC "started -" SPC PlanetXScene.getCount() SPC "scene objects");
+	echo("PlanetX: level" SPC %this.levelNum SPC "started -" SPC PlanetXScene.getCount() SPC "scene objects");
 }
 
 /// Crystal secured: tear the level down and build the next, harder one.
@@ -108,7 +125,7 @@ function PlanetXGame::nextLevel(%this)
 	$PlanetX::state = "";
 	%this.teardownLevel();
 
-	%this.level++;
+	%this.levelNum++;
 	%this.launchLevel();
 }
 
@@ -119,7 +136,8 @@ function PlanetXGame::returnToTitle(%this)
 
 	// Stop input immediately; the level itself is torn down once the fade
 	// has moved the canvas off it (see onSwapComplete).
-	%this.popControls();
+	if (isObject(%this.level))
+		%this.level.suspend();
 	%this.teardownPending = true;
 	%this.showTitle(false);
 }
@@ -144,14 +162,12 @@ function PlanetXGame::onWin(%this)
 		return;
 
 	$PlanetX::state = "won";
-
-	PlanetXScene.setScenePause(true);
-	%this.popControls();
+	%this.level.suspend();
 
 	if (!isObject(%this.victoryGui))
 		%this.victoryGui = TamlRead(expandPath("^PlanetXGame/gui/victoryGui.gui.taml"));
 
-	VictoryHeading.setText("LEVEL" SPC %this.level SPC "CLEARED");
+	VictoryHeading.setText("LEVEL" SPC %this.levelNum SPC "CLEARED");
 
 	%this.activeDialog = %this.victoryGui;
 	ScreenFade.openDialog(%this.victoryGui, "48 0 34 220", 400);
@@ -168,11 +184,9 @@ function PlanetXGame::onPlayerDeath(%this)
 
 	$PlanetX::state = "lost";
 
-	%this.playBurst(%this.player.getPosition());
-	%this.player.setVisible(false);
-
-	PlanetXScene.setScenePause(true);
-	%this.popControls();
+	%this.level.playBurst(%this.level.player.getPosition());
+	%this.level.player.setVisible(false);
+	%this.level.suspend();
 
 	if (!isObject(%this.gameOverGui))
 		%this.gameOverGui = TamlRead(expandPath("^PlanetXGame/gui/gameOverGui.gui.taml"));
@@ -203,19 +217,11 @@ function PlanetXGame::dialogToTitle(%this)
 
 //-----------------------------------------------------------------------------
 
-/// Destroy every gameplay object so the level can be rebuilt from scratch.
+/// Destroy the current level. One delete cascades through PlanetXLevel::onRemove
+/// to free the scene, HUD, input, and every object they own.
 function PlanetXGame::teardownLevel(%this)
 {
-	%this.popControls();
-
-	if (isObject(PlanetXRoot))
-		PlanetXRoot.delete();
-
-	if (isObject(PlanetXScene))
-		PlanetXScene.delete();
-
-	%this.player = "";
-	%this.tileMap = "";
-	%this.crosshair = "";
-	%this.steamPlayer = "";
+	if (isObject(%this.level))
+		%this.level.delete();
+	%this.level = "";
 }

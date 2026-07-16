@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Torque2D 4.0 ("Rocket Edition", Early Access) is a cross-platform 2D game engine. The C++ engine lives in `engine/source`; games are written in **TorqueScript** (`.cs` files) and structured as **modules**. The same engine binary runs the in-engine editors (Project Manager, Asset Manager, GUI Editor) and any game built on top of it.
 
+**When writing or refactoring TorqueScript, follow the conventions in [`TORQUE_SCRIPT.md`](TORQUE_SCRIPT.md)** — the prescriptive style guide for script code (one class per file, `onAdd`/`onRemove` lifecycle, ownership/teardown chains, `class`/`superclass` inheritance).
+
 Target platforms: Windows, macOS, Linux, iOS, Android, and Web (Emscripten).
 
 ## Building
@@ -84,6 +86,7 @@ Games are composed of **modules**, each defined by a `module.taml` (`engine/sour
 
 ## Conventions
 
+- **TorqueScript game/UI code follows [`TORQUE_SCRIPT.md`](TORQUE_SCRIPT.md)** (repo root): one class per file named for the class, self-configuring objects via `onAdd`/`onRemove`, each object owning and deleting what it creates, and `class`/`superclass` inheritance with the `init()` pattern. Read it before touching any `.cs` game code. To verify changed scripts against these rules, use the **`checking-torquescript-conventions`** skill (`.claude/skills/`).
 - Header include guards use the `_NAME_H_` convention and are wrapped in `#ifndef` checks at every include site (see `platform.h`) — follow this when adding headers.
 - New engine source files must be added explicitly to `cmake/EngineSources.cmake` (cross-platform) or `cmake/PlatformSources.cmake` (platform-specific back-ends) to be compiled. These CMake lists are the single source of truth — regenerate your project from them; there are no hand-maintained `.vcxproj`/Xcode/Makefile lists to keep in sync anymore.
 - All pull requests target the **`development`** branch, not `master` (master is the stable release branch).

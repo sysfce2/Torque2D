@@ -1,11 +1,17 @@
 //-----------------------------------------------------------------------------
-// The in-game HUD: hull (health) bar top-left and the objective hint. Built
-// in script as children of PlanetXRoot, layered over the scene window.
+// PlanetXHud: the in-game heads-up display - hull (health) bar, gun-heat bar,
+// level readout, and the objective hint. A manager ScriptObject: it builds all
+// its controls into one panel over the scene window in onAdd and deletes that
+// panel in onRemove, so the level frees the whole HUD with a single delete.
+//
+// The level passes the level number (%this.number) for the readout. The player
+// and weapon push updates through setHealth/setHeat.
 //-----------------------------------------------------------------------------
 
-function PlanetXGame::buildHud(%this)
+function PlanetXHud::onAdd(%this)
 {
-	// A coral-filled clone of the stock progress profile for the heat bar.
+	// A coral-filled clone of the stock progress profile for the heat bar. It
+	// is a shared resource, so it persists across levels (created once).
 	if (!isObject(PlanetXHeatProfile))
 	{
 		new GuiControlProfile(PlanetXHeatProfile)
@@ -19,6 +25,22 @@ function PlanetXGame::buildHud(%this)
 		};
 	}
 
+	// One panel holds every HUD widget; deleting it frees them all. It is
+	// full-screen and sits ON TOP of the scene window, so it MUST be mouse-
+	// transparent (useInput = false) or it would swallow every aim/fire event
+	// meant for the scene beneath it. useInput is inherited by hit-testing:
+	// with it off, the panel and all its children are skipped by findHitControl.
+	%this.panel = new GuiControl()
+	{
+		Profile = "GuiDefaultProfile";
+		HorizSizing = "relative";
+		VertSizing = "relative";
+		Position = "0 0";
+		Extent = "1024 768";
+		useInput = false;
+	};
+	PlanetXRoot.add(%this.panel);
+
 	%hullLabel = new GuiControl()
 	{
 		Profile = "GuiLabelProfile";
@@ -28,9 +50,9 @@ function PlanetXGame::buildHud(%this)
 		Extent = "60 24";
 		Text = "HULL";
 	};
-	PlanetXRoot.add(%hullLabel);
+	%this.panel.add(%hullLabel);
 
-	%healthBar = new GuiProgressCtrl(PlanetXHealthBar)
+	%this.healthBar = new GuiProgressCtrl()
 	{
 		Profile = "GuiProgressProfile";
 		HorizSizing = "right";
@@ -38,10 +60,10 @@ function PlanetXGame::buildHud(%this)
 		Position = "84 16";
 		Extent = "260 24";
 	};
-	PlanetXRoot.add(%healthBar);
-	%healthBar.setProgress(1);
+	%this.panel.add(%this.healthBar);
+	%this.healthBar.setProgress(1);
 
-	%heatLabel = new GuiControl(PlanetXHeatLabel)
+	%this.heatLabel = new GuiControl()
 	{
 		Profile = "GuiLabelProfile";
 		HorizSizing = "right";
@@ -50,9 +72,9 @@ function PlanetXGame::buildHud(%this)
 		Extent = "60 18";
 		Text = "HEAT";
 	};
-	PlanetXRoot.add(%heatLabel);
+	%this.panel.add(%this.heatLabel);
 
-	%heatBar = new GuiProgressCtrl(PlanetXHeatBar)
+	%this.heatBar = new GuiProgressCtrl()
 	{
 		Profile = "PlanetXHeatProfile";
 		HorizSizing = "right";
@@ -60,10 +82,10 @@ function PlanetXGame::buildHud(%this)
 		Position = "84 47";
 		Extent = "260 14";
 	};
-	PlanetXRoot.add(%heatBar);
-	%heatBar.setProgress(0);
+	%this.panel.add(%this.heatBar);
+	%this.heatBar.setProgress(0);
 
-	%levelLabel = new GuiControl(PlanetXLevelLabel)
+	%levelLabel = new GuiControl()
 	{
 		Profile = "GuiLabelProfile";
 		HorizSizing = "left";
@@ -72,10 +94,10 @@ function PlanetXGame::buildHud(%this)
 		Extent = "200 24";
 		Align = "right";
 	};
-	PlanetXRoot.add(%levelLabel);
-	%levelLabel.setText("LEVEL" SPC %this.level);
+	%this.panel.add(%levelLabel);
+	%levelLabel.setText("LEVEL" SPC %this.number);
 
-	%hint = new GuiControl(PlanetXObjectiveHint)
+	%this.hint = new GuiControl()
 	{
 		Profile = "GuiTextProfile";
 		HorizSizing = "center";
@@ -87,27 +109,37 @@ function PlanetXGame::buildHud(%this)
 		OverrideFontColor = "1";
 		FontColor = "234 72 72 255";
 	};
-	PlanetXRoot.add(%hint);
-	%hint.schedule(6000, "setVisible", false);
+	%this.panel.add(%this.hint);
+	%this.hintEvent = %this.hint.schedule(6000, "setVisible", false);
+
+	%this.heatWarning = false;
 }
 
-function PlanetXGame::updateHealthBar(%this, %health)
+function PlanetXHud::onRemove(%this)
 {
-	if (isObject(PlanetXHealthBar))
-		PlanetXHealthBar.setProgress(%health / $PlanetX::PlayerMaxHealth, 150);
+	if (isEventPending(%this.hintEvent))
+		cancel(%this.hintEvent);
+	if (isObject(%this.panel))
+		%this.panel.delete();
 }
 
-function PlanetXGame::updateHeatBar(%this)
+function PlanetXHud::setHealth(%this, %health)
 {
-	if (isObject(PlanetXHeatBar))
-		PlanetXHeatBar.setProgress(%this.gunHeat, $PlanetX::HeatTickMs);
+	if (isObject(%this.healthBar))
+		%this.healthBar.setProgress(%health / $PlanetX::PlayerMaxHealth, 150);
+}
+
+function PlanetXHud::setHeat(%this, %heat, %overheated, %tickMs)
+{
+	if (isObject(%this.heatBar))
+		%this.heatBar.setProgress(%heat, %tickMs);
 
 	// The label doubles as the overheat warning.
-	if (isObject(PlanetXHeatLabel) && %this.overheated != PlanetXHeatLabel.warning)
+	if (isObject(%this.heatLabel) && %overheated != %this.heatWarning)
 	{
-		PlanetXHeatLabel.warning = %this.overheated;
-		PlanetXHeatLabel.OverrideFontColor = %this.overheated;
-		PlanetXHeatLabel.FontColor = "234 72 72 255";
-		PlanetXHeatLabel.setText(%this.overheated ? "VENT!" : "HEAT");
+		%this.heatWarning = %overheated;
+		%this.heatLabel.OverrideFontColor = %overheated;
+		%this.heatLabel.FontColor = "234 72 72 255";
+		%this.heatLabel.setText(%overheated ? "VENT!" : "HEAT");
 	}
 }
