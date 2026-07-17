@@ -45,6 +45,10 @@ $PlanetX::MaxAliens = 90;
 
 $PlanetX::BurstPoolSize = 8;
 
+// A per-asset throttle keeps a mass aggro or a chain of deaths from blaring the
+// same enemy sound across the whole swarm at once.
+$PlanetX::EnemySoundThrottleMs = 200;
+
 //-----------------------------------------------------------------------------
 // Lifecycle.
 //-----------------------------------------------------------------------------
@@ -115,6 +119,10 @@ function PlanetXLevel::onAdd(%this)
 	// Level generation is done: give the gameplay RNG (bug wander, the next
 	// level's seed) fresh time-based entropy so retries differ.
 	setRandomSeed();
+
+	// The mission begins. (One site: new runs, next levels, and retries all build
+	// a fresh level, so this fires for every level start.)
+	Audio.PlaySound("PlanetXGame:levelStart");
 }
 
 /// Tear the whole level down. Deleting the scene fires every SceneObject's
@@ -399,6 +407,9 @@ function PlanetXLevel::spawnBug(%this, %position)
 		contactDamage = %this.contactDamage;
 	};
 	PlanetXScene.add(%bug);
+
+	// The level listens for this enemy's sound events (see onEnemyStartChase etc.).
+	%this.startListening(%bug);
 	return %bug;
 }
 
@@ -415,6 +426,9 @@ function PlanetXLevel::spawnBrute(%this, %position)
 		contactDamage = %this.contactDamage;
 	};
 	PlanetXScene.add(%brute);
+
+	// The level listens for this enemy's sound events (see onEnemyStartChase etc.).
+	%this.startListening(%brute);
 	return %brute;
 }
 
@@ -442,4 +456,40 @@ function PlanetXLevel::playBurst(%this, %position)
 	%burst.setPosition(%position);
 	%burst.setVisible(true);
 	%burst.playAnimation("PlanetXGame:burstAnim");
+}
+
+//-----------------------------------------------------------------------------
+// Enemy sounds: a level-wide service, alongside playBurst. Enemies announce state
+// changes as object-to-object events (see enemy.cs); the level listens to every
+// enemy it spawns and turns those events into distance-attenuated, throttled
+// sounds. One listener for the whole swarm makes the throttle naturally global.
+//-----------------------------------------------------------------------------
+
+function PlanetXLevel::onEnemyStartChase(%this)
+{
+	%this.playEnemySound("PlanetXGame:enemyChase");
+}
+
+function PlanetXLevel::onEnemyStopChase(%this)
+{
+	%this.playEnemySound("PlanetXGame:enemyGiveUp");
+}
+
+function PlanetXLevel::onEnemyDeath(%this)
+{
+	%this.playEnemySound("PlanetXGame:enemyDeath");
+}
+
+/// Play an enemy event's sound at full volume, rate-limited per asset name across
+/// the whole swarm so a mass aggro or a chain of deaths does not blare. Uses only
+/// the Audio module's public API.
+function PlanetXLevel::playEnemySound(%this, %name)
+{
+	// Per-asset throttle (keyed by asset id), shared across every enemy.
+	%now = getSimTime();
+	if (%now - %this.lastEnemySound[%name] < $PlanetX::EnemySoundThrottleMs)
+		return;
+	%this.lastEnemySound[%name] = %now;
+
+	Audio.PlaySound(%name);
 }

@@ -17,6 +17,9 @@ $PlanetX::PlayerSpeed = 15;
 $PlanetX::PlayerMaxHealth = 100;
 $PlanetX::GunMuzzleLength = 0.9;
 
+// One footstep per foot-plant: half of the 400ms walk cycle (spacemanWalkAnim).
+$PlanetX::FootstepIntervalMs = 200;
+
 function PlanetXPlayer::onAdd(%this)
 {
 	%this.setSceneLayer($PlanetX::EntityLayer);
@@ -67,6 +70,9 @@ function PlanetXPlayer::onAdd(%this)
 /// when the scene tears down; the weapon is a ScriptObject and must be freed.)
 function PlanetXPlayer::onRemove(%this)
 {
+	if (isEventPending(%this.footstepEvent))
+		cancel(%this.footstepEvent);
+
 	if (isObject(%this.weapon))
 		%this.weapon.delete();
 }
@@ -150,6 +156,10 @@ function PlanetXPlayer::updateVelocity(%this)
 			%this.selectSpriteName("body");
 			%this.setSpriteImage("PlanetXGame:spacemanIdle");
 			%this.moving = false;
+
+			// Halt the footstep loop the instant he stops.
+			if (isEventPending(%this.footstepEvent))
+				cancel(%this.footstepEvent);
 		}
 		return;
 	}
@@ -163,7 +173,22 @@ function PlanetXPlayer::updateVelocity(%this)
 		%this.selectSpriteName("body");
 		%this.setSpriteAnimation("PlanetXGame:spacemanWalkAnim");
 		%this.moving = true;
+
+		// Kick off the footstep loop (plays now, then reschedules while walking).
+		%this.footstep();
 	}
+}
+
+/// Repeating footstep while the spaceman walks. Self-cancels when he stops moving
+/// or the game leaves play; the pending event is also cancelled in onRemove and
+/// when movement stops.
+function PlanetXPlayer::footstep(%this)
+{
+	if ($PlanetX::state !$= "playing" || !%this.moving)
+		return;
+
+	Audio.PlaySound("PlanetXGame:footstep");
+	%this.footstepEvent = %this.schedule($PlanetX::FootstepIntervalMs, "footstep");
 }
 
 //-----------------------------------------------------------------------------
@@ -189,6 +214,8 @@ function PlanetXPlayer::takeDamage(%this, %amount)
 
 	if (%this.health <= 0)
 		PlanetXGame.onPlayerDeath();
+	else
+		Audio.PlaySound("PlanetXGame:playerHurt");
 }
 
 function PlanetXPlayer::flash(%this, %color)

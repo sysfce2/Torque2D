@@ -41,6 +41,9 @@ function PlanetXEnemy::init(%this)
 	%this.wanderTicks = 0;
 	%this.lastContactDamage = 0;
 
+	// Chase/wander state, so the sound events fire only on the transition.
+	%this.chasing = false;
+
 	%this.chaseEvent = %this.schedule($PlanetX::ChaseTickMs, "updateChase");
 }
 
@@ -74,12 +77,26 @@ function PlanetXEnemy::updateChase(%this)
 
 	if (%distance < %this.aggroRadius)
 	{
+		// Just locked on - announce it once (the level turns this into a sound).
+		if (!%this.chasing)
+		{
+			%this.chasing = true;
+			%this.postEvent("EnemyStartChase");
+		}
+
 		// Chase: head straight for the target.
 		%angle = mAtan(%toTarget);
 		%this.setLinearVelocityPolar(%angle, %this.chaseSpeed);
 		%this.setFlipX(getWord(Vector2Direction(%angle, 1), 0) < 0);
 		%this.wanderTicks = 0;
 		return;
+	}
+
+	// Lost the target - announce giving up once.
+	if (%this.chasing)
+	{
+		%this.chasing = false;
+		%this.postEvent("EnemyStopChase");
 	}
 
 	// Wander: hold a random heading for a few ticks, then pick a new one.
@@ -108,6 +125,7 @@ function PlanetXEnemy::takeDamage(%this, %amount)
 	{
 		if (isObject(PlanetXGame.level))
 			PlanetXGame.level.playBurst(%this.getPosition());
+		%this.postEvent("EnemyDeath");
 		%this.setCollisionSuppress(true);
 		%this.safeDelete();
 		return;

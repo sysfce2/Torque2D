@@ -8,6 +8,10 @@
 // which builds and tears down its own world. See TORQUE_SCRIPT.md.
 //-----------------------------------------------------------------------------
 
+// Hold the soundtrack under the SFX so effects cut through (music is channel 0,
+// SFX channel 1). Lower this for quieter music, raise toward 1 for louder.
+$PlanetX::MusicVolume = 0.6;
+
 function PlanetXGame::create(%this)
 {
 	// One class per file; each is named for the class it defines.
@@ -47,6 +51,10 @@ function PlanetXGame::create(%this)
 		Extent = "1024 768";
 	};
 
+	// Set the music level under the SFX before the title track starts (persists
+	// for the session; the shared Audio module defaults every channel to full).
+	Audio.SetMusicVolume($PlanetX::MusicVolume);
+
 	$PlanetX::state = "";
 	%this.showTitle(true);
 	echo("PlanetX: title screen ready (" @ getEngineVersion() @ ")");
@@ -69,6 +77,13 @@ function PlanetXGame::destroy(%this)
 		%this.gameOverGui.delete();
 	if (isObject(%this.blankGui))
 		%this.blankGui.delete();
+}
+
+/// Shared click for the menu and dialog buttons (their Command fields call this
+/// before the action, so the asset id lives in one place).
+function PlanetXGame::playClick(%this)
+{
+	Audio.PlaySound("PlanetXGame:uiClick");
 }
 
 //-----------------------------------------------------------------------------
@@ -161,6 +176,8 @@ function PlanetXGame::onWin(%this)
 	if ($PlanetX::state !$= "playing")
 		return;
 
+	Audio.PlaySound("PlanetXGame:crystalGet");
+
 	$PlanetX::state = "won";
 	%this.level.suspend();
 
@@ -181,6 +198,8 @@ function PlanetXGame::onPlayerDeath(%this)
 {
 	if ($PlanetX::state !$= "playing")
 		return;
+
+	Audio.PlaySound("PlanetXGame:playerDeath");
 
 	$PlanetX::state = "lost";
 

@@ -32,7 +32,7 @@
 		Position="80 130"
 		Extent="240 44"
 		Text="RETRY MISSION"
-		Command="PlanetXGame.retryMission();" />
+		Command="PlanetXGame.playClick(); PlanetXGame.retryMission();" />
 	<GuiButtonCtrl
 		Name="GameOverTitleButton"
 		Profile="GuiButtonProfile"
@@ -41,5 +41,5 @@
 		Position="80 186"
 		Extent="240 44"
 		Text="RETURN TO TITLE"
-		Command="PlanetXGame.dialogToTitle();" />
+		Command="PlanetXGame.playClick(); PlanetXGame.dialogToTitle();" />
 </GuiControl>

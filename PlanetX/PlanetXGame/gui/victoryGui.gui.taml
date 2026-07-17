@@ -33,7 +33,7 @@
 		Position="80 130"
 		Extent="240 44"
 		Text="NEXT LEVEL"
-		Command="PlanetXGame.nextLevel();" />
+		Command="PlanetXGame.playClick(); PlanetXGame.nextLevel();" />
 	<GuiButtonCtrl
 		Name="VictoryTitleButton"
 		Profile="GuiButtonProfile"
@@ -42,5 +42,5 @@
 		Position="80 186"
 		Extent="240 44"
 		Text="RETURN TO TITLE"
-		Command="PlanetXGame.dialogToTitle();" />
+		Command="PlanetXGame.playClick(); PlanetXGame.dialogToTitle();" />
 </GuiControl>
