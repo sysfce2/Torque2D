@@ -22,8 +22,12 @@ swarm does not turn into a wall of noise.
    Any bug or brute can trigger the chase/give-up sounds, but each asset is
    rate-limited and its volume falls off with distance to the player.
 3. **Distance audio — script-only volume falloff (no engine change).** Use
-   `alxSourcef(handle, AL_GAIN_LINEAR, gain)` after `alxPlay`. No stereo panning
+   `alxSourcef(handle, AL_GAIN_LINEAR, gain)` after playing. No stereo panning
    (that would need the engine's `mIs3D` path, deliberately out of scope).
+4. **All changes stay in the PlanetXGame module.** The `Audio` library module
+   (`PlanetX/Audio/1/`) is a direct import from the shared module library and must
+   **not** be modified. We only *call* its existing public API (`Audio.PlaySound`)
+   and layer game-side behavior (throttle, gain) on top, inside `PlanetXGame`.
 
 ## Background: how audio already works here
 
@@ -67,86 +71,76 @@ All play on channel 1 (SFX). "Site" is the exact call location.
 | 8 | `uiClick`   | menu/dialog button pressed | 6 buttons in 3 `.gui.taml` files | per-button |
 | 9 | `playerHurt`| player takes non-fatal damage | `player.cs::takeDamage` | only when `health > 0` after the hit |
 
-## Component 1 — reusable Audio helper (generic)
+## Component 1 — level-wide enemy sound service (`level.cs`)
 
-Add **one** method to `PlanetX/Audio/1/audio.cs`, kept generic so the shared
-Audio module carries no PlanetX-specific tuning:
-
-```cs
-/// Play a sound at a caller-supplied linear gain (0-1), rate-limited so the same
-/// asset fires at most once per %minIntervalMs (pass 0 for no limit). Returns the
-/// sound handle, or 0 if muted or throttled. The gain is the sample's own volume;
-/// the engine still scales it by the SFX channel and master volume.
-function Audio::PlaySoundScaled(%this, %name, %gain, %minIntervalMs)
-{
-    if (!%this.SoundOn)
-        return 0;
-
-    %now = getSimTime();
-    if (%minIntervalMs > 0 && %now - %this.lastPlay[%name] < %minIntervalMs)
-        return 0;
-    %this.lastPlay[%name] = %now;
-
-    %handle = alxPlay(%name);
-    alxSourcef(%handle, AL_GAIN_LINEAR, mClamp(%gain, 0, 1));
-    return %handle;
-}
-```
-
-- Throttle state is per-asset (`%this.lastPlay[%name]`), so `enemyChase`,
-  `enemyDeath`, and `enemyGiveUp` each rate-limit independently. First play of a
-  name reads `""` → always passes.
-- Uses `getSimTime()` (the sim clock the AI ticks already run on).
-
-The non-distance one-shots (#5, #6, #7, #8, #9) and the footstep loop (#1) keep
-using the existing `Audio.PlaySound(...)`.
-
-## Component 2 — distance-attenuated enemy sound (game-side)
-
-The distance→gain mapping and the max-range gate are **PlanetX tuning**, so they
-live in `enemy.cs`, not the shared Audio module:
+The shared throttle and the distance→gain mapping live on **`PlanetXLevel`**, the
+game-side owner of every enemy. This mirrors the existing `playBurst` effects
+service (same file, same "level-wide service" role) and keeps the throttle state
+**global across all enemies** — which is what makes "40 bugs aggro on one tick →
+one `enemyChase` fires" work. It calls only the Audio module's existing public
+`Audio.PlaySound`; the shared module is untouched.
 
 ```cs
 $PlanetX::SoundRefDistance     = 8;    // full volume within this many world units
 $PlanetX::SoundMaxDistance     = 40;   // silent (and skipped) at/beyond this range
-$PlanetX::EnemySoundThrottleMs = 150;  // per-asset rate limit
+$PlanetX::EnemySoundThrottleMs = 150;  // per-asset rate limit, shared across enemies
 
-/// Distance-attenuated one-shot for enemy events. Silent past SoundMaxDistance,
-/// which doubles as the "near the camera" gate (the camera is mounted to the
-/// player), so far-off swarm members never contribute noise.
-function PlanetXEnemy::playSound(%this, %name)
+/// Distance-attenuated one-shot for an enemy event at %position. Silent past
+/// SoundMaxDistance (which doubles as the "near the camera" gate, since the camera
+/// is mounted to the player), and rate-limited per asset name across the whole
+/// swarm so a mass aggro or a chain of deaths does not blare.
+function PlanetXLevel::playEnemySound(%this, %name, %position)
 {
-    if (!isObject(%this.target))
+    if (!isObject(%this.player))
         return;
 
-    %d = Vector2Length(Vector2Sub(%this.target.getPosition(), %this.getPosition()));
+    %d = Vector2Length(Vector2Sub(%this.player.getPosition(), %position));
     if (%d >= $PlanetX::SoundMaxDistance)
         return;
 
+    %now = getSimTime();
+    if (%now - %this.lastEnemySound[%name] < $PlanetX::EnemySoundThrottleMs)
+        return;
+    %this.lastEnemySound[%name] = %now;
+
     %gain = mClamp(1 - (%d - $PlanetX::SoundRefDistance)
                        / ($PlanetX::SoundMaxDistance - $PlanetX::SoundRefDistance), 0, 1);
-    Audio.PlaySoundScaled(%name, %gain, $PlanetX::EnemySoundThrottleMs);
+
+    %handle = Audio.PlaySound(%name);          // shared module's public API, unmodified
+    if (%handle)
+        alxSourcef(%handle, AL_GAIN_LINEAR, mClamp(%gain, 0, 1));
 }
 ```
 
-Because distance already thins the mix, the throttle is relaxed to ~150 ms
-(down from the ~400 ms a throttle-only design would have needed).
+- Throttle state is per-asset (`%this.lastEnemySound[%name]`), so `enemyChase`,
+  `enemyDeath`, and `enemyGiveUp` rate-limit independently; the first play of a
+  name reads `""` → always passes. State lives on the level, so it resets cleanly
+  each new level.
+- `getSimTime()` is the sim clock the AI ticks already run on; `AL_GAIN_LINEAR`
+  via `alxSourcef` matches the existing `AL_PITCH` bareword usage in `audio.cs`.
+- Because distance already thins the mix, the throttle is relaxed to ~150 ms
+  (down from the ~400 ms a throttle-only design would have needed).
 
-## Component 3 — enemy AI transitions (`enemy.cs`)
+## Component 2 — enemy AI transitions (`enemy.cs`)
 
 `updateChase` currently has no persistent chase/wander state, so add a
 `%this.chasing` flag (initialized `false` in `init()`) and fire the sounds only on
-the **transition**, not every tick:
+the **transition**, not every tick. Each site is guarded by
+`isObject(PlanetXGame.level)` (matching the existing `playBurst` call guard):
 
 - Compute `%wantChase = (%distance < %this.aggroRadius)`.
-- `%wantChase && !%this.chasing` → `%this.playSound("PlanetXGame:enemyChase")`; set `chasing = true`.
-- `!%wantChase && %this.chasing` → `%this.playSound("PlanetXGame:enemyGiveUp")`; set `chasing = false`.
+- `%wantChase && !%this.chasing` → `PlanetXGame.level.playEnemySound("PlanetXGame:enemyChase", %this.getPosition())`; set `chasing = true`.
+- `!%wantChase && %this.chasing` → `PlanetXGame.level.playEnemySound("PlanetXGame:enemyGiveUp", %this.getPosition())`; set `chasing = false`.
 
 The existing chase/wander movement logic is unchanged. In `takeDamage`, the fatal
-branch calls `%this.playSound("PlanetXGame:enemyDeath")` (before `safeDelete()`,
-while the object still has a valid position).
+branch already runs inside `if (isObject(PlanetXGame.level))` (for `playBurst`);
+add `PlanetXGame.level.playEnemySound("PlanetXGame:enemyDeath", %this.getPosition())`
+there, before `safeDelete()`, while the object still has a valid position.
 
-## Component 4 — player footsteps (`player.cs`)
+The non-distance one-shots (#5, #6, #7, #8, #9) and the footstep loop (#1) call the
+existing `Audio.PlaySound(...)` directly.
+
+## Component 3 — player footsteps (`player.cs`)
 
 A self-rescheduling loop, following the same "cancel in `onRemove`" pattern the
 crystal pulse and enemy chase tick already use:
@@ -160,7 +154,7 @@ crystal pulse and enemy chase tick already use:
 - `onRemove` cancels a pending `footstepEvent` (added alongside the existing
   weapon cleanup).
 
-## Component 5 — one-shot event sounds
+## Component 4 — one-shot event sounds
 
 - **#5 crystal:** `game.cs::onWin` → `Audio.PlaySound("PlanetXGame:crystalGet")`.
 - **#6 player death:** `game.cs::onPlayerDeath` → `Audio.PlaySound("PlanetXGame:playerDeath")`.
@@ -170,7 +164,7 @@ crystal pulse and enemy chase tick already use:
   `PlanetXGame:playerHurt` **only if `%this.health > 0`** — the fatal hit routes
   through `onPlayerDeath` (#6), so a killing blow plays one sound, not two.
 
-## Component 6 — button clicks (#8)
+## Component 5 — button clicks (#8)
 
 No native profile button-sound exists in this engine, so prepend the click to each
 button's `Command` string in the three GUI TAML files (6 buttons total):
@@ -183,7 +177,7 @@ Example: `Command="Audio.PlaySound(\"PlanetXGame:uiClick\"); PlanetXGame.startGa
 Known limitation: the QUIT button's click may be cut off by the app exiting —
 acceptable (quitting needs no audible feedback).
 
-## Component 7 — placeholder SFX generation
+## Component 6 — placeholder SFX generation
 
 A committed Python generator, `PlanetX/PlanetXGame/sound/generate_sfx.py`, writes
 the nine `.wav` files (mono, 16-bit PCM, 22050 Hz) so the placeholders are
@@ -233,13 +227,13 @@ variation, positional music, any engine change.
 
 ## Files touched
 
-- `PlanetX/Audio/1/audio.cs` — add `PlaySoundScaled`.
-- `PlanetX/PlanetXGame/scripts/enemy.cs` — `playSound`, chase/give-up transitions, death sound, constants.
+- `PlanetX/PlanetXGame/scripts/level.cs` — `playEnemySound` service + sound constants; `levelStart`.
+- `PlanetX/PlanetXGame/scripts/enemy.cs` — `chasing` flag, chase/give-up transitions, death sound call.
 - `PlanetX/PlanetXGame/scripts/player.cs` — footstep loop + `onRemove` cancel; `playerHurt`.
-- `PlanetX/PlanetXGame/scripts/level.cs` — `levelStart`.
 - `PlanetX/PlanetXGame/game.cs` — `crystalGet` (onWin), `playerDeath` (onPlayerDeath).
 - `PlanetX/PlanetXGame/gui/{titleGui,victoryGui,gameOverGui}.gui.taml` — `uiClick` on 6 buttons.
 - `PlanetX/PlanetXGame/sound/generate_sfx.py` — new generator.
 - `PlanetX/PlanetXGame/sound/<name>.wav` + `<name>.audio.taml` — 9 new assets.
 
-No `module.taml` change (existing glob covers new assets).
+**Not touched:** `PlanetX/Audio/1/` (shared library import — call-only), and
+`module.taml` (existing `sound/*.audio.taml` glob covers the new assets).
