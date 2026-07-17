@@ -28,6 +28,12 @@ swarm does not turn into a wall of noise.
    (`PlanetX/Audio/1/`) is a direct import from the shared module library and must
    **not** be modified. We only *call* its existing public API (`Audio.PlaySound`)
    and layer game-side behavior (throttle, gain) on top, inside `PlanetXGame`.
+5. **Enemies announce sound events; the level handles them.** Enemies do not touch
+   audio or reference the level directly. They raise object-to-object events
+   (`EnemyStartChase`, `EnemyStopChase`, `EnemyDeath`); the level listens to each
+   enemy it spawns and implements `onEnemyStartChase` / `onEnemyStopChase` /
+   `onEnemyDeath`, where it owns the throttling and distance attenuation. This is
+   the same event mechanism `PlanetXGame` already uses with `ScreenFade`.
 
 ## Background: how audio already works here
 
@@ -62,23 +68,81 @@ All play on channel 1 (SFX). "Site" is the exact call location.
 | # | Asset name  | Trigger | Site | Guard / attenuation |
 |---|-------------|---------|------|---------------------|
 | 1 | `footstep`  | player is walking | `player.cs` | repeating loop while `moving && state == "playing"` |
-| 2 | `enemyChase`| wander → chase transition | `enemy.cs::updateChase` | distance falloff + per-asset throttle |
-| 3 | `enemyDeath`| enemy killed | `enemy.cs::takeDamage` (fatal branch) | distance falloff + per-asset throttle |
-| 4 | `enemyGiveUp`| chase → wander transition | `enemy.cs::updateChase` | distance falloff + per-asset throttle |
+| 2 | `enemyChase`| wander → chase transition | `enemy.cs` posts `EnemyStartChase` → `level.cs::onEnemyStartChase` | distance falloff + per-asset throttle |
+| 3 | `enemyDeath`| enemy killed | `enemy.cs` posts `EnemyDeath` (fatal branch) → `level.cs::onEnemyDeath` | distance falloff + per-asset throttle |
+| 4 | `enemyGiveUp`| chase → wander transition | `enemy.cs` posts `EnemyStopChase` → `level.cs::onEnemyStopChase` | distance falloff + per-asset throttle |
 | 5 | `crystalGet`| crystal secured | `game.cs::onWin` | one-shot |
 | 6 | `playerDeath`| player dies | `game.cs::onPlayerDeath` | one-shot |
 | 7 | `levelStart`| level built/entered | `level.cs::onAdd` (end) | one-shot; covers new game, next level, and retry |
 | 8 | `uiClick`   | menu/dialog button pressed | 6 buttons in 3 `.gui.taml` files | per-button |
 | 9 | `playerHurt`| player takes non-fatal damage | `player.cs::takeDamage` | only when `health > 0` after the hit |
 
-## Component 1 — level-wide enemy sound service (`level.cs`)
+### How the object-to-object event system works (verified in engine source)
 
-The shared throttle and the distance→gain mapping live on **`PlanetXLevel`**, the
-game-side owner of every enemy. This mirrors the existing `playBurst` effects
-service (same file, same "level-wide service" role) and keeps the throttle state
-**global across all enemies** — which is what makes "40 bugs aggro on one tick →
-one `enemyChase` fires" work. It calls only the Audio module's existing public
-`Audio.PlaySound`; the shared module is untouched.
+- `emitter.postEvent("EventName", data)` calls `on"EventName"` on every listener
+  that implements it (`SimObject::postEvent`, `simObject.cc:1481`), passing the
+  single `data` string as the handler's first argument after `%this` (the same way
+  `onDialogSwap(%this, %dialog)` receives its payload).
+- `listener.startListening(emitter)` registers the listener on the emitter
+  (`emitter.addListener(listenerId)`), exactly as `game.cs` does with `ScreenFade`.
+- `postEvent` is a **no-op when nobody is listening**, and a **reentrancy guard**
+  forbids posting another event on the same object mid-dispatch. Our handlers only
+  play a sound (no re-posting), so both are safe.
+- Only one `data` string travels, so the enemy's world position rides in `data`
+  and the sound is chosen by the event *name*.
+
+## Component 1 — enemy events (`enemy.cs`)
+
+Enemies announce state changes and know nothing about audio or the level. The
+payload is `%this.getPosition()` (an `"x y"` string); the event name selects the
+sound.
+
+`updateChase` has no persistent chase/wander state today, so add a `%this.chasing`
+flag (initialized `false` in `init()`) and post only on the **transition**, not
+every tick:
+
+- `%wantChase = (%distance < %this.aggroRadius)`.
+- `%wantChase && !%this.chasing` → `%this.postEvent("EnemyStartChase", %this.getPosition())`; set `chasing = true`.
+- `!%wantChase && %this.chasing` → `%this.postEvent("EnemyStopChase", %this.getPosition())`; set `chasing = false`.
+
+The existing chase/wander movement logic is unchanged. In `takeDamage`, the fatal
+branch posts `%this.postEvent("EnemyDeath", %this.getPosition())` before
+`safeDelete()`, while the object still has a valid position. The existing
+`playBurst` visual call in that branch stays as-is — this change only adds the
+sound event, so the enemy gains no new coupling beyond `postEvent` on itself.
+
+## Component 2 — level listens and plays (`level.cs`)
+
+The level subscribes to every enemy it spawns and owns the sound policy. Because
+one listener (the level) handles the whole swarm, the throttle state is naturally
+global — "40 bugs aggro on one tick → one `enemyChase`."
+
+**Subscribe on spawn.** In `spawnBug` and `spawnBrute`, after `PlanetXScene.add`,
+add `%this.startListening(%enemy)` (the level starts listening to that enemy). No
+teardown needed: enemies never outlive the level, and a deleted enemy's listener
+list is freed with it.
+
+**Handlers** map each event to a distance-attenuated, throttled sound:
+
+```cs
+function PlanetXLevel::onEnemyStartChase(%this, %position)
+{
+    %this.playEnemySound("PlanetXGame:enemyChase", %position);
+}
+
+function PlanetXLevel::onEnemyStopChase(%this, %position)
+{
+    %this.playEnemySound("PlanetXGame:enemyGiveUp", %position);
+}
+
+function PlanetXLevel::onEnemyDeath(%this, %position)
+{
+    %this.playEnemySound("PlanetXGame:enemyDeath", %position);
+}
+```
+
+**The service** mirrors the existing `playBurst` level-wide service and calls only
+the Audio module's unmodified public `Audio.PlaySound`:
 
 ```cs
 $PlanetX::SoundRefDistance     = 8;    // full volume within this many world units
@@ -114,28 +178,12 @@ function PlanetXLevel::playEnemySound(%this, %name, %position)
 
 - Throttle state is per-asset (`%this.lastEnemySound[%name]`), so `enemyChase`,
   `enemyDeath`, and `enemyGiveUp` rate-limit independently; the first play of a
-  name reads `""` → always passes. State lives on the level, so it resets cleanly
-  each new level.
+  name reads `""` → always passes. State lives on the level, so it resets each new
+  level.
 - `getSimTime()` is the sim clock the AI ticks already run on; `AL_GAIN_LINEAR`
   via `alxSourcef` matches the existing `AL_PITCH` bareword usage in `audio.cs`.
 - Because distance already thins the mix, the throttle is relaxed to ~150 ms
   (down from the ~400 ms a throttle-only design would have needed).
-
-## Component 2 — enemy AI transitions (`enemy.cs`)
-
-`updateChase` currently has no persistent chase/wander state, so add a
-`%this.chasing` flag (initialized `false` in `init()`) and fire the sounds only on
-the **transition**, not every tick. Each site is guarded by
-`isObject(PlanetXGame.level)` (matching the existing `playBurst` call guard):
-
-- Compute `%wantChase = (%distance < %this.aggroRadius)`.
-- `%wantChase && !%this.chasing` → `PlanetXGame.level.playEnemySound("PlanetXGame:enemyChase", %this.getPosition())`; set `chasing = true`.
-- `!%wantChase && %this.chasing` → `PlanetXGame.level.playEnemySound("PlanetXGame:enemyGiveUp", %this.getPosition())`; set `chasing = false`.
-
-The existing chase/wander movement logic is unchanged. In `takeDamage`, the fatal
-branch already runs inside `if (isObject(PlanetXGame.level))` (for `playBurst`);
-add `PlanetXGame.level.playEnemySound("PlanetXGame:enemyDeath", %this.getPosition())`
-there, before `safeDelete()`, while the object still has a valid position.
 
 The non-distance one-shots (#5, #6, #7, #8, #9) and the footstep loop (#1) call the
 existing `Audio.PlaySound(...)` directly.
@@ -208,8 +256,8 @@ full scale to leave headroom.
 
 ## Scope (YAGNI)
 
-**In:** the nine triggers, one generic Audio helper, distance-based volume falloff
-for enemy sounds, the generator.
+**In:** the nine triggers, the event-driven enemy→level sound wiring, the level's
+`playEnemySound` service with distance-based volume falloff, the generator.
 
 **Out:** stereo/3D panning, per-sound pitch randomization, footstep surface
 variation, positional music, any engine change.
@@ -227,8 +275,8 @@ variation, positional music, any engine change.
 
 ## Files touched
 
-- `PlanetX/PlanetXGame/scripts/level.cs` — `playEnemySound` service + sound constants; `levelStart`.
-- `PlanetX/PlanetXGame/scripts/enemy.cs` — `chasing` flag, chase/give-up transitions, death sound call.
+- `PlanetX/PlanetXGame/scripts/level.cs` — `startListening` on each spawned enemy; `onEnemyStartChase`/`onEnemyStopChase`/`onEnemyDeath` handlers; `playEnemySound` service + sound constants; `levelStart`.
+- `PlanetX/PlanetXGame/scripts/enemy.cs` — `chasing` flag; post `EnemyStartChase`/`EnemyStopChase` on transition; post `EnemyDeath` on the fatal hit.
 - `PlanetX/PlanetXGame/scripts/player.cs` — footstep loop + `onRemove` cancel; `playerHurt`.
 - `PlanetX/PlanetXGame/game.cs` — `crystalGet` (onWin), `playerDeath` (onPlayerDeath).
 - `PlanetX/PlanetXGame/gui/{titleGui,victoryGui,gameOverGui}.gui.taml` — `uiClick` on 6 buttons.
