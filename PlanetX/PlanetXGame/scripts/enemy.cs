@@ -20,7 +20,7 @@ $PlanetX::AlienDamageCooldownMs = 500;
 $PlanetX::ChaseTickMs = 400;
 
 // The brute: a hulking dark-shelled variant.
-$PlanetX::BruteSize = 3.5;
+$PlanetX::BruteSize = "3.5 2.1875";
 
 /// Shared setup. Sets only the always-the-same values (the passed-in target and
 /// stats are left untouched) and starts the AI tick.

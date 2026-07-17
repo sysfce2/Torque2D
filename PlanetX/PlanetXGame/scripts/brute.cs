@@ -8,7 +8,7 @@ function PlanetXBrute::onAdd(%this)
 {
 	%this.init();   // shared enemy setup (marker, scene group, AI tick, ...)
 
-	%this.setSize($PlanetX::BruteSize SPC $PlanetX::BruteSize);
+	%this.setSize($PlanetX::BruteSize);
 	%this.playAnimation("PlanetXGame:bruteWalkAnim");
 
 	// Feet-centric collision, feet-centric Y-sort key - scaled up.

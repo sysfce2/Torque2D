@@ -5,22 +5,13 @@
 	VertSizing="relative"
 	Position="0 0"
 	Extent="1024 768"
-	Image="PlanetXGame:torqueBG"
+	Image="PlanetXGame:planetXBG"
 	SingleFrameBitmap="1"
 	TileImage="0"
 	FullSize="1"
 	ConstrainProportions="1"
+	ClampImage="0"
 	ImageColor="255 255 255 255">
-	<GuiSpriteCtrl
-		Name="TitleLogo"
-		Profile="GuiDefaultProfile"
-		HorizSizing="center"
-		VertSizing="relative"
-		Position="212 96"
-		Extent="600 165"
-		Image="PlanetXGame:planetxLogo"
-		SingleFrameBitmap="1"
-		FullSize="1" />
 	<GuiButtonCtrl
 		Name="TitleStartButton"
 		Profile="GuiButtonProfile"
