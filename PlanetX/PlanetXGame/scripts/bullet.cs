@@ -15,10 +15,23 @@ function PlanetXBullet::onAdd(%this)
 	%this.setCollisionCallback(true);
 	%this.setBullet(true);
 
+	// A sensor, not a solid: the bolt still reports its hit (onCollision fires, as it
+	// does for the crystal sensor) but takes no impulse from the contact. Without this,
+	// when a forked volley lands two bolts on the same alien in one step, the bolt that
+	// does NOT land the kill gets physically deflected but never receives its recycle
+	// callback - the alien's death suppresses its collision mid-step - so it drifts off
+	// slowly. As a sensor it just flies straight through and recycles on its next hit
+	// or when its life expires.
+	%this.setCollisionShapeIsSensor(0, true);
+
 	// Bolts fly at the angle they were fired at. Without this, a collision gives
 	// the body angular velocity which survives park() and recycling - pooled
 	// bullets came back visibly spinning.
 	%this.setFixedAngle(true);
+
+	// The weapon stamps the real per-shot damage onto each bolt as it launches it
+	// (launchBolt); this is just the un-upgraded default for a bolt that never was.
+	%this.damage = 1;
 }
 
 /// Cancel any pending recycle so no orphaned event outlives the bullet.
@@ -31,7 +44,15 @@ function PlanetXBullet::onRemove(%this)
 function PlanetXBullet::onCollision(%this, %object, %collisionDetails)
 {
 	if (%object.isEnemy)
-		%object.takeDamage(1);
+	{
+		%object.takeDamage(%this.damage);
+
+		// Shove a surviving alien back along the bolt's travel - the physical knock the
+		// old solid bolts used to give, now that the bolt is a sensor. A dead alien
+		// (health spent) is on its way out, so skip it.
+		if (isObject(%object) && %object.health > 0)
+			%object.knockback(%this.getAngle());
+	}
 
 	if (isObject(PlanetXGame.level))
 		PlanetXGame.level.playBurst(%this.getPosition());

@@ -20,6 +20,9 @@ $PlanetX::GunMuzzleLength = 0.9;
 // One footstep per foot-plant: half of the 400ms walk cycle (spacemanWalkAnim).
 $PlanetX::FootstepIntervalMs = 200;
 
+// How often the Nanite Weave auto-repair upgrade mends the suit back up.
+$PlanetX::RepairTickMs = 250;
+
 // Collision knockback. The player is driven at a fixed key-velocity, so whatever
 // velocity a physics contact adds sticks until the next key event - a hit or a
 // rock used to leave them drifting. On a contact we shove them off, then re-read
@@ -82,6 +85,11 @@ function PlanetXPlayer::onAdd(%this)
 	%this.downed = false;
 	%this.lastKnockback = 0;
 
+	// Upgrade-driven suit stats; PlanetXUpgrades::applyToPlayer sets the real values
+	// from this player's banked choices just below (0 = the upgrade isn't owned).
+	%this.selfDestructRadius = 0;
+	%this.autoRepairRate = 0;
+
 	// Per-player held-move flags (input.cs sets these; updateVelocity reads them).
 	%this.inUp = 0;
 	%this.inDown = 0;
@@ -96,6 +104,13 @@ function PlanetXPlayer::onAdd(%this)
 		superclass = "PlanetXWeapon";
 		owner = %this;
 	};
+
+	// Stamp this player's playthrough upgrades onto the fresh weapon and suit (the
+	// player is rebuilt every level, so upgrades are re-applied here each time), then
+	// start the auto-repair loop if that upgrade is owned.
+	PlanetXUpgrades.applyToPlayer(%this);
+	if (%this.autoRepairRate > 0)
+		%this.repairTick();
 }
 
 /// The player owns its weapon, so it deletes it. (The player's own sprites go
@@ -106,6 +121,8 @@ function PlanetXPlayer::onRemove(%this)
 		cancel(%this.footstepEvent);
 	if (isEventPending(%this.velocityResetEvent))
 		cancel(%this.velocityResetEvent);
+	if (isEventPending(%this.repairEvent))
+		cancel(%this.repairEvent);
 
 	if (isObject(%this.weapon))
 		%this.weapon.delete();
@@ -309,6 +326,29 @@ function PlanetXPlayer::flash(%this, %color)
 	%this.setSpriteBlendColor(%color);
 }
 
+/// Auto-repair upgrade (Nanite Weave): while alive and in play, mend the suit back
+/// toward full a little each tick. Self-reschedules like the weapon's heat loop -
+/// started in onAdd only when the rate is above zero, cancelled in onRemove, and
+/// stopped whenever the game leaves play. A downed player and a full hull are no-ops
+/// but keep the loop alive so it resumes on revive / after the next hit.
+function PlanetXPlayer::repairTick(%this)
+{
+	if ($PlanetX::state !$= "playing")
+		return;
+
+	%this.repairEvent = %this.schedule($PlanetX::RepairTickMs, "repairTick");
+
+	if (%this.downed || %this.health >= $PlanetX::PlayerMaxHealth)
+		return;
+
+	%this.health = mClamp(%this.health + %this.autoRepairRate * $PlanetX::RepairTickMs / 1000,
+	                      0, $PlanetX::PlayerMaxHealth);
+
+	%level = PlanetXGame.level;
+	if (isObject(%level) && isObject(%level.hud))
+		%level.hud.setHealth(%this.playerIndex, %this.health);
+}
+
 //-----------------------------------------------------------------------------
 // Downed / revive (co-op). A killed player is downed - hidden and out of play -
 // until a living teammate reaches the rocket and revives them (see camera.cs and
@@ -319,6 +359,11 @@ function PlanetXPlayer::flash(%this, %color)
 /// collisions so aliens ignore the empty body.
 function PlanetXPlayer::goDown(%this)
 {
+	// Dead Man's Payload: detonate a clearing blast on the way down (co-op only, and
+	// only if this player owns the upgrade).
+	if (%this.selfDestructRadius > 0)
+		%this.detonate();
+
 	%this.downed = true;
 	%this.stopFiring();
 	%this.setLinearVelocity(0, 0);
@@ -357,4 +402,28 @@ function PlanetXPlayer::revive(%this, %position)
 	%level = PlanetXGame.level;
 	if (isObject(%level) && isObject(%level.hud))
 		%level.hud.setHealth(%this.playerIndex, %this.health);
+}
+
+/// Self-destruct upgrade (Dead Man's Payload): wipe out every enemy within
+/// selfDestructRadius of where this player fell. Walks the level's live-enemy set
+/// from the top down because a kill removes the enemy from the set; overkill damage
+/// is fine (takeDamage no-ops once an enemy is dead).
+function PlanetXPlayer::detonate(%this)
+{
+	%level = PlanetXGame.level;
+	if (!isObject(%level) || !isObject(%level.enemies))
+		return;
+
+	%origin = %this.getPosition();
+
+	for (%i = %level.enemies.getCount() - 1; %i >= 0; %i--)
+	{
+		%enemy = %level.enemies.getObject(%i);
+		if (isObject(%enemy)
+			&& Vector2Length(Vector2Sub(%enemy.getPosition(), %origin)) <= %this.selfDestructRadius)
+			%enemy.takeDamage(99999);
+	}
+
+	%level.playBurst(%origin);
+	PlanetXWindow.startCameraShake(6, 0.4);
 }

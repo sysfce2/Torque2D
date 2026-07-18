@@ -16,6 +16,7 @@ function PlanetXGame::create(%this)
 {
 	// One class per file; each is named for the class it defines.
 	exec("./gui/titleScreen.cs");
+	exec("./gui/upgradeScreen.cs");
 	exec("./scripts/level.cs");
 	exec("./scripts/sceneWindow.cs");
 	exec("./scripts/camera.cs");
@@ -29,6 +30,7 @@ function PlanetXGame::create(%this)
 	exec("./scripts/weapon.cs");
 	exec("./scripts/blaster.cs");
 	exec("./scripts/bullet.cs");
+	exec("./scripts/upgrades.cs");
 	exec("./scripts/burst.cs");
 	exec("./scripts/enemy.cs");
 	exec("./scripts/bug.cs");
@@ -41,6 +43,11 @@ function PlanetXGame::create(%this)
 
 	// Dedicated GUI profiles (larger text) - built before any PlanetX GUI.
 	%this.createProfiles();
+
+	// The weapon-upgrade catalog and this run's upgrade state. A named session
+	// singleton (like PlanetXWindow/PlanetXScene) so any file can reach it; reset()
+	// at the start of each run clears it back to the stock blaster.
+	new ScriptObject(PlanetXUpgrades) { class = "PlanetXUpgrades"; };
 
 	// Two-player co-op starts off; the title's "START 2 PLAYERS" turns it on.
 	$PlanetX::twoPlayer = false;
@@ -78,8 +85,13 @@ function PlanetXGame::destroy(%this)
 	if (isObject(%this.titleScreen))
 		%this.titleScreen.delete();
 
-	if (isObject(%this.victoryGui))
-		%this.victoryGui.delete();
+	// The upgrade picker replaces the old victory dialog; it and the catalog
+	// singleton outlive a level, so free them here.
+	if (isObject(%this.upgradeScreen))
+		%this.upgradeScreen.delete();
+	if (isObject(PlanetXUpgrades))
+		PlanetXUpgrades.delete();
+
 	if (isObject(%this.gameOverGui))
 		%this.gameOverGui.delete();
 	if (isObject(%this.blankGui))
@@ -111,6 +123,12 @@ function PlanetXGame::createProfiles(%this)
 	%this.makeBigProfile("PlanetXButtonProfile", GuiButtonProfile, %big);
 	%this.makeBigProfile("PlanetXLabelProfile", GuiLabelProfile, %big);
 	%this.makeBigProfile("PlanetXTextProfile", GuiTextProfile, %big);
+
+	// Upgrade cards want smaller text than the big menu profiles: a title a touch
+	// under the labels, a body smaller still, and a compact card button.
+	%this.makeBigProfile("PlanetXCardTitleProfile", GuiLabelProfile, mRound(%big * 0.62));
+	%this.makeBigProfile("PlanetXCardBodyProfile", GuiTextProfile, mRound(%big * 0.5));
+	%this.makeBigProfile("PlanetXCardButtonProfile", GuiButtonProfile, mRound(%big * 0.5));
 }
 
 /// Clone %base into a named profile at %size font (no-op if it already exists).
@@ -149,6 +167,10 @@ function PlanetXGame::startGame(%this, %twoPlayer)
 		return;
 
 	$PlanetX::twoPlayer = %twoPlayer;
+
+	// A fresh run starts with the stock blaster - wipe last run's upgrades.
+	PlanetXUpgrades.reset();
+
 	%this.levelNum = 1;
 	%this.launchLevel();
 }
@@ -222,13 +244,24 @@ function PlanetXGame::onWin(%this)
 	$PlanetX::state = "won";
 	%this.level.suspend();
 
-	if (!isObject(%this.victoryGui))
-		%this.victoryGui = TamlRead(expandPath("^PlanetXGame/gui/victoryGui.gui.taml"));
+	// Offer upgrades in place of the old victory dialog: two cards solo, three in
+	// co-op (each player claims a different one). Build a fresh screen each win - the
+	// offered set changes - and free the previous one, whose close animation is long
+	// finished. The screen builds its dialog in onAdd from the fields set here.
+	if (isObject(%this.upgradeScreen))
+		%this.upgradeScreen.delete();
 
-	VictoryHeading.setText("LEVEL" SPC %this.levelNum SPC "CLEARED");
+	%needed = $PlanetX::twoPlayer ? 3 : 2;
+	%offered = PlanetXUpgrades.offer(%needed);
+	%this.upgradeScreen = new ScriptObject()
+	{
+		class = "PlanetXUpgradeScreen";
+		levelNum = %this.levelNum;
+		offered = %offered;
+	};
 
-	%this.activeDialog = %this.victoryGui;
-	ScreenFade.openDialog(%this.victoryGui, "48 0 34 220", 400);
+	%this.activeDialog = %this.upgradeScreen.dialog;
+	ScreenFade.openDialog(%this.upgradeScreen.dialog, "48 0 34 220", 400);
 }
 
 //-----------------------------------------------------------------------------

@@ -19,6 +19,15 @@ $PlanetX::AlienContactDamage = 10;
 $PlanetX::AlienDamageCooldownMs = 500;
 $PlanetX::ChaseTickMs = 400;
 
+// A bolt's hit shoves the alien back along the shot; the AI reclaims its velocity on
+// the next chase tick, so it reads as a brief recoil. BulletKnockbackSpeed is the
+// velocity bump a bug takes (brutes take a fraction - see knockResist). One shove per
+// cooldown de-dups a forked volley, and the max-speed gate keeps a fast gun from
+// piling shoves up between AI ticks into a launch.
+$PlanetX::BulletKnockbackSpeed = 6;
+$PlanetX::BulletKnockbackCooldownMs = 70;
+$PlanetX::BulletKnockbackMaxSpeed = 14;
+
 // The brute: a hulking dark-shelled variant.
 $PlanetX::BruteSize = "3.5 2.1875";
 
@@ -40,6 +49,8 @@ function PlanetXEnemy::init(%this)
 	%this.aggroRadius = $PlanetX::AlienAggroRadius;
 	%this.wanderTicks = 0;
 	%this.lastContactDamage = 0;
+	%this.lastKnockback = 0;
+	%this.knockResist = 1;   // fraction of a bolt's shove this alien takes (brutes < 1)
 
 	// Chase/wander state, so the sound events fire only on the transition.
 	%this.chasing = false;
@@ -143,6 +154,26 @@ function PlanetXEnemy::takeDamage(%this, %amount)
 	// Hit flash.
 	%this.setBlendColor(1, 0.45, 0.45);
 	%this.schedule(120, "setBlendColor", 1, 1, 1);
+}
+
+/// A bolt's hit shoves the alien back along the shot direction. The impulse is mass x
+/// the desired velocity bump, so the recoil speed is consistent whatever the body
+/// size, then scaled by knockResist (a heavy brute barely budges). The next chase tick
+/// re-derives velocity, so it's a brief pop; a per-alien cooldown keeps a forked volley
+/// from stacking several shoves into a launch.
+function PlanetXEnemy::knockback(%this, %angle)
+{
+	%now = getSimTime();
+	if (%now - %this.lastKnockback < $PlanetX::BulletKnockbackCooldownMs)
+		return;
+	%this.lastKnockback = %now;
+
+	// Already flying from earlier shoves this AI window - don't pile on and launch it.
+	if (Vector2Length(%this.getLinearVelocity()) >= $PlanetX::BulletKnockbackMaxSpeed)
+		return;
+
+	%deltaV = $PlanetX::BulletKnockbackSpeed * %this.knockResist;
+	%this.applyLinearImpulse(Vector2Direction(%angle, %this.getMass() * %deltaV), %this.getPosition());
 }
 
 /// Contact damage against the player, with a per-enemy cooldown so a lingering

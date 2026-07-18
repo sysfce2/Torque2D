@@ -16,4 +16,7 @@ function PlanetXBrute::onAdd(%this)
 	%this.setCollisionGroups($PlanetX::PlayerGroup SPC $PlanetX::AlienGroup SPC
 		$PlanetX::BulletGroup SPC $PlanetX::WallGroup);
 	%this.setSortPoint(0, -1.6);
+
+	// A hulking brute barely flinches when shot.
+	%this.knockResist = 0.35;
 }
