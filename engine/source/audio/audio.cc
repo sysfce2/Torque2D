@@ -109,6 +109,7 @@ static Resource<AudioBuffer>  mBuffer[MAX_AUDIOSOURCES];                   // ea
 static F32                    mScore[MAX_AUDIOSOURCES];                    // for figuring out which sources to cull/uncull
 static F32                    mSourceVolume[MAX_AUDIOSOURCES];             // the samples current un-attenuated gain (not scaled by master/channel gains)
 static U32                    mType[MAX_AUDIOSOURCES];                     // the channel which this source belongs
+static bool                   mPriority[MAX_AUDIOSOURCES];                 // priority sounds are culled only when every other source is also priority
 
 static AudioSampleEnvironment*        mSampleEnvironment[MAX_AUDIOSOURCES];           // currently playing sample environments
 static bool                           mEnvironmentEnabled = false;                    // environment enabled?
@@ -285,10 +286,24 @@ static bool cullSource(U32 *index, F32 volume)
 {
    alGetError();
 
+   // Priority sounds (e.g. music) are protected: one is only culled when EVERY
+   // source is also a priority sound. So while any non-priority source exists, skip
+   // the priority ones when choosing what to evict.
+   bool anyNonPriority = false;
+   for(U32 i = 0; i < mNumSources; i++)
+      if(mHandle[i] != NULL_AUDIOHANDLE && !mPriority[i])
+      {
+         anyNonPriority = true;
+         break;
+      }
+
    F32 minVolume = volume;
    S32 best = -1;
    for(U32 i = 0; i < mNumSources; i++)
    {
+      if(anyNonPriority && mPriority[i])
+         continue;
+
       if(mScore[i] < minVolume)
       {
          minVolume = mScore[i];
@@ -775,6 +790,7 @@ AUDIOHANDLE alxCreateSource(const Audio::Description& desc,
    // init the source (created inactive) and store needed values
    mHandle[index] = getNewHandle() | AUDIOHANDLE_INACTIVE_BIT;
    mType[index] = desc.mVolumeChannel;
+   mPriority[index] = desc.mIsPriority;
    if(!(desc.mIsStreaming)) {
     mBuffer[index] = buffer;
    }
@@ -1817,6 +1833,7 @@ void alxLoopingUpdate()
          mScore[index] = (*itr)->mScore;
          mSourceVolume[index] = (*itr)->mDescription.mVolume;
          mType[index] = (*itr)->mDescription.mVolumeChannel;
+         mPriority[index] = (*itr)->mDescription.mIsPriority;
          mSampleEnvironment[index] = (*itr)->mEnvironment;
 
          ALuint source = mSource[index];
@@ -1917,6 +1934,7 @@ void alxStreamingUpdate()
          mScore[index] = (*itr)->mScore;
          mSourceVolume[index] = (*itr)->mDescription.mVolume;
          mType[index] = (*itr)->mDescription.mVolumeChannel;
+         mPriority[index] = (*itr)->mDescription.mIsPriority;
          mSampleEnvironment[index] = (*itr)->mEnvironment;
 
          ALuint source = mSource[index];

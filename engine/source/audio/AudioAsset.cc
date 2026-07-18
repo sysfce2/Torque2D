@@ -88,6 +88,7 @@ AudioAsset::AudioAsset()
    mDescription.mVolumeChannel       = 0;
    mDescription.mIsLooping           = false;
    mDescription.mIsStreaming		 = false;
+   mDescription.mIsPriority          = false;
 
    mDescription.mIs3D                = false;
    mDescription.mReferenceDistance   = 1.0f;
@@ -111,6 +112,7 @@ void AudioAsset::initPersistFields()
    addProtectedField("VolumeChannel", TypeS32, Offset(mDescription.mVolumeChannel, AudioAsset), &setVolumeChannel, &defaultProtectedGetFn, &writeVolumeChannel, "");
    addProtectedField("Looping", TypeBool, Offset(mDescription.mIsLooping, AudioAsset), &setLooping, &defaultProtectedGetFn, &writeLooping, "");
    addProtectedField("Streaming", TypeBool, Offset(mDescription.mIsStreaming, AudioAsset), &setStreaming, &defaultProtectedGetFn, &writeStreaming, "");
+   addProtectedField("Priority", TypeBool, Offset(mDescription.mIsPriority, AudioAsset), &setPriority, &defaultProtectedGetFn, &writePriority, "");
 
    //addField("is3D",              TypeBool,    Offset(mDescription.mIs3D, AudioAsset));
    //addField("referenceDistance", TypeF32,     Offset(mDescription.mReferenceDistance, AudioAsset));
@@ -141,6 +143,7 @@ void AudioAsset::copyTo(SimObject* object)
     pAsset->setVolumeChannel( getVolumeChannel() );
     pAsset->setLooping( getLooping() );
     pAsset->setStreaming( getStreaming() );
+    pAsset->setPriority( getPriority() );
 }
 
 //--------------------------------------------------------------------------
@@ -246,6 +249,21 @@ void AudioAsset::setStreaming( const bool streaming )
 
     // UPdate.
     mDescription.mIsStreaming = streaming;
+
+    // Refresh the asset.
+    refreshAsset();
+}
+
+//--------------------------------------------------------------------------
+
+void AudioAsset::setPriority( const bool priority )
+{
+    // Ignore no change.
+    if ( priority == mDescription.mIsPriority )
+        return;
+
+    // Update.
+    mDescription.mIsPriority = priority;
 
     // Refresh the asset.
     refreshAsset();

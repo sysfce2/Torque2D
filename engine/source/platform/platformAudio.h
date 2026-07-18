@@ -59,6 +59,7 @@ namespace Audio
       S32  mVolumeChannel;
       bool mIsLooping;
       bool mIsStreaming;
+      bool mIsPriority; // when the voice pool is full, a priority sound is only culled if every other source is also a priority sound
 
       bool mIs3D;
       F32  mReferenceDistance;

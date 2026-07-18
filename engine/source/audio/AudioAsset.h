@@ -80,6 +80,9 @@ public:
    void setStreaming( const bool streaming );
    inline bool getStreaming( void ) const { return mDescription.mIsStreaming; }
 
+   void setPriority( const bool priority );
+   inline bool getPriority( void ) const { return mDescription.mIsPriority; }
+
    void setDescription( const Audio::Description& audioDescription );
    inline const Audio::Description& getAudioDescription( void ) const { return mDescription; }
 
@@ -107,6 +110,9 @@ protected:
 
     static bool setStreaming( void* obj, const char* data )                     { static_cast<AudioAsset*>(obj)->setStreaming(dAtob(data)); return false; }
     static bool writeStreaming( void* obj, StringTableEntry pFieldName )        { return static_cast<AudioAsset*>(obj)->getStreaming() == true; }
+
+    static bool setPriority( void* obj, const char* data )                      { static_cast<AudioAsset*>(obj)->setPriority(dAtob(data)); return false; }
+    static bool writePriority( void* obj, StringTableEntry pFieldName )         { return static_cast<AudioAsset*>(obj)->getPriority() == true; }
 };
 
 #endif  // _AUDIO_ASSET_H_
