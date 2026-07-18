@@ -3,4 +3,6 @@
     AssetAutoUnload="0"
     AudioFile="planetfall.ogg"
 	VolumeChannel="0"
-	Looping="true" />
+	Looping="true"
+	Streaming="1"
+	Priority="1" />

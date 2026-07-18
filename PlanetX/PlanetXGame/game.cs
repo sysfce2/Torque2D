@@ -8,15 +8,15 @@
 // which builds and tears down its own world. See TORQUE_SCRIPT.md.
 //-----------------------------------------------------------------------------
 
-// Hold the soundtrack under the SFX so effects cut through (music is channel 0,
-// SFX channel 1). Lower this for quieter music, raise toward 1 for louder.
-$PlanetX::MusicVolume = 0.6;
-
 function PlanetXGame::create(%this)
 {
 	// One class per file; each is named for the class it defines.
+	exec("./scripts/settings.cs");
 	exec("./gui/titleScreen.cs");
 	exec("./gui/upgradeScreen.cs");
+	exec("./gui/optionsScreen.cs");
+	exec("./gui/pauseMenu.cs");
+	exec("./gui/keyCapture.cs");
 	exec("./scripts/level.cs");
 	exec("./scripts/sceneWindow.cs");
 	exec("./scripts/camera.cs");
@@ -44,6 +44,11 @@ function PlanetXGame::create(%this)
 	// Dedicated GUI profiles (larger text) - built before any PlanetX GUI.
 	%this.createProfiles();
 
+	// User settings (volumes, key bindings, aim mode). Created before any audio
+	// plays or any GUI reads a binding; its onAdd seeds defaults, loads saved prefs
+	// over them, and pushes the volume levels into the shared Audio module.
+	%this.settings = new ScriptObject() { class = "PlanetXSettings"; };
+
 	// The weapon-upgrade catalog and this run's upgrade state. A named session
 	// singleton (like PlanetXWindow/PlanetXScene) so any file can reach it; reset()
 	// at the start of each run clears it back to the stock blaster.
@@ -55,6 +60,10 @@ function PlanetXGame::create(%this)
 	// The title screen owns its own GUI; it lives for the whole session.
 	%this.titleScreen = new ScriptObject() { class = "PlanetXTitleScreen"; };
 
+	// The options window also lives for the whole session - it is opened from the
+	// title and from the pause menu, and refreshed from prefs on each open.
+	%this.optionsScreen = new ScriptObject() { class = "PlanetXOptionsScreen"; };
+
 	// Neutral placeholder shown while a level is being torn down and rebuilt.
 	%this.blankGui = new GuiControl()
 	{
@@ -65,11 +74,9 @@ function PlanetXGame::create(%this)
 		Extent = "1024 768";
 	};
 
-	// Set the music level under the SFX before the title track starts (persists
-	// for the session; the shared Audio module defaults every channel to full).
-	Audio.SetMusicVolume($PlanetX::MusicVolume);
-
+	// (Volume levels were applied by PlanetXSettings above.)
 	$PlanetX::state = "";
+	$PlanetX::paused = false;
 	%this.showTitle(true);
 	echo("PlanetX: title screen ready (" @ getEngineVersion() @ ")");
 }
@@ -96,6 +103,19 @@ function PlanetXGame::destroy(%this)
 		%this.gameOverGui.delete();
 	if (isObject(%this.blankGui))
 		%this.blankGui.delete();
+
+	// The options and pause dialogs outlive a level; free them here.
+	if (isObject(%this.optionsScreen))
+		%this.optionsScreen.delete();
+	if (isObject(%this.pauseMenu))
+		%this.pauseMenu.delete();
+
+	// Persist any last changes, then free the settings singleton.
+	if (isObject(%this.settings))
+	{
+		%this.settings.save();
+		%this.settings.delete();
+	}
 }
 
 /// Shared click for the menu and dialog buttons (their Command fields call this
@@ -151,6 +171,10 @@ function PlanetXGame::makeBigProfile(%this, %name, %base, %size)
 /// there is no previous canvas content to fade from).
 function PlanetXGame::showTitle(%this, %instant)
 {
+	// Leaving play for the title always clears the pause flag (Main Menu from the
+	// pause dialog lands here).
+	$PlanetX::paused = false;
+	$PlanetX::optionsOpen = false;
 	$PlanetX::state = "title";
 
 	%this.titleScreen.open(%instant);
@@ -228,6 +252,81 @@ function PlanetXGame::onSwapComplete(%this)
 		%this.teardownPending = false;
 		%this.teardownLevel();
 	}
+}
+
+//-----------------------------------------------------------------------------
+// Pause and options. ESC during play raises the pause dialog instead of quitting
+// to the title. We keep $PlanetX::state == "playing" and freeze the world with a
+// separate $PlanetX::paused flag, so the gameplay loops (aim, footsteps, auto-
+// repair, co-op camera) keep rescheduling themselves and just skip their work
+// while paused - nothing has to be restarted on resume. See input.cs.
+//-----------------------------------------------------------------------------
+
+function PlanetXGame::pauseGame(%this)
+{
+	if ($PlanetX::state !$= "playing" || $PlanetX::paused)
+		return;
+
+	$PlanetX::paused = true;
+	%this.level.pause();
+
+	// Built once and reused; it lives until the game shuts down (see destroy).
+	if (!isObject(%this.pauseMenu))
+		%this.pauseMenu = new ScriptObject() { class = "PlanetXPauseMenu"; };
+
+	%this.activeDialog = %this.pauseMenu.dialog;
+	ScreenFade.openDialog(%this.pauseMenu.dialog, "48 0 34 220", 300);
+}
+
+/// Continue: drop the dialog and unfreeze exactly where we left off.
+function PlanetXGame::resumeGame(%this)
+{
+	if (!$PlanetX::paused)
+		return;
+
+	%this.pauseMenu.dialog.postEvent("dialogClose");
+	%this.level.resume();
+	$PlanetX::paused = false;
+}
+
+/// Open the options window over the title screen (Back closes it, revealing the
+/// title again).
+function PlanetXGame::openOptions(%this)
+{
+	%this.optionsContext = "title";
+	$PlanetX::optionsOpen = true;
+
+	%this.optionsScreen.refresh();
+	%this.activeDialog = %this.optionsScreen.dialog;
+	ScreenFade.openDialog(%this.optionsScreen.dialog, "48 0 34 220", 300);
+}
+
+/// Open the options window from the pause menu by SWAPPING the visible dialog, so
+/// the pause backdrop stays up and Back can swap straight back to the pause menu.
+function PlanetXGame::openOptionsFromPause(%this)
+{
+	%this.optionsContext = "pause";
+	$PlanetX::optionsOpen = true;
+
+	%this.optionsScreen.refresh();
+	%this.activeDialog.postEvent("dialogSwap", %this.optionsScreen.dialog);
+	%this.activeDialog = %this.optionsScreen.dialog;
+}
+
+/// Options Back: save the settings, then return to wherever it was opened from -
+/// the title (close the dialog) or the pause menu (swap back to it).
+function PlanetXGame::closeOptions(%this)
+{
+	$PlanetX::optionsOpen = false;
+	%this.settings.save();
+
+	if (%this.optionsContext $= "pause")
+	{
+		%this.activeDialog.postEvent("dialogSwap", %this.pauseMenu.dialog);
+		%this.activeDialog = %this.pauseMenu.dialog;
+	}
+	else
+		%this.activeDialog.postEvent("dialogClose");
 }
 
 //-----------------------------------------------------------------------------

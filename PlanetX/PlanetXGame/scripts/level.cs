@@ -99,18 +99,18 @@ function PlanetXLevel::onAdd(%this)
 	%this.createBurstPool();
 	%this.spawnCrosshair();
 
-	// The spaceman steps out beside his rocket.
+	// The spaceman steps out beside his rocket. Aim mode comes from the saved
+	// settings (default: player 1 mouse, player 2 automatic).
 	%spawn = %this.clampToWorld(Vector2Add(%rocketPosition, "6 -3"));
 	%this.player = %this.spawnPlayer(%spawn, 1, "PlanetXGame:spacemanIdle",
-		"PlanetXGame:spacemanWalkAnim", "mouse");
+		"PlanetXGame:spacemanWalkAnim", PlanetXGame.settings.get("P1Aim"));
 
 	if ($PlanetX::twoPlayer)
 	{
-		// The second spaceman lands right beside the first, in his own colors and
-		// aiming himself at the nearest alien (there is no second mouse).
+		// The second spaceman lands right beside the first, in his own colors.
 		%spawn2 = %this.clampToWorld(Vector2Add(%rocketPosition, "3 0"));
 		%this.player2 = %this.spawnPlayer(%spawn2, 2, "PlanetXGame:spacemanIdle2",
-			"PlanetXGame:spacemanWalkAnim2", "auto");
+			"PlanetXGame:spacemanWalkAnim2", PlanetXGame.settings.get("P2Aim"));
 	}
 
 	// Camera: one player -> rigid follow; two -> a shared camera that frames both
@@ -130,7 +130,7 @@ function PlanetXLevel::onAdd(%this)
 	// The HUD and input controller are the level's non-visual managers; each
 	// builds and tears down its own pieces.
 	%this.hud = new ScriptObject() { class = "PlanetXHud"; number = %this.number; };
-	%this.input = new ScriptObject() { class = "PlanetXInput"; };
+	%this.input = new ScriptObject() { class = "PlanetXInput"; level = %this; };
 
 	%this.generator.delete();
 
@@ -178,6 +178,29 @@ function PlanetXLevel::suspend(%this)
 	// clickable), pops the ActionMap, and cancels the aim loop.
 	if (isObject(%this.input))
 		%this.input.delete();
+}
+
+/// Pause the level in place: freeze the world and quiet input, but keep everything
+/// alive so resume() continues exactly where it left off. Used by the pause dialog
+/// (contrast suspend(), which is for a terminal win/lose and tears input down).
+function PlanetXLevel::pause(%this)
+{
+	if (isObject(PlanetXScene))
+		PlanetXScene.setScenePause(true);
+
+	if (isObject(%this.input))
+		%this.input.pause();
+}
+
+/// Unfreeze after a pause. Input restores the crosshair/cursor and re-reads any
+/// bindings or aim modes changed in the options screen; the scene resumes stepping.
+function PlanetXLevel::resume(%this)
+{
+	if (isObject(%this.input))
+		%this.input.resume();
+
+	if (isObject(PlanetXScene))
+		PlanetXScene.setScenePause(false);
 }
 
 //-----------------------------------------------------------------------------

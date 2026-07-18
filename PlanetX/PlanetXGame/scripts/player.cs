@@ -338,7 +338,8 @@ function PlanetXPlayer::repairTick(%this)
 
 	%this.repairEvent = %this.schedule($PlanetX::RepairTickMs, "repairTick");
 
-	if (%this.downed || %this.health >= $PlanetX::PlayerMaxHealth)
+	// Keep the loop alive across a pause, but don't mend while frozen.
+	if ($PlanetX::paused || %this.downed || %this.health >= $PlanetX::PlayerMaxHealth)
 		return;
 
 	%this.health = mClamp(%this.health + %this.autoRepairRate * $PlanetX::RepairTickMs / 1000,

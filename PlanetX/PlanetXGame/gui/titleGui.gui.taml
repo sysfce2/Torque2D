@@ -17,15 +17,15 @@
 		Profile="GuiDefaultProfile"
 		HorizSizing="width"
 		VertSizing="bottom"
-		Position="0 520"
-		Extent="1024 248">
+		Position="0 496"
+		Extent="1024 272">
 		<GuiButtonCtrl
 			Name="TitleStart1Button"
 			Profile="PlanetXButtonProfile"
 			HorizSizing="center"
 			VertSizing="top"
 			Position="352 8"
-			Extent="320 60"
+			Extent="320 56"
 			Text="START 1 PLAYER"
 			Command="PlanetXGame.playClick(); PlanetXGame.startGame(false);" />
 		<GuiButtonCtrl
@@ -33,17 +33,26 @@
 			Profile="PlanetXButtonProfile"
 			HorizSizing="center"
 			VertSizing="top"
-			Position="352 76"
-			Extent="320 60"
+			Position="352 74"
+			Extent="320 56"
 			Text="START 2 PLAYERS"
 			Command="PlanetXGame.playClick(); PlanetXGame.startGame(true);" />
+		<GuiButtonCtrl
+			Name="TitleOptionsButton"
+			Profile="PlanetXButtonProfile"
+			HorizSizing="center"
+			VertSizing="top"
+			Position="352 140"
+			Extent="320 56"
+			Text="OPTIONS"
+			Command="PlanetXGame.playClick(); PlanetXGame.openOptions();" />
 		<GuiButtonCtrl
 			Name="TitleQuitButton"
 			Profile="PlanetXButtonProfile"
 			HorizSizing="center"
 			VertSizing="top"
-			Position="352 144"
-			Extent="320 60"
+			Position="352 206"
+			Extent="320 56"
 			Text="QUIT"
 			Command="PlanetXGame.playClick(); quit();" />
 	</GuiControl>

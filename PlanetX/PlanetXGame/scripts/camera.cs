@@ -40,8 +40,13 @@ function PlanetXCamera::followTick(%this)
 	if ($PlanetX::state !$= "playing")
 		return;
 
-	%this.updateFrame();
-	%this.reviveCheck();
+	// Keep the loop alive across a pause; hold the frame (and don't revive) while
+	// the world is frozen.
+	if (!$PlanetX::paused)
+	{
+		%this.updateFrame();
+		%this.reviveCheck();
+	}
 
 	%this.followEvent = %this.schedule($PlanetX::CameraTickMs, "followTick");
 }
