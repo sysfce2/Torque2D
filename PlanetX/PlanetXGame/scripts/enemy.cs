@@ -69,7 +69,16 @@ function PlanetXEnemy::updateChase(%this)
 {
 	%this.chaseEvent = %this.schedule($PlanetX::ChaseTickMs, "updateChase");
 
-	if ($PlanetX::state !$= "playing" || !isObject(%this.target))
+	if ($PlanetX::state !$= "playing")
+		return;
+
+	// Co-op: chase whichever living player is nearest, re-evaluated each tick so
+	// a downed player is dropped and a revived one is picked back up. In single-
+	// player the target stays the sole player the level handed us.
+	if ($PlanetX::twoPlayer && isObject(PlanetXGame.level))
+		%this.target = PlanetXGame.level.nearestLivingPlayer(%this.getPosition());
+
+	if (!isObject(%this.target))
 		return;
 
 	%toTarget = Vector2Sub(%this.target.getPosition(), %this.getPosition());
@@ -140,7 +149,7 @@ function PlanetXEnemy::takeDamage(%this, %amount)
 /// contact doesn't drain health every physics step.
 function PlanetXEnemy::onCollision(%this, %object, %collisionDetails)
 {
-	if (%object.class !$= "PlanetXPlayer")
+	if (%object.class !$= "PlanetXPlayer" || %object.downed)
 		return;
 
 	%now = getSimTime();

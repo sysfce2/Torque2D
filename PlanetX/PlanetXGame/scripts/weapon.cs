@@ -218,6 +218,6 @@ function PlanetXWeapon::heatTick(%this)
 function PlanetXWeapon::updateHeatBar(%this)
 {
 	%level = PlanetXGame.level;
-	if (isObject(%level) && isObject(%level.hud))
-		%level.hud.setHeat(%this.gunHeat, %this.overheated, %this.heatTickMs);
+	if (isObject(%level) && isObject(%level.hud) && isObject(%this.owner))
+		%level.hud.setHeat(%this.owner.playerIndex, %this.gunHeat, %this.overheated, %this.heatTickMs);
 }

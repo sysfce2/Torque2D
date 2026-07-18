@@ -18,6 +18,7 @@ function PlanetXGame::create(%this)
 	exec("./gui/titleScreen.cs");
 	exec("./scripts/level.cs");
 	exec("./scripts/sceneWindow.cs");
+	exec("./scripts/camera.cs");
 	exec("./scripts/tileMap.cs");
 	exec("./scripts/barrier.cs");
 	exec("./scripts/rock.cs");
@@ -37,6 +38,12 @@ function PlanetXGame::create(%this)
 
 	// ScreenFade posts SwapComplete when a canvas transition finishes.
 	%this.startListening(ScreenFade);
+
+	// Dedicated GUI profiles (larger text) - built before any PlanetX GUI.
+	%this.createProfiles();
+
+	// Two-player co-op starts off; the title's "START 2 PLAYERS" turns it on.
+	$PlanetX::twoPlayer = false;
 
 	// The title screen owns its own GUI; it lives for the whole session.
 	%this.titleScreen = new ScriptObject() { class = "PlanetXTitleScreen"; };
@@ -87,6 +94,38 @@ function PlanetXGame::playClick(%this)
 }
 
 //-----------------------------------------------------------------------------
+// GUI profiles. The stock GuiButton/Label/Text profiles are shared by the editor
+// and every toy, so we don't touch them; instead we clone each into a PlanetX-
+// owned profile at double the font size for readable in-game text. Built once and
+// kept for the session (like PlanetXHeatProfile).
+//-----------------------------------------------------------------------------
+
+function PlanetXGame::createProfiles(%this)
+{
+	// GuiLabelProfile reliably carries the platform font size; double it. Fall back
+	// to 24 if it is somehow unavailable, so text is never sized to zero.
+	%big = 24;
+	if (isObject(GuiLabelProfile) && GuiLabelProfile.fontSize > 0)
+		%big = GuiLabelProfile.fontSize * 2;
+
+	%this.makeBigProfile("PlanetXButtonProfile", GuiButtonProfile, %big);
+	%this.makeBigProfile("PlanetXLabelProfile", GuiLabelProfile, %big);
+	%this.makeBigProfile("PlanetXTextProfile", GuiTextProfile, %big);
+}
+
+/// Clone %base into a named profile at %size font (no-op if it already exists).
+function PlanetXGame::makeBigProfile(%this, %name, %base, %size)
+{
+	if (isObject(%name))
+		return;
+
+	%profile = new GuiControlProfile();
+	%profile.assignFieldsFrom(%base);
+	%profile.fontSize = %size;
+	%profile.setName(%name);
+}
+
+//-----------------------------------------------------------------------------
 // State transitions.
 //-----------------------------------------------------------------------------
 
@@ -102,12 +141,14 @@ function PlanetXGame::showTitle(%this, %instant)
 	Audio.PlayMusic("PlanetXGame:planetfall");
 }
 
-/// A fresh run from the title screen always begins at level 1.
-function PlanetXGame::startGame(%this)
+/// A fresh run from the title screen always begins at level 1. %twoPlayer picks
+/// solo or co-op (the two START buttons pass it; see titleGui.gui.taml).
+function PlanetXGame::startGame(%this, %twoPlayer)
 {
 	if ($PlanetX::state $= "playing")
 		return;
 
+	$PlanetX::twoPlayer = %twoPlayer;
 	%this.levelNum = 1;
 	%this.launchLevel();
 }
@@ -194,17 +235,54 @@ function PlanetXGame::onWin(%this)
 // Losing.
 //-----------------------------------------------------------------------------
 
-function PlanetXGame::onPlayerDeath(%this)
+/// A player's health hit zero. In single-player that ends the run. In co-op the
+/// player is downed and out of play; a living teammate can revive them at the
+/// rocket (see camera.cs / PlanetXLevel::revivePlayer), and the run only ends
+/// once BOTH players are down.
+function PlanetXGame::onPlayerDown(%this, %player)
 {
 	if ($PlanetX::state !$= "playing")
 		return;
 
+	// Single-player: a death is game over.
+	if (!$PlanetX::twoPlayer)
+	{
+		%this.onPlayerDeath(%player);
+		return;
+	}
+
+	// Co-op: take this player out of play.
 	Audio.PlaySound("PlanetXGame:playerDeath");
+	%this.level.playBurst(%player.getPosition());
+	%player.goDown();
+
+	// If the teammate is already down too, the run is over.
+	if (%player.playerIndex == 1)
+		%mate = %this.level.player2;
+	else
+		%mate = %this.level.player;
+
+	if (!isObject(%mate) || %mate.downed)
+		%this.onPlayerDeath(%player);
+}
+
+/// Terminal game over: burst on the fallen player, freeze the level, and show the
+/// game-over dialog.
+function PlanetXGame::onPlayerDeath(%this, %player)
+{
+	if ($PlanetX::state !$= "playing")
+		return;
 
 	$PlanetX::state = "lost";
 
-	%this.level.playBurst(%this.level.player.getPosition());
-	%this.level.player.setVisible(false);
+	// Burst/hide the player that just fell - unless co-op already downed them.
+	if (isObject(%player) && !%player.downed)
+	{
+		Audio.PlaySound("PlanetXGame:playerDeath");
+		%this.level.playBurst(%player.getPosition());
+		%player.setVisible(false);
+	}
+
 	%this.level.suspend();
 
 	if (!isObject(%this.gameOverGui))

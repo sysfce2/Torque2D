@@ -3,44 +3,44 @@
 	Profile="GuiWindowProfile"
 	HorizSizing="center"
 	VertSizing="center"
-	Position="312 254"
-	Extent="400 260">
+	Position="232 240"
+	Extent="560 288">
 	<GuiControl
 		Name="VictoryHeading"
-		Profile="GuiLabelProfile"
+		Profile="PlanetXLabelProfile"
 		HorizSizing="center"
 		VertSizing="bottom"
-		Position="0 36"
-		Extent="400 40"
+		Position="0 30"
+		Extent="560 44"
 		Text="CRYSTAL SECURED"
 		Align="center"
 		OverrideFontColor="1"
 		FontColor="33 191 132 255" />
 	<GuiControl
 		Name="VictorySubtitle"
-		Profile="GuiTextProfile"
+		Profile="PlanetXTextProfile"
 		HorizSizing="center"
 		VertSizing="bottom"
-		Position="0 84"
-		Extent="400 24"
+		Position="0 90"
+		Extent="560 34"
 		Text="The next one is harder."
 		Align="center" />
 	<GuiButtonCtrl
 		Name="VictoryNextButton"
-		Profile="GuiButtonProfile"
+		Profile="PlanetXButtonProfile"
 		HorizSizing="center"
 		VertSizing="bottom"
-		Position="80 130"
-		Extent="240 44"
+		Position="140 150"
+		Extent="280 50"
 		Text="NEXT LEVEL"
 		Command="PlanetXGame.playClick(); PlanetXGame.nextLevel();" />
 	<GuiButtonCtrl
 		Name="VictoryTitleButton"
-		Profile="GuiButtonProfile"
+		Profile="PlanetXButtonProfile"
 		HorizSizing="center"
 		VertSizing="bottom"
-		Position="80 186"
-		Extent="240 44"
+		Position="140 210"
+		Extent="280 50"
 		Text="RETURN TO TITLE"
 		Command="PlanetXGame.playClick(); PlanetXGame.dialogToTitle();" />
 </GuiControl>

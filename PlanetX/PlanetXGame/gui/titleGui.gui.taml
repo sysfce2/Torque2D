@@ -12,31 +12,48 @@
 	ConstrainProportions="1"
 	ClampImage="0"
 	ImageColor="255 255 255 255">
-	<GuiButtonCtrl
-		Name="TitleStartButton"
-		Profile="GuiButtonProfile"
-		HorizSizing="center"
-		VertSizing="relative"
-		Position="372 430"
-		Extent="280 52"
-		Text="START MISSION"
-		Command="PlanetXGame.playClick(); PlanetXGame.startGame();" />
-	<GuiButtonCtrl
-		Name="TitleQuitButton"
-		Profile="GuiButtonProfile"
-		HorizSizing="center"
-		VertSizing="relative"
-		Position="372 502"
-		Extent="280 52"
-		Text="QUIT"
-		Command="PlanetXGame.playClick(); quit();" />
+	<GuiControl
+		Name="TitleMenu"
+		Profile="GuiDefaultProfile"
+		HorizSizing="width"
+		VertSizing="bottom"
+		Position="0 520"
+		Extent="1024 248">
+		<GuiButtonCtrl
+			Name="TitleStart1Button"
+			Profile="PlanetXButtonProfile"
+			HorizSizing="center"
+			VertSizing="top"
+			Position="352 8"
+			Extent="320 60"
+			Text="START 1 PLAYER"
+			Command="PlanetXGame.playClick(); PlanetXGame.startGame(false);" />
+		<GuiButtonCtrl
+			Name="TitleStart2Button"
+			Profile="PlanetXButtonProfile"
+			HorizSizing="center"
+			VertSizing="top"
+			Position="352 76"
+			Extent="320 60"
+			Text="START 2 PLAYERS"
+			Command="PlanetXGame.playClick(); PlanetXGame.startGame(true);" />
+		<GuiButtonCtrl
+			Name="TitleQuitButton"
+			Profile="PlanetXButtonProfile"
+			HorizSizing="center"
+			VertSizing="top"
+			Position="352 144"
+			Extent="320 60"
+			Text="QUIT"
+			Command="PlanetXGame.playClick(); quit();" />
+	</GuiControl>
 	<GuiControl
 		Name="TitleVersionLabel"
-		Profile="GuiTextProfile"
+		Profile="PlanetXTextProfile"
 		HorizSizing="left"
 		VertSizing="top"
-		Position="804 736"
-		Extent="200 24"
+		Position="764 728"
+		Extent="240 32"
 		Align="right"
 		OverrideFontColor="1"
 		FontColor="33 191 132 255" />

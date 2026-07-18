@@ -101,11 +101,29 @@ function PlanetXLevel::onAdd(%this)
 
 	// The spaceman steps out beside his rocket.
 	%spawn = %this.clampToWorld(Vector2Add(%rocketPosition, "6 -3"));
-	%this.player = %this.spawnPlayer(%spawn);
+	%this.player = %this.spawnPlayer(%spawn, 1, "PlanetXGame:spacemanIdle",
+		"PlanetXGame:spacemanWalkAnim", "mouse");
 
-	// Rigid camera follow, no rotation.
-	PlanetXWindow.mount(%this.player, "0 0", 0, true, false);
+	if ($PlanetX::twoPlayer)
+	{
+		// The second spaceman lands right beside the first, in his own colors and
+		// aiming himself at the nearest alien (there is no second mouse).
+		%spawn2 = %this.clampToWorld(Vector2Add(%rocketPosition, "3 0"));
+		%this.player2 = %this.spawnPlayer(%spawn2, 2, "PlanetXGame:spacemanIdle2",
+			"PlanetXGame:spacemanWalkAnim2", "auto");
+	}
 
+	// Camera: one player -> rigid follow; two -> a shared camera that frames both
+	// (camera.cs). The two-player camera positions the window itself each tick, so
+	// it must NOT be mounted.
+	if ($PlanetX::twoPlayer)
+		%this.camera = new ScriptObject() { class = "PlanetXCamera"; level = %this; };
+	else
+		PlanetXWindow.mount(%this.player, "0 0", 0, true, false);
+
+	// The level tracks every live enemy (a non-owning set) so player 2's auto-aim
+	// and enemy retargeting can find the nearest one. Must exist before spawning.
+	%this.enemies = new SimSet();
 	%this.spawnBugs();
 	%this.spawnBrutes();
 
@@ -130,6 +148,9 @@ function PlanetXLevel::onAdd(%this)
 /// deletes its weapon, ...); deleting the root frees the window and any GUI.
 function PlanetXLevel::onRemove(%this)
 {
+	// The camera owns a schedule that pokes the window; kill it before the window.
+	if (isObject(%this.camera))
+		%this.camera.delete();
 	if (isObject(%this.input))
 		%this.input.delete();
 	if (isObject(%this.hud))
@@ -139,6 +160,11 @@ function PlanetXLevel::onRemove(%this)
 		PlanetXRoot.delete();
 	if (isObject(PlanetXScene))
 		PlanetXScene.delete();
+
+	// The enemy set only references its members (the scene owned and just freed
+	// them), so this frees an already-empty set.
+	if (isObject(%this.enemies))
+		%this.enemies.delete();
 }
 
 /// Freeze the level and stop input without tearing it down - used while a
@@ -320,11 +346,84 @@ function PlanetXLevel::spawnCrosshair(%this)
 	%this.crosshair = %crosshair;
 }
 
-function PlanetXLevel::spawnPlayer(%this, %position)
+/// Spawn a spaceman. The level decides only its identity - where it lands, which
+/// player it is, its sprites, and how it aims; the player configures the rest of
+/// itself in onAdd.
+function PlanetXLevel::spawnPlayer(%this, %position, %index, %idleImage, %walkAnim, %aimMode)
 {
-	%player = new CompositeSprite() { class = "PlanetXPlayer"; Position = %position; };
+	%player = new CompositeSprite()
+	{
+		class = "PlanetXPlayer";
+		Position = %position;
+		playerIndex = %index;
+		idleImage = %idleImage;
+		walkAnim = %walkAnim;
+		aimMode = %aimMode;
+	};
 	PlanetXScene.add(%player);
 	return %player;
+}
+
+//-----------------------------------------------------------------------------
+// Co-op helpers: nearest living player (enemy targeting), nearest enemy (player
+// 2 auto-aim), and reviving a downed teammate at the rocket.
+//-----------------------------------------------------------------------------
+
+/// The closest player that is still up (not downed) to %position. In single-
+/// player it is always the sole player. Returns "" only if every player is down.
+function PlanetXLevel::nearestLivingPlayer(%this, %position)
+{
+	%best = "";
+	%bestDist = 0;
+
+	%p = %this.player;
+	if (isObject(%p) && !%p.downed)
+	{
+		%best = %p;
+		%bestDist = Vector2Length(Vector2Sub(%p.getPosition(), %position));
+	}
+
+	%p = %this.player2;
+	if (isObject(%p) && !%p.downed)
+	{
+		%dist = Vector2Length(Vector2Sub(%p.getPosition(), %position));
+		if (%best $= "" || %dist < %bestDist)
+			%best = %p;
+	}
+
+	return %best;
+}
+
+/// The closest live enemy to %position within %maxRange, or "" if none - backs
+/// player 2's auto-aim. Every spawned enemy is kept in %this.enemies.
+function PlanetXLevel::nearestEnemy(%this, %position, %maxRange)
+{
+	if (!isObject(%this.enemies))
+		return "";
+
+	%best = "";
+	%bestDist = %maxRange;
+
+	%count = %this.enemies.getCount();
+	for (%i = 0; %i < %count; %i++)
+	{
+		%enemy = %this.enemies.getObject(%i);
+		%dist = Vector2Length(Vector2Sub(%enemy.getPosition(), %position));
+		if (%dist <= %bestDist)
+		{
+			%bestDist = %dist;
+			%best = %enemy;
+		}
+	}
+
+	return %best;
+}
+
+/// Bring a downed teammate back at the rocket's door at full health.
+function PlanetXLevel::revivePlayer(%this, %player)
+{
+	%player.revive(%this.clampToWorld(%this.rocket.getDoorPosition()));
+	Audio.PlaySound("PlanetXGame:levelStart");
 }
 
 /// Populate the planet from the level's noise field: sample a coarse grid, spawn
@@ -407,6 +506,7 @@ function PlanetXLevel::spawnBug(%this, %position)
 		contactDamage = %this.contactDamage;
 	};
 	PlanetXScene.add(%bug);
+	%this.enemies.add(%bug);
 
 	// The level listens for this enemy's sound events (see onEnemyStartChase etc.).
 	%this.startListening(%bug);
@@ -426,6 +526,7 @@ function PlanetXLevel::spawnBrute(%this, %position)
 		contactDamage = %this.contactDamage;
 	};
 	PlanetXScene.add(%brute);
+	%this.enemies.add(%brute);
 
 	// The level listens for this enemy's sound events (see onEnemyStartChase etc.).
 	%this.startListening(%brute);

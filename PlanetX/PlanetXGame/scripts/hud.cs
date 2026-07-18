@@ -43,11 +43,11 @@ function PlanetXHud::onAdd(%this)
 
 	%hullLabel = new GuiControl()
 	{
-		Profile = "GuiLabelProfile";
+		Profile = "PlanetXLabelProfile";
 		HorizSizing = "right";
 		VertSizing = "bottom";
-		Position = "20 16";
-		Extent = "60 24";
+		Position = "20 14";
+		Extent = "90 34";
 		Text = "HULL";
 	};
 	%this.panel.add(%hullLabel);
@@ -57,19 +57,19 @@ function PlanetXHud::onAdd(%this)
 		Profile = "GuiProgressProfile";
 		HorizSizing = "right";
 		VertSizing = "bottom";
-		Position = "84 16";
-		Extent = "260 24";
+		Position = "116 20";
+		Extent = "240 26";
 	};
 	%this.panel.add(%this.healthBar);
 	%this.healthBar.setProgress(1);
 
 	%this.heatLabel = new GuiControl()
 	{
-		Profile = "GuiLabelProfile";
+		Profile = "PlanetXLabelProfile";
 		HorizSizing = "right";
 		VertSizing = "bottom";
-		Position = "20 44";
-		Extent = "60 18";
+		Position = "20 54";
+		Extent = "90 30";
 		Text = "HEAT";
 	};
 	%this.panel.add(%this.heatLabel);
@@ -79,31 +79,86 @@ function PlanetXHud::onAdd(%this)
 		Profile = "PlanetXHeatProfile";
 		HorizSizing = "right";
 		VertSizing = "bottom";
-		Position = "84 47";
-		Extent = "260 14";
+		Position = "116 60";
+		Extent = "240 16";
 	};
 	%this.panel.add(%this.heatBar);
 	%this.heatBar.setProgress(0);
 
+	// In co-op, player 2 gets a matching hull/heat readout mirrored along the
+	// top-right edge (player 1 stays top-left). Built only in two-player mode.
+	if ($PlanetX::twoPlayer)
+	{
+		%hullLabel2 = new GuiControl()
+		{
+			Profile = "PlanetXLabelProfile";
+			HorizSizing = "left";
+			VertSizing = "bottom";
+			Position = "914 14";
+			Extent = "90 34";
+			Text = "HULL";
+			Align = "right";
+		};
+		%this.panel.add(%hullLabel2);
+
+		%this.healthBar2 = new GuiProgressCtrl()
+		{
+			Profile = "GuiProgressProfile";
+			HorizSizing = "left";
+			VertSizing = "bottom";
+			Position = "668 20";
+			Extent = "240 26";
+		};
+		%this.panel.add(%this.healthBar2);
+		%this.healthBar2.setProgress(1);
+
+		%this.heatLabel2 = new GuiControl()
+		{
+			Profile = "PlanetXLabelProfile";
+			HorizSizing = "left";
+			VertSizing = "bottom";
+			Position = "914 54";
+			Extent = "90 30";
+			Text = "HEAT";
+			Align = "right";
+		};
+		%this.panel.add(%this.heatLabel2);
+
+		%this.heatBar2 = new GuiProgressCtrl()
+		{
+			Profile = "PlanetXHeatProfile";
+			HorizSizing = "left";
+			VertSizing = "bottom";
+			Position = "668 60";
+			Extent = "240 16";
+		};
+		%this.panel.add(%this.heatBar2);
+		%this.heatBar2.setProgress(0);
+
+		%this.heatWarning2 = false;
+	}
+
+	// The level readout sits in the top center in both modes - there is room and
+	// it reads better there than tucked in a corner.
 	%levelLabel = new GuiControl()
 	{
-		Profile = "GuiLabelProfile";
-		HorizSizing = "left";
+		Profile = "PlanetXLabelProfile";
+		HorizSizing = "center";
 		VertSizing = "bottom";
-		Position = "804 16";
-		Extent = "200 24";
-		Align = "right";
+		Position = "362 14";
+		Extent = "300 36";
+		Align = "center";
 	};
 	%this.panel.add(%levelLabel);
 	%levelLabel.setText("LEVEL" SPC %this.number);
 
 	%this.hint = new GuiControl()
 	{
-		Profile = "GuiTextProfile";
+		Profile = "PlanetXTextProfile";
 		HorizSizing = "center";
 		VertSizing = "bottom";
-		Position = "312 24";
-		Extent = "400 24";
+		Position = "262 56";
+		Extent = "500 34";
 		Text = "FIND THE CRYSTAL";
 		Align = "center";
 		OverrideFontColor = "1";
@@ -123,23 +178,32 @@ function PlanetXHud::onRemove(%this)
 		%this.panel.delete();
 }
 
-function PlanetXHud::setHealth(%this, %health)
+function PlanetXHud::setHealth(%this, %index, %health)
 {
-	if (isObject(%this.healthBar))
-		%this.healthBar.setProgress(%health / $PlanetX::PlayerMaxHealth, 150);
+	%bar = (%index == 2) ? %this.healthBar2 : %this.healthBar;
+	if (isObject(%bar))
+		%bar.setProgress(%health / $PlanetX::PlayerMaxHealth, 150);
 }
 
-function PlanetXHud::setHeat(%this, %heat, %overheated, %tickMs)
+function PlanetXHud::setHeat(%this, %index, %heat, %overheated, %tickMs)
 {
-	if (isObject(%this.heatBar))
-		%this.heatBar.setProgress(%heat, %tickMs);
+	%bar   = (%index == 2) ? %this.heatBar2   : %this.heatBar;
+	%label = (%index == 2) ? %this.heatLabel2 : %this.heatLabel;
+	%warned = (%index == 2) ? %this.heatWarning2 : %this.heatWarning;
+
+	if (isObject(%bar))
+		%bar.setProgress(%heat, %tickMs);
 
 	// The label doubles as the overheat warning.
-	if (isObject(%this.heatLabel) && %overheated != %this.heatWarning)
+	if (isObject(%label) && %overheated != %warned)
 	{
-		%this.heatWarning = %overheated;
-		%this.heatLabel.OverrideFontColor = %overheated;
-		%this.heatLabel.FontColor = "234 72 72 255";
-		%this.heatLabel.setText(%overheated ? "VENT!" : "HEAT");
+		if (%index == 2)
+			%this.heatWarning2 = %overheated;
+		else
+			%this.heatWarning = %overheated;
+
+		%label.OverrideFontColor = %overheated;
+		%label.FontColor = "234 72 72 255";
+		%label.setText(%overheated ? "VENT!" : "HEAT");
 	}
 }

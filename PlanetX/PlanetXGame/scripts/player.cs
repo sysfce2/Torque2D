@@ -20,10 +20,33 @@ $PlanetX::GunMuzzleLength = 0.9;
 // One footstep per foot-plant: half of the 400ms walk cycle (spacemanWalkAnim).
 $PlanetX::FootstepIntervalMs = 200;
 
+// Collision knockback. The player is driven at a fixed key-velocity, so whatever
+// velocity a physics contact adds sticks until the next key event - a hit or a
+// rock used to leave them drifting. On a contact we shove them off, then re-read
+// the held keys a moment later to snap velocity back to intent. Enemies shove hard
+// and recover slowly; solid props (rocks, walls) barely nudge and recover fast.
+$PlanetX::EnemyKnockbackSpeed = 28;
+$PlanetX::EnemyKnockbackMs    = 220;
+$PlanetX::PropBounceSpeed     = 6;
+$PlanetX::PropBounceMs        = 70;
+$PlanetX::KnockbackCooldownMs = 260;
+
 function PlanetXPlayer::onAdd(%this)
 {
 	%this.setSceneLayer($PlanetX::EntityLayer);
 	%this.setSceneGroup($PlanetX::PlayerGroup);
+
+	// Identity: the level sets these per player (index, sprites, aim mode) in
+	// spawnPlayer. Default them so a bare PlanetXPlayer is still player 1 - the
+	// single-player path behaves exactly as before.
+	if (%this.playerIndex $= "")
+		%this.playerIndex = 1;
+	if (%this.idleImage $= "")
+		%this.idleImage = "PlanetXGame:spacemanIdle";
+	if (%this.walkAnim $= "")
+		%this.walkAnim = "PlanetXGame:spacemanWalkAnim";
+	if (%this.aimMode $= "")
+		%this.aimMode = "mouse";
 
 	// "off" layout: addSprite's args are the sprite's local position.
 	%this.setBatchLayout("off");
@@ -33,7 +56,7 @@ function PlanetXPlayer::onAdd(%this)
 	// Body: drawn behind the gun (higher depth renders first).
 	%this.addSprite("0 0");
 	%this.setSpriteName("body");
-	%this.setSpriteImage("PlanetXGame:spacemanIdle");
+	%this.setSpriteImage(%this.idleImage);
 	%this.setSpriteDepth(1);
 
 	// Gun: pivots at the sprite center, held slightly above body center.
@@ -46,6 +69,7 @@ function PlanetXPlayer::onAdd(%this)
 	// Feet-centric collision, feet-centric Y-sort key.
 	%this.createCircleCollisionShape(0.6, 0, -0.4);
 	%this.setCollisionGroups($PlanetX::AlienGroup SPC $PlanetX::WallGroup SPC $PlanetX::PickupGroup);
+	%this.setCollisionCallback(true);
 	%this.setSortPoint(0, -0.9);
 
 	// The body never rotates - the gun sprite carries the aim.
@@ -55,6 +79,14 @@ function PlanetXPlayer::onAdd(%this)
 	%this.moving = false;
 	%this.facingLeft = false;
 	%this.aimAngle = 0;
+	%this.downed = false;
+	%this.lastKnockback = 0;
+
+	// Per-player held-move flags (input.cs sets these; updateVelocity reads them).
+	%this.inUp = 0;
+	%this.inDown = 0;
+	%this.inLeft = 0;
+	%this.inRight = 0;
 
 	// The spaceman arrives armed. Swap this class to change the weapon; nothing
 	// else in the player needs to know which weapon it is holding.
@@ -72,6 +104,8 @@ function PlanetXPlayer::onRemove(%this)
 {
 	if (isEventPending(%this.footstepEvent))
 		cancel(%this.footstepEvent);
+	if (isEventPending(%this.velocityResetEvent))
+		cancel(%this.velocityResetEvent);
 
 	if (isObject(%this.weapon))
 		%this.weapon.delete();
@@ -144,8 +178,15 @@ function PlanetXPlayer::getMuzzlePosition(%this)
 /// Re-derive velocity from the held-key flags. Called on every key make/break.
 function PlanetXPlayer::updateVelocity(%this)
 {
-	%x = $PlanetX::keyRight - $PlanetX::keyLeft;
-	%y = $PlanetX::keyUp - $PlanetX::keyDown;
+	// A downed player is out of play until revived - ignore any held keys.
+	if (%this.downed)
+	{
+		%this.setLinearVelocity(0, 0);
+		return;
+	}
+
+	%x = %this.inRight - %this.inLeft;
+	%y = %this.inUp - %this.inDown;
 
 	if (%x == 0 && %y == 0)
 	{
@@ -154,7 +195,7 @@ function PlanetXPlayer::updateVelocity(%this)
 		if (%this.moving)
 		{
 			%this.selectSpriteName("body");
-			%this.setSpriteImage("PlanetXGame:spacemanIdle");
+			%this.setSpriteImage(%this.idleImage);
 			%this.moving = false;
 
 			// Halt the footstep loop the instant he stops.
@@ -171,7 +212,7 @@ function PlanetXPlayer::updateVelocity(%this)
 	if (!%this.moving)
 	{
 		%this.selectSpriteName("body");
-		%this.setSpriteAnimation("PlanetXGame:spacemanWalkAnim");
+		%this.setSpriteAnimation(%this.walkAnim);
 		%this.moving = true;
 
 		// Kick off the footstep loop (plays now, then reschedules while walking).
@@ -192,19 +233,61 @@ function PlanetXPlayer::footstep(%this)
 }
 
 //-----------------------------------------------------------------------------
+// Collision knockback: shove off whatever we hit, then re-read the held keys a
+// moment later so a contact never leaves the player drifting. A per-player
+// cooldown keeps a lingering contact from re-shoving every physics step (the same
+// reason enemy contact damage has one).
+//-----------------------------------------------------------------------------
+
+function PlanetXPlayer::onCollision(%this, %object, %collisionDetails)
+{
+	if (%this.downed)
+		return;
+
+	%now = getSimTime();
+	if (%now - %this.lastKnockback < $PlanetX::KnockbackCooldownMs)
+		return;
+
+	if (%object.isEnemy)
+	{
+		%this.lastKnockback = %now;
+		%this.shoveFrom(%object, $PlanetX::EnemyKnockbackSpeed, $PlanetX::EnemyKnockbackMs);
+	}
+	else if (%object.getSceneGroup() == $PlanetX::WallGroup)
+	{
+		%this.lastKnockback = %now;
+		%this.shoveFrom(%object, $PlanetX::PropBounceSpeed, $PlanetX::PropBounceMs);
+	}
+	// Sensors (the crystal) don't knock the player around.
+}
+
+/// Push the player directly away from %object at %speed, then re-derive velocity
+/// from the held keys after %resetMs so control snaps back and the shove doesn't
+/// linger as drift.
+function PlanetXPlayer::shoveFrom(%this, %object, %speed, %resetMs)
+{
+	%away = mAtan(Vector2Sub(%this.getPosition(), %object.getPosition()));
+	%this.setLinearVelocityPolar(%away, %speed);
+
+	if (isEventPending(%this.velocityResetEvent))
+		cancel(%this.velocityResetEvent);
+	%this.velocityResetEvent = %this.schedule(%resetMs, "updateVelocity");
+}
+
+//-----------------------------------------------------------------------------
 // Damage.
 //-----------------------------------------------------------------------------
 
 function PlanetXPlayer::takeDamage(%this, %amount)
 {
-	if ($PlanetX::state !$= "playing")
+	if ($PlanetX::state !$= "playing" || %this.downed)
 		return;
 
 	%this.health -= %amount;
 
 	%level = PlanetXGame.level;
 	if (isObject(%level) && isObject(%level.hud))
-		%level.hud.setHealth(%this.health);
+		%level.hud.setHealth(%this.playerIndex, %this.health);
 
 	// Hit feedback: coral flash and a camera jolt. Object-level blend color
 	// does not tint batch sprites, so flash each sprite individually.
@@ -213,7 +296,7 @@ function PlanetXPlayer::takeDamage(%this, %amount)
 	PlanetXWindow.startCameraShake(4, 0.3);
 
 	if (%this.health <= 0)
-		PlanetXGame.onPlayerDeath();
+		PlanetXGame.onPlayerDown(%this);
 	else
 		Audio.PlaySound("PlanetXGame:playerHurt");
 }
@@ -224,4 +307,54 @@ function PlanetXPlayer::flash(%this, %color)
 	%this.setSpriteBlendColor(%color);
 	%this.selectSpriteName("gun");
 	%this.setSpriteBlendColor(%color);
+}
+
+//-----------------------------------------------------------------------------
+// Downed / revive (co-op). A killed player is downed - hidden and out of play -
+// until a living teammate reaches the rocket and revives them (see camera.cs and
+// PlanetXLevel::revivePlayer). In single-player nothing calls these.
+//-----------------------------------------------------------------------------
+
+/// Take this player out of play: stop firing/moving, hide, and drop out of
+/// collisions so aliens ignore the empty body.
+function PlanetXPlayer::goDown(%this)
+{
+	%this.downed = true;
+	%this.stopFiring();
+	%this.setLinearVelocity(0, 0);
+
+	%this.inUp = 0;
+	%this.inDown = 0;
+	%this.inLeft = 0;
+	%this.inRight = 0;
+
+	%this.moving = false;
+	if (isEventPending(%this.footstepEvent))
+		cancel(%this.footstepEvent);
+	if (isEventPending(%this.velocityResetEvent))
+		cancel(%this.velocityResetEvent);
+
+	%this.setVisible(false);
+	%this.setCollisionSuppress(true);
+}
+
+/// Bring a downed player back at %position with full health.
+function PlanetXPlayer::revive(%this, %position)
+{
+	%this.setPosition(%position);
+	%this.setLinearVelocity(0, 0);
+	%this.health = $PlanetX::PlayerMaxHealth;
+	%this.downed = false;
+
+	%this.setVisible(true);
+	%this.setCollisionSuppress(false);
+
+	// Back to the idle look; aim refreshes on the next input/aim tick.
+	%this.selectSpriteName("body");
+	%this.setSpriteImage(%this.idleImage);
+	%this.moving = false;
+
+	%level = PlanetXGame.level;
+	if (isObject(%level) && isObject(%level.hud))
+		%level.hud.setHealth(%this.playerIndex, %this.health);
 }
