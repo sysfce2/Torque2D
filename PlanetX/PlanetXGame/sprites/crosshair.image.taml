@@ -1,0 +1,4 @@
+<ImageAsset
+    AssetName="crosshair"
+    ImageFile="crosshair.png"
+    FilterMode="NEAREST" />

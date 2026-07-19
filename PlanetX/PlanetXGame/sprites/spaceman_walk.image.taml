@@ -1,0 +1,8 @@
+<ImageAsset
+    AssetName="spacemanWalk"
+    ImageFile="spaceman_walk.png"
+    FilterMode="NEAREST"
+    CellCountX="4"
+    CellCountY="1"
+    CellWidth="32"
+    CellHeight="32" />

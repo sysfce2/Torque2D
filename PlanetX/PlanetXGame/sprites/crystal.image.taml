@@ -1,0 +1,4 @@
+<ImageAsset
+    AssetName="crystal"
+    ImageFile="crystal.png"
+    FilterMode="NEAREST" />

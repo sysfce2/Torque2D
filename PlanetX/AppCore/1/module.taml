@@ -1,0 +1,21 @@
+<ModuleDefinition
+	ModuleId="AppCore"
+	VersionId="1"
+	BuildID="2"
+	Description="Provides critical initialization and functionality needed for every project."
+	ScriptFile="appCore.cs"
+	CreateFunction="create"
+	DestroyFunction="destroy"
+	Project="PlanetX"
+	ProjectDescription="Recover the crystal. Survive the aliens. An official Torque2D demo game."
+	Icon="projectIcon.png"
+	Synchronized="1" >
+	<DeclaredAssets
+		Path="gui"
+		Extension="asset.taml"
+		Recurse="true"/>
+	<DeclaredAssets
+		Path="fonts"
+		Extension="asset.taml"
+		Recurse="false"/>
+</ModuleDefinition>

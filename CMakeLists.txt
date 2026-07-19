@@ -165,6 +165,23 @@ target_include_directories(Torque2D PRIVATE
 if(WIN32)
     # OpenAL headers (OpenAL itself is loaded dynamically at runtime — not linked).
     target_include_directories(Torque2D PRIVATE ${TORQUE_LIB}/openal/win32)
+
+    # Stage the architecture-matching OpenAL Soft runtime next to the executable.
+    # winOpenAL.cc loads OpenAL via LoadLibrary("OpenAL32.dll") from the app
+    # directory, so the DLL must sit beside Torque2D.exe. A 64-bit process cannot
+    # load a 32-bit DLL (and vice versa), so pick by the target's pointer size.
+    # The staged root-level OpenAL32.dll is a build artifact (git-ignored), same
+    # as Torque2D.exe. Sources live in engine/lib/openal/{win32,win64}.
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(TORQUE_OPENAL_DLL "${TORQUE_LIB}/openal/win64/OpenAL32.dll")
+    else()
+        set(TORQUE_OPENAL_DLL "${TORQUE_LIB}/openal/win32/OpenAL32.dll")
+    endif()
+    add_custom_command(TARGET Torque2D POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${TORQUE_OPENAL_DLL}" "$<TARGET_FILE_DIR:Torque2D>/OpenAL32.dll"
+        VERBATIM
+        COMMENT "Staging OpenAL Soft runtime (OpenAL32.dll) next to Torque2D")
 endif()
 if(ANDROID)
     # platformAndroid vendors android_native_app_glue.h (included as <...> by
@@ -545,13 +562,17 @@ if(EMSCRIPTEN)
         "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/main.cs@/main.cs"
         "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/editor@/editor"
         "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/library@/library"
-        "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/toybox@/toybox")
+        "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/toybox@/toybox"
+        "SHELL:--preload-file ${CMAKE_SOURCE_DIR}/PlanetX@/PlanetX")
 
     target_link_options(Torque2D PRIVATE
         "-sUSE_SDL=1"
         "-sLEGACY_GL_EMULATION=1"      # fixed-function GL over WebGL (at-risk flag; see notes)
-        "-sINITIAL_MEMORY=134217728"   # 128 MB initial heap (was the legacy TOTAL_MEMORY)
-        "-sALLOW_MEMORY_GROWTH=1"
+        # Fixed 512 MB heap: with ALLOW_MEMORY_GROWTH the WASM heap ArrayBuffer is
+        # resizable, and Chrome's texImage2D rejects typed-array views into a
+        # resizable buffer (seen with emscripten 6.x + LEGACY_GL_EMULATION).
+        "-sINITIAL_MEMORY=536870912"
+        "-sALLOW_MEMORY_GROWTH=0"
         "-sEXIT_RUNTIME=0"
         "-sFORCE_FILESYSTEM=1"
         "$<$<CONFIG:Debug>:-sASSERTIONS=1>"

@@ -1,0 +1,5 @@
+<AnimationAsset
+    AssetName="alienWalkAnim"
+    Image="@asset=PlanetXGame:alienWalk"
+    animationFrames="0 1 2 3"
+    animationTime="0.5" />

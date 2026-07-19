@@ -1,0 +1,4 @@
+<AudioAsset
+    AssetName="enemyChase"
+    AudioFile="enemyChase.wav"
+    VolumeChannel="1" />

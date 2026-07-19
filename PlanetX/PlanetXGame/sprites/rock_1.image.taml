@@ -1,0 +1,4 @@
+<ImageAsset
+    AssetName="rock1"
+    ImageFile="rock_1.png"
+    FilterMode="NEAREST" />

@@ -1,0 +1,4 @@
+<AudioAsset
+    AssetName="enemyGiveUp"
+    AudioFile="enemyGiveUp.wav"
+    VolumeChannel="1" />

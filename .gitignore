@@ -6,6 +6,7 @@
 /tmp/*
 /preferences.cs
 /engine/**/preferences.cs
+/PlanetXPrefs.cs
 /console.log
 *.dso
 *.edso
@@ -25,6 +26,9 @@ Torque2D.app
 Torque2D_DEBUG.app
 Torque2D.exe
 Torque2D_DEBUG.exe
+# OpenAL Soft runtime staged next to the exe by CMake POST_BUILD (build artifact).
+# Root-anchored so the per-arch source DLLs under engine/lib/openal/ stay tracked.
+/OpenAL32.dll
 Torque2DGame.app
 Torque2DGame_Debug.app
 Torque2D

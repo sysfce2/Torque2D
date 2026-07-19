@@ -1,0 +1,45 @@
+<GuiControl
+	Name="GameOverGui"
+	Profile="GuiWindowProfile"
+	HorizSizing="center"
+	VertSizing="center"
+	Position="232 240"
+	Extent="560 288">
+	<GuiControl
+		Name="GameOverHeading"
+		Profile="PlanetXLabelProfile"
+		HorizSizing="center"
+		VertSizing="bottom"
+		Position="0 30"
+		Extent="560 44"
+		Text="SIGNAL LOST"
+		Align="center"
+		OverrideFontColor="1"
+		FontColor="234 72 72 255" />
+	<GuiControl
+		Profile="PlanetXTextProfile"
+		HorizSizing="center"
+		VertSizing="bottom"
+		Position="0 90"
+		Extent="560 34"
+		Text="The aliens got the better of you."
+		Align="center" />
+	<GuiButtonCtrl
+		Name="GameOverRetryButton"
+		Profile="PlanetXButtonProfile"
+		HorizSizing="center"
+		VertSizing="bottom"
+		Position="140 150"
+		Extent="280 50"
+		Text="RETRY MISSION"
+		Command="PlanetXGame.playClick(); PlanetXGame.retryMission();" />
+	<GuiButtonCtrl
+		Name="GameOverTitleButton"
+		Profile="PlanetXButtonProfile"
+		HorizSizing="center"
+		VertSizing="bottom"
+		Position="140 210"
+		Extent="280 50"
+		Text="RETURN TO TITLE"
+		Command="PlanetXGame.playClick(); PlanetXGame.dialogToTitle();" />
+</GuiControl>

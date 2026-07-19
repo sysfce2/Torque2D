@@ -1,0 +1,69 @@
+<GuiSpriteCtrl
+	Name="PlanetXTitle"
+	Profile="GuiDefaultProfile"
+	HorizSizing="relative"
+	VertSizing="relative"
+	Position="0 0"
+	Extent="1024 768"
+	Image="PlanetXGame:planetXBG"
+	SingleFrameBitmap="1"
+	TileImage="0"
+	FullSize="1"
+	ConstrainProportions="1"
+	ClampImage="0"
+	ImageColor="255 255 255 255">
+	<GuiControl
+		Name="TitleMenu"
+		Profile="GuiDefaultProfile"
+		HorizSizing="width"
+		VertSizing="bottom"
+		Position="0 496"
+		Extent="1024 272">
+		<GuiButtonCtrl
+			Name="TitleStart1Button"
+			Profile="PlanetXButtonProfile"
+			HorizSizing="center"
+			VertSizing="top"
+			Position="352 8"
+			Extent="320 56"
+			Text="START 1 PLAYER"
+			Command="PlanetXGame.playClick(); PlanetXGame.startGame(false);" />
+		<GuiButtonCtrl
+			Name="TitleStart2Button"
+			Profile="PlanetXButtonProfile"
+			HorizSizing="center"
+			VertSizing="top"
+			Position="352 74"
+			Extent="320 56"
+			Text="START 2 PLAYERS"
+			Command="PlanetXGame.playClick(); PlanetXGame.startGame(true);" />
+		<GuiButtonCtrl
+			Name="TitleOptionsButton"
+			Profile="PlanetXButtonProfile"
+			HorizSizing="center"
+			VertSizing="top"
+			Position="352 140"
+			Extent="320 56"
+			Text="OPTIONS"
+			Command="PlanetXGame.playClick(); PlanetXGame.openOptions();" />
+		<GuiButtonCtrl
+			Name="TitleQuitButton"
+			Profile="PlanetXButtonProfile"
+			HorizSizing="center"
+			VertSizing="top"
+			Position="352 206"
+			Extent="320 56"
+			Text="QUIT"
+			Command="PlanetXGame.playClick(); quit();" />
+	</GuiControl>
+	<GuiControl
+		Name="TitleVersionLabel"
+		Profile="PlanetXTextProfile"
+		HorizSizing="left"
+		VertSizing="top"
+		Position="764 728"
+		Extent="240 32"
+		Align="right"
+		OverrideFontColor="1"
+		FontColor="33 191 132 255" />
+</GuiSpriteCtrl>

@@ -60,6 +60,10 @@ AssetDatabase.IgnoreAutoUnload = true;
 //ModuleDatabase.scanModules( "./toybox" );
 //ModuleDatabase.LoadExplicit( "AppCore" );
 
+// ...or to boot straight into the PlanetX demo game:
+//ModuleDatabase.scanModules( "./PlanetX" );
+//ModuleDatabase.LoadExplicit( "AppCore" );
+
 // Starts the editor.
 exec("./editor/main.cs");
 
