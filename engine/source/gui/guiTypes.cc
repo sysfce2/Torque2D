@@ -123,6 +123,14 @@ ConsoleGetType(TypeGuiCursor)
 }
 
 //------------------------------------------------------------------------------
+// The theme-managed category field name, shared by the membership glue on
+// GuiBorderProfile and GuiControlProfile.
+static StringTableEntry themeCategoryField()
+{
+	static StringTableEntry categoryField = StringTable->insert("category");
+	return categoryField;
+}
+
 IMPLEMENT_CONOBJECT(GuiBorderProfile);
 
 GuiBorderProfile::GuiBorderProfile()
@@ -148,6 +156,7 @@ GuiBorderProfile::GuiBorderProfile()
    }
 
 	mUnderfill = true;
+	mCategory = StringTable->EmptyString;
 }
 
 GuiBorderProfile::~GuiBorderProfile()
@@ -179,6 +188,8 @@ void GuiBorderProfile::initPersistFields()
 	addField("paddingNA", TypeS32, Offset(mPadding[3], GuiBorderProfile));
 
 	addField("underfill", TypeBool, Offset(mUnderfill, GuiBorderProfile));
+
+	addField("category", TypeString, Offset(mCategory, GuiBorderProfile));
 }
 
 bool GuiBorderProfile::onAdd()
@@ -194,6 +205,62 @@ bool GuiBorderProfile::onAdd()
 void GuiBorderProfile::onRemove()
 {
 	Parent::onRemove();
+}
+
+void GuiBorderProfile::setTheme(GuiProfileTheme* theme)
+{
+	if (mThemeMembership.mTheme == theme)
+		return;
+
+	if (mThemeMembership.mTheme != NULL)
+		clearNotify(mThemeMembership.mTheme);
+
+	mThemeMembership.mTheme = theme;
+	mThemeMembership.clearAll();
+
+	if (theme != NULL)
+		deleteNotify(theme);
+}
+
+void GuiBorderProfile::onStaticModified(const char* slotName, const char* newValue)
+{
+	Parent::onStaticModified(slotName, newValue);
+
+	// On a themed border, any external field write becomes an override that
+	// stamping will preserve. The category field is theme-managed.
+	if (mThemeMembership.mTheme != NULL)
+	{
+		StringTableEntry slot = StringTable->insert(slotName);
+		if (slot != themeCategoryField())
+			mThemeMembership.markOverride(slot);
+	}
+}
+
+bool GuiBorderProfile::writeField(StringTableEntry fieldname, const char* value)
+{
+	if (!Parent::writeField(fieldname, value))
+		return false;
+
+	// Themed borders persist only explicitly overridden fields; everything
+	// else is derived from the theme. Category always persists so a loaded
+	// theme can rebind its members.
+	if (mThemeMembership.mTheme != NULL)
+	{
+		if (fieldname != themeCategoryField() &&
+			findField(fieldname) != NULL &&
+			!mThemeMembership.isOverridden(fieldname))
+			return false;
+	}
+
+	return true;
+}
+
+void GuiBorderProfile::onDeleteNotify(SimObject* object)
+{
+	if (object == (SimObject*)mThemeMembership.mTheme)
+		mThemeMembership.mTheme = NULL;
+
+	Parent::onDeleteNotify(object);
 }
 
 S32 GuiBorderProfile::getMargin(const GuiControlState state)
@@ -384,6 +451,77 @@ GuiControlProfile::GuiControlProfile(void) :
 
 GuiControlProfile::~GuiControlProfile()
 {
+}
+
+void GuiControlProfile::setTheme(GuiProfileTheme* theme)
+{
+   if (mThemeMembership.mTheme == theme)
+      return;
+
+   if (mThemeMembership.mTheme != NULL)
+      clearNotify(mThemeMembership.mTheme);
+
+   mThemeMembership.mTheme = theme;
+   mThemeMembership.clearAll();
+
+   if (theme != NULL)
+      deleteNotify(theme);
+}
+
+void GuiControlProfile::onStaticModified(const char* slotName, const char* newValue)
+{
+   Parent::onStaticModified(slotName, newValue);
+
+   // On a themed profile, any external field write becomes an override that
+   // stamping will preserve. The category field is theme-managed.
+   if (mThemeMembership.mTheme != NULL)
+   {
+      StringTableEntry slot = StringTable->insert(slotName);
+      if (slot != themeCategoryField())
+         mThemeMembership.markOverride(slot);
+   }
+}
+
+bool GuiControlProfile::writeField(StringTableEntry fieldname, const char* value)
+{
+   if (!Parent::writeField(fieldname, value))
+      return false;
+
+   // Themed profiles persist only explicitly overridden fields; everything
+   // else is derived from the theme. Category always persists so a loaded
+   // theme can rebind its members.
+   if (mThemeMembership.mTheme != NULL)
+   {
+      if (fieldname != themeCategoryField() &&
+          findField(fieldname) != NULL &&
+          !mThemeMembership.isOverridden(fieldname))
+         return false;
+   }
+
+   return true;
+}
+
+void GuiControlProfile::onDeleteNotify(SimObject* object)
+{
+   // Null the theme back-pointer if our theme is being deleted.
+   if (object == (SimObject*)mThemeMembership.mTheme)
+      mThemeMembership.mTheme = NULL;
+
+   // Null any border profile pointer matching the deleted object. The border
+   // setters have always registered deleteNotify for these, but the
+   // notification was previously ignored, leaving dangling pointers.
+   if (object == mBorderDefault)
+      mBorderDefault = NULL;
+   if (object == mBorderLeft)
+      mBorderLeft = NULL;
+   if (object == mBorderRight)
+      mBorderRight = NULL;
+   if (object == mBorderTop)
+      mBorderTop = NULL;
+   if (object == mBorderBottom)
+      mBorderBottom = NULL;
+
+   Parent::onDeleteNotify(object);
 }
 
 

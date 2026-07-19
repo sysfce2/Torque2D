@@ -31,6 +31,10 @@
 #include "gui/guiProfileTheme.h"
 #endif
 
+#ifndef _GUITYPES_H_
+#include "gui/guiTypes.h"
+#endif
+
 //-----------------------------------------------------------------------------
 // adjustValue: HSV-value (brightness) shift that preserves hue and alpha.
 // Positive percent brightens, negative darkens. This is the C++ port of the
@@ -124,6 +128,159 @@ TEST( GuiProfileThemeTests, SetAlphaClampsRange )
 {
     ASSERT_EQ( GuiProfileTheme::setAlpha( ColorI( 1, 2, 3, 4 ), 300 ).alpha, 255 );
     ASSERT_EQ( GuiProfileTheme::setAlpha( ColorI( 1, 2, 3, 4 ), -5 ).alpha, 0 );
+
+    SUCCEED();
+}
+
+//-----------------------------------------------------------------------------
+// Theme membership: profiles attached to a theme track which fields were
+// explicitly overridden (any external field write marks the field), while
+// standalone profiles behave exactly as before.
+//-----------------------------------------------------------------------------
+
+TEST( GuiProfileThemeTests, ThemedProfileMarksExternalFieldWritesAsOverridden )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject();
+    GuiControlProfile* profile = new GuiControlProfile();
+    profile->registerObject();
+    profile->setTheme( theme );
+
+    StringTableEntry fillColor = StringTable->insert( "fillColor" );
+    ASSERT_FALSE( profile->isThemeFieldOverridden( fillColor ) );
+
+    profile->setDataField( fillColor, NULL, "1 2 3 4" );
+    ASSERT_TRUE( profile->isThemeFieldOverridden( fillColor ) );
+
+    profile->clearThemeFieldOverride( fillColor );
+    ASSERT_FALSE( profile->isThemeFieldOverridden( fillColor ) );
+
+    profile->deleteObject();
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, StandaloneProfileDoesNotTrackOverrides )
+{
+    GuiControlProfile* profile = new GuiControlProfile();
+    profile->registerObject();
+
+    StringTableEntry fillColor = StringTable->insert( "fillColor" );
+    profile->setDataField( fillColor, NULL, "1 2 3 4" );
+    ASSERT_FALSE( profile->isThemeFieldOverridden( fillColor ) );
+
+    profile->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, CategoryFieldIsNotOverridable )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject();
+    GuiControlProfile* profile = new GuiControlProfile();
+    profile->registerObject();
+    profile->setTheme( theme );
+
+    StringTableEntry category = StringTable->insert( "category" );
+    profile->setDataField( category, NULL, "Button" );
+    ASSERT_FALSE( profile->isThemeFieldOverridden( category ) )
+        << "The category field is theme-managed and must never be marked overridden.";
+
+    profile->deleteObject();
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, ThemedProfileWriteFieldFiltersUnoverriddenFields )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject();
+    GuiControlProfile* profile = new GuiControlProfile();
+    profile->registerObject();
+
+    StringTableEntry fillColor = StringTable->insert( "fillColor" );
+    StringTableEntry category = StringTable->insert( "category" );
+
+    // Standalone: normal serialization decision (non-empty value writes).
+    ASSERT_TRUE( profile->writeField( fillColor, "1 2 3 4" ) );
+
+    profile->setTheme( theme );
+
+    // Themed, not overridden: field is derived from the theme, don't write it.
+    ASSERT_FALSE( profile->writeField( fillColor, "1 2 3 4" ) );
+
+    // Themed and overridden: the override must persist.
+    profile->setDataField( fillColor, NULL, "1 2 3 4" );
+    ASSERT_TRUE( profile->writeField( fillColor, "1 2 3 4" ) );
+
+    // Category always persists so a loaded theme can rebind members.
+    ASSERT_TRUE( profile->writeField( category, "Button" ) );
+
+    profile->deleteObject();
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, ThemeDeletionNullsMemberBackPointer )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject();
+    GuiControlProfile* profile = new GuiControlProfile();
+    profile->registerObject();
+    profile->setTheme( theme );
+    ASSERT_EQ( profile->getTheme(), theme );
+
+    theme->deleteObject();
+    ASSERT_EQ( profile->getTheme(), (GuiProfileTheme*)NULL )
+        << "A member must not be left with a dangling theme pointer.";
+
+    profile->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, DeletingBorderProfileNullsProfileBorderPointers )
+{
+    GuiControlProfile* profile = new GuiControlProfile();
+    profile->registerObject();
+    GuiBorderProfile* border = new GuiBorderProfile();
+    border->registerObject();
+
+    profile->setLeftProfile( border );
+    ASSERT_EQ( profile->getLeftBorder(), border );
+
+    border->deleteObject();
+    ASSERT_EQ( profile->getLeftBorder(), (GuiBorderProfile*)NULL )
+        << "Deleting a border profile must not leave a dangling pointer.";
+
+    profile->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, BorderProfileSupportsThemeMembershipAndCategory )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject();
+    GuiBorderProfile* border = new GuiBorderProfile();
+    border->registerObject();
+    border->setTheme( theme );
+
+    StringTableEntry margin = StringTable->insert( "margin" );
+    ASSERT_FALSE( border->isThemeFieldOverridden( margin ) );
+    border->setDataField( margin, NULL, "4" );
+    ASSERT_TRUE( border->isThemeFieldOverridden( margin ) );
+
+    // Border profiles carry a category persist field like control profiles.
+    border->setDataField( StringTable->insert( "category" ), NULL, "Bright" );
+    ASSERT_STREQ( border->getDataField( StringTable->insert( "category" ), NULL ), "Bright" );
+
+    border->deleteObject();
+    theme->deleteObject();
 
     SUCCEED();
 }

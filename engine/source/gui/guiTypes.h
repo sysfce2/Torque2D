@@ -42,6 +42,9 @@
 #ifndef _SIMBASE_H_
 #include "sim/simBase.h"
 #endif
+#ifndef _GUI_PROFILE_THEME_H_
+#include "gui/guiProfileTheme.h"
+#endif
 
 #ifndef _TEXTURE_MANAGER_H_
 #include "graphics/TextureManager.h"
@@ -160,12 +163,15 @@ private:
 	typedef SimObject Parent;
 	inline U8 getStateIndex(const GuiControlState state) { return state >= 4 ? state - 4 : state; }
 
+	GuiThemeMembership mThemeMembership;				//Theme membership and per-field override tracking.
+
 public:
 	S32 mMargin[static_cast<S32>(4)];					//The distance between the edge and the start of the border. Margin is outside of the control.
 	S32 mBorder[static_cast<S32>(4)];					//Width of the border.
 	ColorI mBorderColor[static_cast<S32>(4)];			//The color of the border.
 	S32 mPadding[static_cast<S32>(4)];					//The distance between the border and content of the control.
 	bool mUnderfill;									//True if the control's fill color should appear under the border.
+	StringTableEntry mCategory;							//The theme category this border belongs to. See GuiProfileTheme.
 public:
 	DECLARE_CONOBJECT(GuiBorderProfile);
 	GuiBorderProfile();
@@ -173,6 +179,18 @@ public:
 	static void initPersistFields();
 	bool onAdd();
 	void onRemove();
+
+	// Theme membership. A border stamped by a GuiProfileTheme tracks which
+	// fields were explicitly overridden; standalone borders are unaffected.
+	void setTheme(GuiProfileTheme* theme);
+	inline GuiProfileTheme* getTheme() const { return mThemeMembership.mTheme; }
+	bool isThemeFieldOverridden(StringTableEntry field) const { return mThemeMembership.isOverridden(field); }
+	void clearThemeFieldOverride(StringTableEntry field) { mThemeMembership.clearOverride(field); }
+	void clearAllThemeOverrides() { mThemeMembership.clearAll(); }
+
+	virtual void onStaticModified(const char* slotName, const char* newValue = NULL);
+	virtual bool writeField(StringTableEntry fieldname, const char* value);
+	virtual void onDeleteNotify(SimObject* object);
 
 	S32 getMargin(const GuiControlState state); //Returns the margin based on the control's state.
 	S32 getBorder(const GuiControlState state); //Returns the size of the border based on the control's state.
@@ -190,6 +208,8 @@ class GuiControlProfile : public SimObject
 {
 private:
    typedef SimObject Parent;
+
+   GuiThemeMembership mThemeMembership;            ///< Theme membership and per-field override tracking.
 
 public:
    S32  mRefCount;                                 ///< Used to determine if any controls are using this profile
@@ -301,6 +321,18 @@ public:
 
    void incRefCount(F32 fontAdjust = 1.0);
    void decRefCount();
+
+   // Theme membership. A profile stamped by a GuiProfileTheme tracks which
+   // fields were explicitly overridden; standalone profiles are unaffected.
+   void setTheme(GuiProfileTheme* theme);
+   inline GuiProfileTheme* getTheme() const { return mThemeMembership.mTheme; }
+   bool isThemeFieldOverridden(StringTableEntry field) const { return mThemeMembership.isOverridden(field); }
+   void clearThemeFieldOverride(StringTableEntry field) { mThemeMembership.clearOverride(field); }
+   void clearAllThemeOverrides() { mThemeMembership.clearAll(); }
+
+   virtual void onStaticModified(const char* slotName, const char* newValue = NULL);
+   virtual bool writeField(StringTableEntry fieldname, const char* value);
+   virtual void onDeleteNotify(SimObject* object);
 
    const ColorI& getFillColor(const GuiControlState state); //Returns the fill color based on the state.
    const ColorI& getFontColor(const GuiControlState state); //Returns the font color based on the state.

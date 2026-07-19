@@ -27,15 +27,75 @@
 #include "graphics/gColor.h"
 #endif
 
+#ifndef _SIM_OBJECT_H_
+#include "sim/simObject.h"
+#endif
+
+#ifndef _VECTOR_H_
+#include "collection/vector.h"
+#endif
+
+class GuiProfileTheme;
+
+//-----------------------------------------------------------------------------
+/// Embedded by GuiControlProfile and GuiBorderProfile to record membership in
+/// a GuiProfileTheme: a non-owning back-pointer to the theme plus the set of
+/// fields the user explicitly overrode away from the theme's stamped
+/// defaults. A NULL theme means the object is standalone and behaves exactly
+/// as it did before themes existed.
+//-----------------------------------------------------------------------------
+struct GuiThemeMembership
+{
+    GuiProfileTheme* mTheme;                ///< Owning theme; NULL for standalone objects.
+    Vector<StringTableEntry> mOverrides;    ///< Fields explicitly overridden away from the theme's defaults.
+
+    GuiThemeMembership() : mTheme(NULL) {}
+
+    inline bool isOverridden(StringTableEntry field) const
+    {
+        for (S32 i = 0; i < mOverrides.size(); ++i)
+        {
+            if (mOverrides[i] == field)
+                return true;
+        }
+        return false;
+    }
+
+    inline void markOverride(StringTableEntry field)
+    {
+        if (!isOverridden(field))
+            mOverrides.push_back(field);
+    }
+
+    inline void clearOverride(StringTableEntry field)
+    {
+        for (S32 i = 0; i < mOverrides.size(); ++i)
+        {
+            if (mOverrides[i] == field)
+            {
+                mOverrides.erase(i);
+                return;
+            }
+        }
+    }
+
+    inline void clearAll() { mOverrides.clear(); }
+};
+
 //-----------------------------------------------------------------------------
 /// A set of theme-wide values (fonts, palette colors, border size) from which
 /// a complete family of GuiControlProfile / GuiBorderProfile objects is
 /// derived. Formalizes in C++ the theme pattern used by the script-side
 /// editor themes and AppCore profile helpers.
 //-----------------------------------------------------------------------------
-class GuiProfileTheme
+class GuiProfileTheme : public SimObject
 {
+private:
+    typedef SimObject Parent;
+
 public:
+    DECLARE_CONOBJECT(GuiProfileTheme);
+
     /// Shift a color's HSV value (brightness) by percent (positive brightens,
     /// negative darkens), preserving hue and alpha. The value fraction is
     /// clamped to 0..1, so over-brightening saturates without hue wash-out.

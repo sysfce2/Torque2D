@@ -30,6 +30,10 @@
 
 //-----------------------------------------------------------------------------
 
+IMPLEMENT_CONOBJECT(GuiProfileTheme);
+
+//-----------------------------------------------------------------------------
+
 ColorI GuiProfileTheme::adjustValue(const ColorI& color, F32 percent)
 {
     const U8 largest = getMax(color.red, getMax(color.green, color.blue));
