@@ -134,9 +134,9 @@ private:
     S32 mFontSize;                      ///< Base font size; recipes may offset it.
     ColorI mColorBackground;            ///< Deepest background color.
     ColorI mColorPanel;                 ///< Raised panel/control background color.
-    ColorI mColorTextSubtle;            ///< Low-emphasis text color.
-    ColorI mColorText;                  ///< High-emphasis text color.
-    ColorI mColorAccent;                ///< Accent color used during interaction.
+    ColorI mColorText;                  ///< Text color.
+    ColorI mColorAccent;                ///< Primary accent color used during interaction.
+    ColorI mColorHighlight;             ///< Secondary accent for selected/active flavor.
     ColorI mColorWarning;               ///< Destructive-action color (e.g. window close).
     S32 mBorderSize;                    ///< Base border width; recipes may scale it.
 
@@ -189,9 +189,9 @@ public:
     inline S32 getFontSize() const { return mFontSize; }
     inline const ColorI& getColorBackground() const { return mColorBackground; }
     inline const ColorI& getColorPanel() const { return mColorPanel; }
-    inline const ColorI& getColorTextSubtle() const { return mColorTextSubtle; }
     inline const ColorI& getColorText() const { return mColorText; }
     inline const ColorI& getColorAccent() const { return mColorAccent; }
+    inline const ColorI& getColorHighlight() const { return mColorHighlight; }
     inline const ColorI& getColorWarning() const { return mColorWarning; }
     inline S32 getBorderSize() const { return mBorderSize; }
 

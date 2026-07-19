@@ -393,25 +393,133 @@ TEST( GuiProfileThemeTests, ThemeValueChangeRestampsMembersPreservingOverrides )
     GuiProfileTheme* theme = new GuiProfileTheme();
     theme->registerObject( "UnitTestTheme" );
 
-    GuiControlProfile* defaultProfile = theme->getProfile( StringTable->insert( "Default" ) );
-    ASSERT_TRUE( defaultProfile != NULL );
+    GuiControlProfile* panel = theme->getProfile( StringTable->insert( "Panel" ) );
+    ASSERT_TRUE( panel != NULL );
 
-    // Contract: the Default recipe binds fillColor to the theme's
+    // Contract: the Panel recipe binds fillColor to the theme's
     // colorBackground. Changing the theme value restamps the member.
     theme->setDataField( StringTable->insert( "colorBackground" ), NULL, "11 22 33 255" );
-    ASSERT_TRUE( defaultProfile->mFillColor == ColorI( 11, 22, 33, 255 ) );
+    ASSERT_TRUE( panel->mFillColor == ColorI( 11, 22, 33, 255 ) );
 
     // An explicit member override survives later theme changes.
-    defaultProfile->setDataField( StringTable->insert( "fillColor" ), NULL, "9 8 7 6" );
+    panel->setDataField( StringTable->insert( "fillColor" ), NULL, "9 8 7 6" );
     theme->setDataField( StringTable->insert( "colorBackground" ), NULL, "44 55 66 255" );
-    ASSERT_TRUE( defaultProfile->mFillColor == ColorI( 9, 8, 7, 6 ) )
+    ASSERT_TRUE( panel->mFillColor == ColorI( 9, 8, 7, 6 ) )
         << "Overridden fields must survive restamping.";
 
     // Clearing the override re-derives the field from the theme.
-    defaultProfile->clearThemeFieldOverride( StringTable->insert( "fillColor" ) );
+    panel->clearThemeFieldOverride( StringTable->insert( "fillColor" ) );
     theme->restamp();
-    ASSERT_TRUE( defaultProfile->mFillColor == ColorI( 44, 55, 66, 255 ) )
+    ASSERT_TRUE( panel->mFillColor == ColorI( 44, 55, 66, 255 ) )
         << "Cleared overrides must re-derive from the theme.";
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+//-----------------------------------------------------------------------------
+// Category recipe contracts: representative bindings of the engine-defined
+// recipes ported from AppCore's guiProfiles.cs, mapped onto the semantic
+// theme values (background, panel, text, accent, highlight, warning).
+//-----------------------------------------------------------------------------
+
+TEST( GuiProfileThemeTests, ButtonRecipeBindsAccentHighlightAndBevelBorders )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    GuiControlProfile* button = theme->getProfile( StringTable->insert( "Button" ) );
+    ASSERT_TRUE( button != NULL );
+    ASSERT_TRUE( button->mFillColor == theme->getColorAccent() );
+    ASSERT_TRUE( button->mFillColorHL == GuiProfileTheme::adjustValue( theme->getColorAccent(), 10.0f ) );
+    ASSERT_TRUE( button->mFillColorSL == theme->getColorHighlight() );
+    ASSERT_TRUE( button->mFillColorNA == GuiProfileTheme::setAlpha( theme->getColorAccent(), 80 ) );
+    ASSERT_TRUE( button->mCanKeyFocus );
+    ASSERT_TRUE( button->mTabable );
+    ASSERT_EQ( button->getLeftBorder(), theme->getBorder( StringTable->insert( "ButtonBright" ) ) );
+    ASSERT_EQ( button->getBottomBorder(), theme->getBorder( StringTable->insert( "ButtonDark" ) ) );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, WindowCloseButtonRecipeUsesWarningColor )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    GuiControlProfile* close = theme->getProfile( StringTable->insert( "WindowCloseButton" ) );
+    ASSERT_TRUE( close != NULL );
+    ASSERT_TRUE( close->mFillColorHL == GuiProfileTheme::setAlpha( theme->getColorWarning(), 150 ) );
+    ASSERT_TRUE( close->mFillColorSL == GuiProfileTheme::adjustValue( theme->getColorWarning(), 10.0f ) );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, TooltipRecipeUsesHighlightTextOverDimmedBackground )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    GuiControlProfile* tooltip = theme->getProfile( StringTable->insert( "Tooltip" ) );
+    ASSERT_TRUE( tooltip != NULL );
+    ASSERT_TRUE( tooltip->mFillColor == GuiProfileTheme::setAlpha( theme->getColorBackground(), 220 ) );
+    ASSERT_TRUE( tooltip->mFontColor == theme->getColorHighlight() );
+    ASSERT_EQ( tooltip->mBorderDefault, theme->getBorder( StringTable->insert( "Bright" ) ) );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, LabelRecipeUsesBodyFontLeftAligned )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    GuiControlProfile* label = theme->getProfile( StringTable->insert( "Label" ) );
+    ASSERT_TRUE( label != NULL );
+    ASSERT_EQ( label->mFontType, theme->getFontBody() );
+    ASSERT_EQ( label->mFontSize, theme->getFontSize() );
+    ASSERT_EQ( label->mAlignment, AlignmentType::LeftAlign );
+    ASSERT_TRUE( label->mFontColor == theme->getColorText() );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, ScrollThumbRecipeWiresScrollBorders )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    GuiControlProfile* thumb = theme->getProfile( StringTable->insert( "ScrollThumb" ) );
+    ASSERT_TRUE( thumb != NULL );
+    ASSERT_TRUE( thumb->mFillColorSL == theme->getColorAccent() );
+    ASSERT_EQ( thumb->mBorderDefault, theme->getBorder( StringTable->insert( "ScrollBright" ) ) );
+    ASSERT_EQ( thumb->getRightBorder(), theme->getBorder( StringTable->insert( "ScrollDark" ) ) );
+    ASSERT_EQ( thumb->getBottomBorder(), theme->getBorder( StringTable->insert( "ScrollDark" ) ) );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, AccentChangePropagatesToButtonFill )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    theme->setDataField( StringTable->insert( "colorAccent" ), NULL, "10 20 30 255" );
+
+    GuiControlProfile* button = theme->getProfile( StringTable->insert( "Button" ) );
+    ASSERT_TRUE( button != NULL );
+    ASSERT_TRUE( button->mFillColor == ColorI( 10, 20, 30, 255 ) );
 
     theme->deleteObject();
 

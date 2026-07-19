@@ -45,8 +45,10 @@ Recipes: port from `library/AppCore/gui/guiProfiles.cs` (game-facing baseline), 
 ### Theme-wide values (persist fields)
 
 `fontBody`, `fontTitle`, `fontCode` (font type names), `fontDirectory`, `fontSize`;
-`colorBackground`, `colorPanel`, `colorTextSubtle`, `colorText`, `colorAccent`, `colorWarning` (ColorI);
+`colorBackground`, `colorPanel`, `colorText`, `colorAccent`, `colorHighlight`, `colorWarning` (ColorI);
 `borderSize` (S32).
+
+(Amended 2026-07-19 with Peter: the originally-planned `colorTextSubtle` was replaced by `colorHighlight` — AppCore's palette has two accents (blue interaction + yellow flavor) and no subtle-text color, so the 6 roles now map 1:1 onto AppCore's six palette entries with no dead fields.)
 
 Helpers as C++ statics on the class, exposed to script: `adjustValue(color, percent)` — HSV-value shift preserving hue/alpha, **fixing** BaseTheme's clamp bug (`mClamp(newValue, 0, 100)` should clamp the value fraction to 0..1, `BaseTheme.cs:2280-2309`) — and `setAlpha(color, alpha)`.
 
