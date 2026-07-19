@@ -285,4 +285,137 @@ TEST( GuiProfileThemeTests, BorderProfileSupportsThemeMembershipAndCategory )
     SUCCEED();
 }
 
+//-----------------------------------------------------------------------------
+// Theme core: a registered theme auto-creates one named member profile per
+// engine-defined category (and border members per border category), owns
+// them, restamps them when theme values change, and supports extra profiles
+// alongside the defaults.
+//-----------------------------------------------------------------------------
+
+TEST( GuiProfileThemeTests, ThemeAutoCreatesOneProfilePerCategory )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    ASSERT_EQ( theme->getProfileCount(), GuiProfileTheme::getCategoryCount() );
+
+    GuiControlProfile* button = dynamic_cast<GuiControlProfile*>( Sim::findObject( "UnitTestThemeButtonProfile" ) );
+    ASSERT_TRUE( button != NULL ) << "Members are named <ThemeName><CategorySuffix>.";
+    ASSERT_EQ( button->getTheme(), theme );
+    ASSERT_STREQ( button->mCategory, "Button" );
+    ASSERT_EQ( theme->getProfile( StringTable->insert( "Button" ) ), button );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, ThemeAutoCreatesBorderMembers )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    GuiBorderProfile* border = dynamic_cast<GuiBorderProfile*>( Sim::findObject( "UnitTestThemeDefaultBorder" ) );
+    ASSERT_TRUE( border != NULL ) << "Border members are named <ThemeName><BorderSuffix>.";
+    ASSERT_EQ( border->getTheme(), theme );
+    ASSERT_STREQ( border->mCategory, "Default" );
+    ASSERT_EQ( theme->getBorder( StringTable->insert( "Default" ) ), border );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, ThemeDeletionDeletesItsMembers )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+    ASSERT_TRUE( Sim::findObject( "UnitTestThemeButtonProfile" ) != NULL );
+    ASSERT_TRUE( Sim::findObject( "UnitTestThemeDefaultBorder" ) != NULL );
+
+    theme->deleteObject();
+
+    ASSERT_TRUE( Sim::findObject( "UnitTestThemeButtonProfile" ) == NULL )
+        << "The theme owns its members and must delete them.";
+    ASSERT_TRUE( Sim::findObject( "UnitTestThemeDefaultBorder" ) == NULL )
+        << "The theme owns its border members and must delete them.";
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, DeletedDefaultMemberIsRecreatedOnRestamp )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    GuiControlProfile* button = theme->getProfile( StringTable->insert( "Button" ) );
+    ASSERT_TRUE( button != NULL );
+    button->deleteObject();
+    ASSERT_TRUE( Sim::findObject( "UnitTestThemeButtonProfile" ) == NULL );
+
+    theme->restamp();
+
+    GuiControlProfile* recreated = dynamic_cast<GuiControlProfile*>( Sim::findObject( "UnitTestThemeButtonProfile" ) );
+    ASSERT_TRUE( recreated != NULL ) << "A theme is always complete: deleted defaults are recreated.";
+    ASSERT_EQ( recreated->getTheme(), theme );
+    ASSERT_STREQ( recreated->mCategory, "Button" );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, ExtraProfilesShareCategoryAndOnlyExtrasAreRemovable )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    const S32 baseCount = theme->getProfileCount();
+    GuiControlProfile* extra = theme->createProfile( "Button", NULL );
+    ASSERT_TRUE( extra != NULL );
+    ASSERT_STREQ( extra->getName(), "UnitTestThemeButtonProfile2" );
+    ASSERT_STREQ( extra->mCategory, "Button" );
+    ASSERT_EQ( extra->getTheme(), theme );
+    ASSERT_EQ( theme->getProfileCount(), baseCount + 1 );
+
+    GuiControlProfile* defaultButton = theme->getProfile( StringTable->insert( "Button" ) );
+    ASSERT_FALSE( theme->removeProfile( defaultButton ) ) << "Default members must not be removable.";
+    ASSERT_TRUE( theme->removeProfile( extra ) );
+    ASSERT_EQ( theme->getProfileCount(), baseCount );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, ThemeValueChangeRestampsMembersPreservingOverrides )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    GuiControlProfile* defaultProfile = theme->getProfile( StringTable->insert( "Default" ) );
+    ASSERT_TRUE( defaultProfile != NULL );
+
+    // Contract: the Default recipe binds fillColor to the theme's
+    // colorBackground. Changing the theme value restamps the member.
+    theme->setDataField( StringTable->insert( "colorBackground" ), NULL, "11 22 33 255" );
+    ASSERT_TRUE( defaultProfile->mFillColor == ColorI( 11, 22, 33, 255 ) );
+
+    // An explicit member override survives later theme changes.
+    defaultProfile->setDataField( StringTable->insert( "fillColor" ), NULL, "9 8 7 6" );
+    theme->setDataField( StringTable->insert( "colorBackground" ), NULL, "44 55 66 255" );
+    ASSERT_TRUE( defaultProfile->mFillColor == ColorI( 9, 8, 7, 6 ) )
+        << "Overridden fields must survive restamping.";
+
+    // Clearing the override re-derives the field from the theme.
+    defaultProfile->clearThemeFieldOverride( StringTable->insert( "fillColor" ) );
+    theme->restamp();
+    ASSERT_TRUE( defaultProfile->mFillColor == ColorI( 44, 55, 66, 255 ) )
+        << "Cleared overrides must re-derive from the theme.";
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
 #endif // TORQUE_SHIPPING

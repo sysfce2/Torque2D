@@ -82,11 +82,22 @@ struct GuiThemeMembership
     inline void clearAll() { mOverrides.clear(); }
 };
 
+class GuiControlProfile;
+class GuiBorderProfile;
+
 //-----------------------------------------------------------------------------
 /// A set of theme-wide values (fonts, palette colors, border size) from which
 /// a complete family of GuiControlProfile / GuiBorderProfile objects is
 /// derived. Formalizes in C++ the theme pattern used by the script-side
 /// editor themes and AppCore profile helpers.
+///
+/// On registration the theme creates one member profile per entry of the
+/// engine-defined category table (and one border per border category), named
+/// <ThemeName><Suffix>, and stamps every profile field with values derived
+/// from the theme. Changing a theme value restamps all members, skipping any
+/// field a member has explicitly overridden. The theme owns its members and
+/// deletes them on removal; a deleted default member is recreated at the next
+/// restamp, so a theme is always complete.
 //-----------------------------------------------------------------------------
 class GuiProfileTheme : public SimObject
 {
@@ -94,7 +105,95 @@ private:
     typedef SimObject Parent;
 
 public:
+    typedef void (*StampProfileFn)(GuiProfileTheme* theme, GuiControlProfile* profile);
+    typedef void (*StampBorderFn)(GuiProfileTheme* theme, GuiBorderProfile* border);
+
+    /// One entry of the engine-defined category table: the mCategory value,
+    /// the member-name suffix, and the recipe deriving the member's fields
+    /// from the theme's values.
+    struct ProfileCategory
+    {
+        const char* name;
+        const char* suffix;
+        StampProfileFn stamp;
+    };
+
+    struct BorderCategory
+    {
+        const char* name;
+        const char* suffix;
+        StampBorderFn stamp;
+    };
+
+private:
+    // Theme-wide values, the inputs to every category recipe.
+    StringTableEntry mFontBody;         ///< Font for body text; the most common font.
+    StringTableEntry mFontTitle;        ///< Font for titles and headers.
+    StringTableEntry mFontCode;         ///< Monospace font for code and console text.
+    StringTableEntry mFontDirectory;    ///< Directory searched for the fonts.
+    S32 mFontSize;                      ///< Base font size; recipes may offset it.
+    ColorI mColorBackground;            ///< Deepest background color.
+    ColorI mColorPanel;                 ///< Raised panel/control background color.
+    ColorI mColorTextSubtle;            ///< Low-emphasis text color.
+    ColorI mColorText;                  ///< High-emphasis text color.
+    ColorI mColorAccent;                ///< Accent color used during interaction.
+    ColorI mColorWarning;               ///< Destructive-action color (e.g. window close).
+    S32 mBorderSize;                    ///< Base border width; recipes may scale it.
+
+    // Members. Defaults parallel the category tables; extras are additional
+    // user-created profiles that share a category with a default.
+    Vector<GuiControlProfile*> mDefaultProfiles;
+    Vector<GuiControlProfile*> mExtraProfiles;
+    Vector<GuiBorderProfile*> mDefaultBorders;
+
+    static const ProfileCategory smProfileCategories[];
+    static const BorderCategory smBorderCategories[];
+    static const S32 smProfileCategoryCount;
+    static const S32 smBorderCategoryCount;
+
+    GuiControlProfile* createMemberProfile(S32 categoryIndex, const char* objectName);
+    GuiBorderProfile* createMemberBorder(S32 categoryIndex);
+
+public:
     DECLARE_CONOBJECT(GuiProfileTheme);
+    GuiProfileTheme();
+    static void initPersistFields();
+    bool onAdd();
+    void onRemove();
+    virtual void onStaticModified(const char* slotName, const char* newValue = NULL);
+    virtual void onDeleteNotify(SimObject* object);
+
+    // The engine-defined category tables.
+    static S32 getCategoryCount() { return smProfileCategoryCount; }
+    static StringTableEntry getCategoryName(S32 index);
+    static S32 findCategoryIndex(StringTableEntry categoryName);
+    static S32 getBorderCategoryCount() { return smBorderCategoryCount; }
+    static S32 findBorderCategoryIndex(StringTableEntry categoryName);
+
+    // Members.
+    S32 getProfileCount() const;
+    GuiControlProfile* getProfile(StringTableEntry categoryName) const;   ///< The category's default member.
+    GuiBorderProfile* getBorder(StringTableEntry categoryName) const;     ///< The border category's default member.
+    GuiControlProfile* createProfile(const char* categoryName, const char* objectName);  ///< Create an extra profile in a category.
+    bool removeProfile(GuiControlProfile* profile);                       ///< Delete an extra; defaults are refused.
+
+    /// Create any missing default members and re-derive every non-overridden
+    /// field of every member from the current theme values.
+    void restamp();
+
+    // Theme value access for category recipes.
+    inline StringTableEntry getFontBody() const { return mFontBody; }
+    inline StringTableEntry getFontTitle() const { return mFontTitle; }
+    inline StringTableEntry getFontCode() const { return mFontCode; }
+    inline StringTableEntry getFontDirectory() const { return mFontDirectory; }
+    inline S32 getFontSize() const { return mFontSize; }
+    inline const ColorI& getColorBackground() const { return mColorBackground; }
+    inline const ColorI& getColorPanel() const { return mColorPanel; }
+    inline const ColorI& getColorTextSubtle() const { return mColorTextSubtle; }
+    inline const ColorI& getColorText() const { return mColorText; }
+    inline const ColorI& getColorAccent() const { return mColorAccent; }
+    inline const ColorI& getColorWarning() const { return mColorWarning; }
+    inline S32 getBorderSize() const { return mBorderSize; }
 
     /// Shift a color's HSV value (brightness) by percent (positive brightens,
     /// negative darkens), preserving hue and alpha. The value fraction is
