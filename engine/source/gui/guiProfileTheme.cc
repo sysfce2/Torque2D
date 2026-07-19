@@ -40,6 +40,8 @@
 #include "math/mMathFn.h"
 #endif
 
+#include "gui/guiProfileTheme_ScriptBinding.h"
+
 //-----------------------------------------------------------------------------
 
 IMPLEMENT_CONOBJECT(GuiProfileTheme);
@@ -1115,6 +1117,14 @@ S32 GuiProfileTheme::findCategoryIndex(StringTableEntry categoryName)
             return i;
     }
     return -1;
+}
+
+StringTableEntry GuiProfileTheme::getBorderCategoryName(S32 index)
+{
+    if (index < 0 || index >= smBorderCategoryCount)
+        return NULL;
+
+    return StringTable->insert(smBorderCategories[index].name);
 }
 
 S32 GuiProfileTheme::findBorderCategoryIndex(StringTableEntry categoryName)

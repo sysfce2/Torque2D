@@ -189,10 +189,12 @@ public:
     static StringTableEntry getCategoryName(S32 index);
     static S32 findCategoryIndex(StringTableEntry categoryName);
     static S32 getBorderCategoryCount() { return smBorderCategoryCount; }
+    static StringTableEntry getBorderCategoryName(S32 index);
     static S32 findBorderCategoryIndex(StringTableEntry categoryName);
 
     // Members.
     S32 getProfileCount() const;
+    inline const Vector<GuiControlProfile*>& getExtraProfiles() const { return mExtraProfiles; }
     GuiControlProfile* getProfile(StringTableEntry categoryName) const;   ///< The category's default member.
     GuiBorderProfile* getBorder(StringTableEntry categoryName) const;     ///< The border category's default member.
     GuiControlProfile* createProfile(const char* categoryName, const char* objectName);  ///< Create an extra profile in a category.

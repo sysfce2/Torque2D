@@ -627,4 +627,49 @@ TEST( GuiProfileThemeTests, AccentChangePropagatesToButtonFill )
     SUCCEED();
 }
 
+//-----------------------------------------------------------------------------
+// Script bindings: the console API the future Profile Editor drives.
+//-----------------------------------------------------------------------------
+
+TEST( GuiProfileThemeTests, ScriptBindingsExposeThemeApi )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    // getProfile returns the default member for a category.
+    GuiControlProfile* button = theme->getProfile( StringTable->insert( "Button" ) );
+    ASSERT_EQ( dAtoi( Con::executef( theme, 2, "getProfile", "Button" ) ), (S32)button->getId() );
+
+    // getBorder returns the border member for a border category.
+    GuiBorderProfile* bright = theme->getBorder( StringTable->insert( "Bright" ) );
+    ASSERT_EQ( dAtoi( Con::executef( theme, 2, "getBorder", "Bright" ) ), (S32)bright->getId() );
+
+    // The category tables are enumerable for the editor.
+    ASSERT_TRUE( dStrstr( Con::executef( theme, 1, "getCategoryNames" ), (const char*)"Button" ) != NULL );
+    ASSERT_TRUE( dStrstr( Con::executef( theme, 1, "getBorderCategoryNames" ), (const char*)"ScrollBright" ) != NULL );
+
+    // Script field assignment marks an override; resetField re-derives.
+    Con::evaluate( "UnitTestThemeButtonProfile.fillColor = \"9 8 7 6\";" );
+    ASSERT_TRUE( dAtob( Con::executef( theme, 3, "isFieldOverridden", "UnitTestThemeButtonProfile", "fillColor" ) ) );
+    ASSERT_TRUE( button->mFillColor == ColorI( 9, 8, 7, 6 ) );
+    Con::executef( theme, 3, "resetField", "UnitTestThemeButtonProfile", "fillColor" );
+    ASSERT_FALSE( dAtob( Con::executef( theme, 3, "isFieldOverridden", "UnitTestThemeButtonProfile", "fillColor" ) ) );
+    ASSERT_TRUE( button->mFillColor == theme->getColorAccent() );
+
+    // Extra profiles can be created and removed from script.
+    const S32 extraId = dAtoi( Con::executef( theme, 2, "createProfile", "Button" ) );
+    ASSERT_TRUE( extraId > 0 );
+    ASSERT_EQ( theme->getProfileCount(), GuiProfileTheme::getCategoryCount() + 1 );
+    ASSERT_TRUE( dAtob( Con::executef( theme, 2, "removeProfile", "UnitTestThemeButtonProfile2" ) ) );
+    ASSERT_EQ( theme->getProfileCount(), GuiProfileTheme::getCategoryCount() );
+
+    // The color helpers are exposed for the editor.
+    ASSERT_STREQ( Con::executef( theme, 3, "adjustValue", "210 90 30 128", "-20" ), "159 68 23 128" );
+    ASSERT_STREQ( Con::executef( theme, 3, "setAlpha", "10 20 30 255", "100" ), "10 20 30 100" );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
 #endif // TORQUE_SHIPPING
