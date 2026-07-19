@@ -1,7 +1,8 @@
 //-----------------------------------------------------------------------------
 // PlanetXBurst: a one-shot impact flash. Pooled by the level and replayed by
-// PlanetXLevel::playBurst wherever a bullet lands, a bug dies, or the spaceman
-// falls. It hides itself again when its animation ends.
+// PlanetXLevel::playBurst where a bullet lands. It hides itself again when its
+// animation ends. (Deaths pop particle bursts instead - see deathFx.cs and the
+// player's own effect in player.cs.)
 //-----------------------------------------------------------------------------
 
 function PlanetXBurst::onAdd(%this)

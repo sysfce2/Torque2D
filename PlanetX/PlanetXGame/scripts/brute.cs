@@ -19,4 +19,7 @@ function PlanetXBrute::onAdd(%this)
 
 	// A hulking brute barely flinches when shot.
 	%this.knockResist = 0.35;
+
+	// ...and goes out with a bigger blast than a bug (same green pop, scaled up).
+	%this.deathFxScale = $PlanetX::BruteDeathFxScale;
 }

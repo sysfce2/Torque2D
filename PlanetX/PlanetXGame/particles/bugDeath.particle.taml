@@ -1,0 +1,101 @@
+<ParticleAsset
+    AssetName="bugDeath"
+    Lifetime="0.119999997"
+    LifeMode="STOP">
+    <ParticleAssetEmitter
+        EmitterName="pop"
+        OldestInFront="true"
+        Image="@asset=PlanetXGame:puff"
+        Frame="0">
+        <ParticleAssetEmitter.Fields>
+            <Quantity>
+                <Key
+                    Time="0"
+                    Value="300" />
+                <Key
+                    Time="0.2"
+                    Value="290" />
+                <Key
+                    Time="0.6"
+                    Value="10" />
+            </Quantity>
+            <LifetimeVariation>
+                <Key
+                    Time="0"
+                    Value="0.12" />
+            </LifetimeVariation>
+            <Lifetime>
+                <Key
+                    Time="0"
+                    Value="0.3" />
+            </Lifetime>
+            <SpeedLife>
+                <Key
+                    Time="0"
+                    Value="1" />
+                <Key
+                    Time="0.29"
+                    Value="0" />
+            </SpeedLife>
+            <Speed>
+                <Key
+                    Time="0"
+                    Value="7" />
+            </Speed>
+            <SizeXVariation>
+                <Key
+                    Time="0"
+                    Value="0.25" />
+            </SizeXVariation>
+            <GreenChannel>
+                <Key
+                    Time="0"
+                    Value="0.749" />
+            </GreenChannel>
+            <SizeXLife>
+                <Key
+                    Time="0"
+                    Value="2.3" />
+                <Key
+                    Time="1"
+                    Value="0.2" />
+            </SizeXLife>
+            <SizeX>
+                <Key
+                    Time="0"
+                    Value="0.4" />
+            </SizeX>
+            <SpeedVariation>
+                <Key
+                    Time="0"
+                    Value="3" />
+            </SpeedVariation>
+            <RedChannel>
+                <Key
+                    Time="0"
+                    Value="0.129" />
+            </RedChannel>
+            <AlphaChannel>
+                <Key
+                    Time="0"
+                    Value="1" />
+                <Key
+                    Time="0.6"
+                    Value="1" />
+                <Key
+                    Time="1"
+                    Value="0" />
+            </AlphaChannel>
+            <EmissionAngle>
+                <Key
+                    Time="0"
+                    Value="90" />
+            </EmissionAngle>
+            <BlueChannel>
+                <Key
+                    Time="0"
+                    Value="0.518" />
+            </BlueChannel>
+        </ParticleAssetEmitter.Fields>
+    </ParticleAssetEmitter>
+</ParticleAsset>

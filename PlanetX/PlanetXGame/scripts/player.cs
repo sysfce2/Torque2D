@@ -105,6 +105,22 @@ function PlanetXPlayer::onAdd(%this)
 		owner = %this;
 	};
 
+	// The player's death burst - a dramatic two-tone effect built here so a death
+	// never allocates. Parked until the player falls, then fired by playDeathFx (see
+	// PlanetXGame::onPlayerDown/onPlayerDeath). Mirrors the weapon's steam vent:
+	// adding a ParticlePlayer to a scene auto-plays it, so stop it at once - and,
+	// being scene-owned, the scene frees it at teardown (the player only builds it).
+	%this.deathFx = new ParticlePlayer()
+	{
+		Particle = "PlanetXGame:playerDeath";
+		SceneLayer = $PlanetX::EffectLayer;
+		ParticleInterpolation = true;
+	};
+	%this.deathFx.setBodyType("static");
+	%this.deathFx.setCollisionSuppress(true);
+	PlanetXScene.add(%this.deathFx);
+	%this.deathFx.stop();
+
 	// Stamp this player's playthrough upgrades onto the fresh weapon and suit (the
 	// player is rebuilt every level, so upgrades are re-applied here each time), then
 	// start the auto-repair loop if that upgrade is owned.
@@ -113,8 +129,10 @@ function PlanetXPlayer::onAdd(%this)
 		%this.repairTick();
 }
 
-/// The player owns its weapon, so it deletes it. (The player's own sprites go
-/// when the scene tears down; the weapon is a ScriptObject and must be freed.)
+/// The player owns its weapon, so it deletes it. (The player's own sprites go when
+/// the scene tears down; the weapon is a ScriptObject and must be freed. The death
+/// burst is a ParticlePlayer added to the scene, so the scene frees it - deleting it
+/// here would double-free it, exactly as PlanetXWeapon::onRemove notes for the vent.)
 function PlanetXPlayer::onRemove(%this)
 {
 	if (isEventPending(%this.footstepEvent))
@@ -326,6 +344,14 @@ function PlanetXPlayer::flash(%this, %color)
 	%this.setSpriteBlendColor(%color);
 }
 
+/// The body bursts as the player falls - fire their owned death effect at their
+/// feet. Called from PlanetXGame::onPlayerDown (co-op) and ::onPlayerDeath (terminal).
+function PlanetXPlayer::playDeathFx(%this)
+{
+	%this.deathFx.setPosition(%this.getPosition());
+	%this.deathFx.play(true);
+}
+
 /// Auto-repair upgrade (Nanite Weave): while alive and in play, mend the suit back
 /// toward full a little each tick. Self-reschedules like the weapon's heat loop -
 /// started in onAdd only when the rate is above zero, cancelled in onRemove, and
@@ -366,6 +392,7 @@ function PlanetXPlayer::goDown(%this)
 		%this.detonate();
 
 	%this.downed = true;
+	%this.downedAt = getSimTime();   // the co-op camera lingers here for a grace beat
 	%this.stopFiring();
 	%this.setLinearVelocity(0, 0);
 

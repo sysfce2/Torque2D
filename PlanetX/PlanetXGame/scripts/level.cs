@@ -45,6 +45,10 @@ $PlanetX::MaxAliens = 90;
 
 $PlanetX::BurstPoolSize = 8;
 
+// Dying enemies pop a green particle burst from this pool (bugs at scale 1, brutes
+// larger - see enemy.cs). Kept small and quick, so slots free fast even in a swarm.
+$PlanetX::DeathFxPoolSize = 10;
+
 // A per-asset throttle keeps a mass aggro or a chain of deaths from blaring the
 // same enemy sound across the whole swarm at once.
 $PlanetX::EnemySoundThrottleMs = 200;
@@ -97,6 +101,7 @@ function PlanetXLevel::onAdd(%this)
 	%this.spawnRocket(%rocketPosition);
 	%this.spawnCrystal(%crystalPosition);
 	%this.createBurstPool();
+	%this.createDeathFxPool();
 	%this.spawnCrosshair();
 
 	// The spaceman steps out beside his rocket. Aim mode comes from the saved
@@ -557,8 +562,9 @@ function PlanetXLevel::spawnBrute(%this, %position)
 }
 
 //-----------------------------------------------------------------------------
-// Impact bursts: a small pool of one-shot animated sprites, shared by bullets,
-// dying bugs, and the player's death. A level-wide effects service.
+// Impact bursts: a small pool of one-shot animated sprites, fired where a bullet
+// lands. A level-wide effects service. (Deaths use particle bursts instead - see
+// createDeathFxPool below and the player's own effect in player.cs.)
 //-----------------------------------------------------------------------------
 
 function PlanetXLevel::createBurstPool(%this)
@@ -580,6 +586,33 @@ function PlanetXLevel::playBurst(%this, %position)
 	%burst.setPosition(%position);
 	%burst.setVisible(true);
 	%burst.playAnimation("PlanetXGame:burstAnim");
+}
+
+//-----------------------------------------------------------------------------
+// Enemy death pops: a pool of pre-built particle bursts, replayed by playDeathFx
+// wherever an alien dies. Pre-building the ParticlePlayers here means a death in
+// the thick of a swarm never allocates. Brutes pass a larger scale for a bigger
+// blast off the same green effect (see PlanetXDeathFx in deathFx.cs).
+//-----------------------------------------------------------------------------
+
+function PlanetXLevel::createDeathFxPool(%this)
+{
+	for (%i = 0; %i < $PlanetX::DeathFxPoolSize; %i++)
+	{
+		%fx = new ParticlePlayer() { class = "PlanetXDeathFx"; };
+		PlanetXScene.add(%fx);
+		%fx.stop();   // added-to-scene auto-plays; park it until the first pop
+		%this.deathFx[%i] = %fx;
+	}
+	%this.nextDeathFx = 0;
+}
+
+function PlanetXLevel::playDeathFx(%this, %position, %scale)
+{
+	%fx = %this.deathFx[%this.nextDeathFx];
+	%this.nextDeathFx = (%this.nextDeathFx + 1) % $PlanetX::DeathFxPoolSize;
+
+	%fx.pop(%position, %scale);
 }
 
 //-----------------------------------------------------------------------------

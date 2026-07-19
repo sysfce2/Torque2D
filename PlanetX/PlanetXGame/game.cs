@@ -32,6 +32,7 @@ function PlanetXGame::create(%this)
 	exec("./scripts/bullet.cs");
 	exec("./scripts/upgrades.cs");
 	exec("./scripts/burst.cs");
+	exec("./scripts/deathFx.cs");
 	exec("./scripts/enemy.cs");
 	exec("./scripts/bug.cs");
 	exec("./scripts/brute.cs");
@@ -367,6 +368,12 @@ function PlanetXGame::onWin(%this)
 // Losing.
 //-----------------------------------------------------------------------------
 
+// A death holds for a beat before the game freezes and the game-over dialog opens,
+// so the death effect can play over the still-live world (suspend() would freeze
+// it). The co-op camera lingers on a downed player for the same beat, so a teammate
+// sees the effect before it eases to the survivor (see PlanetXCamera::isFramed).
+$PlanetX::DeathLingerMs = 1000;
+
 /// A player's health hit zero. In single-player that ends the run. In co-op the
 /// player is downed and out of play; a living teammate can revive them at the
 /// rocket (see camera.cs / PlanetXLevel::revivePlayer), and the run only ends
@@ -385,7 +392,7 @@ function PlanetXGame::onPlayerDown(%this, %player)
 
 	// Co-op: take this player out of play.
 	Audio.PlaySound("PlanetXGame:playerDeath");
-	%this.level.playBurst(%player.getPosition());
+	%player.playDeathFx();
 	%player.goDown();
 
 	// If the teammate is already down too, the run is over.
@@ -398,8 +405,10 @@ function PlanetXGame::onPlayerDown(%this, %player)
 		%this.onPlayerDeath(%player);
 }
 
-/// Terminal game over: burst on the fallen player, freeze the level, and show the
-/// game-over dialog.
+/// Terminal game over: the fallen player bursts, then after a short beat - so the
+/// death effect plays over the still-live world - the level freezes and the game-over
+/// dialog opens. onPlayerDown routes here for a single-player death and for the
+/// second co-op down.
 function PlanetXGame::onPlayerDeath(%this, %player)
 {
 	if ($PlanetX::state !$= "playing")
@@ -407,13 +416,29 @@ function PlanetXGame::onPlayerDeath(%this, %player)
 
 	$PlanetX::state = "lost";
 
-	// Burst/hide the player that just fell - unless co-op already downed them.
+	// Burst/hide the player that just fell - unless co-op already downed them (their
+	// effect played back in onPlayerDown). Quiet the body so it can't drift or loose
+	// ghost bolts off-screen during the hold before the dialog.
 	if (isObject(%player) && !%player.downed)
 	{
 		Audio.PlaySound("PlanetXGame:playerDeath");
-		%this.level.playBurst(%player.getPosition());
+		%player.playDeathFx();
+		%player.stopFiring();
+		%player.setLinearVelocity(0, 0);
 		%player.setVisible(false);
 	}
+
+	// Hold on the death, then freeze and prompt. Cancelled/guarded in case a teardown
+	// (a quick quit-to-title) beats the timer - see showGameOver and teardownLevel.
+	%this.gameOverEvent = %this.schedule($PlanetX::DeathLingerMs, "showGameOver");
+}
+
+/// Freeze the level and raise the game-over dialog, a beat after onPlayerDeath. Bails
+/// if the hold was cut short - a retry or a quit tore the level down first.
+function PlanetXGame::showGameOver(%this)
+{
+	if ($PlanetX::state !$= "lost" || !isObject(%this.level))
+		return;
 
 	%this.level.suspend();
 
@@ -450,6 +475,11 @@ function PlanetXGame::dialogToTitle(%this)
 /// to free the scene, HUD, input, and every object they own.
 function PlanetXGame::teardownLevel(%this)
 {
+	// A death-hold timer may still be pending (player died, then quit before the
+	// dialog) - drop it so it can't fire suspend() into a torn-down level.
+	if (isEventPending(%this.gameOverEvent))
+		cancel(%this.gameOverEvent);
+
 	if (isObject(%this.level))
 		%this.level.delete();
 	%this.level = "";

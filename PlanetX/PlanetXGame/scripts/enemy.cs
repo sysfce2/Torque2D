@@ -31,6 +31,9 @@ $PlanetX::BulletKnockbackMaxSpeed = 14;
 // The brute: a hulking dark-shelled variant.
 $PlanetX::BruteSize = "3.5 2.1875";
 
+// A brute's death pop is the bug's green burst scaled up, to match its bigger body.
+$PlanetX::BruteDeathFxScale = 1.4;
+
 /// Shared setup. Sets only the always-the-same values (the passed-in target and
 /// stats are left untouched) and starts the AI tick.
 function PlanetXEnemy::init(%this)
@@ -51,6 +54,9 @@ function PlanetXEnemy::init(%this)
 	%this.lastContactDamage = 0;
 	%this.lastKnockback = 0;
 	%this.knockResist = 1;   // fraction of a bolt's shove this alien takes (brutes < 1)
+
+	// Scale of the green death pop this alien fires when it dies (brutes override up).
+	%this.deathFxScale = 1;
 
 	// Chase/wander state, so the sound events fire only on the transition.
 	%this.chasing = false;
@@ -144,7 +150,7 @@ function PlanetXEnemy::takeDamage(%this, %amount)
 	if (%this.health <= 0)
 	{
 		if (isObject(PlanetXGame.level))
-			PlanetXGame.level.playBurst(%this.getPosition());
+			PlanetXGame.level.playDeathFx(%this.getPosition(), %this.deathFxScale);
 		%this.postEvent("EnemyDeath");
 		%this.setCollisionSuppress(true);
 		%this.safeDelete();

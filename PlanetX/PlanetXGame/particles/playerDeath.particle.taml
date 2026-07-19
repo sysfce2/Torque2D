@@ -1,0 +1,203 @@
+<ParticleAsset
+    AssetName="playerDeath"
+    Lifetime="0.200000003"
+    LifeMode="STOP">
+    <ParticleAssetEmitter
+        EmitterName="Core"
+        OldestInFront="true"
+        Image="@asset=PlanetXGame:puff"
+        Frame="0">
+        <ParticleAssetEmitter.Fields>
+            <Quantity>
+                <Key
+                    Time="0"
+                    Value="500" />
+                <Key
+                    Time="0.15"
+                    Value="500" />
+                <Key
+                    Time="0.17"
+                    Value="0" />
+            </Quantity>
+            <LifetimeVariation>
+                <Key
+                    Time="0"
+                    Value="0.2" />
+            </LifetimeVariation>
+            <Lifetime>
+                <Key
+                    Time="0"
+                    Value="0.5" />
+            </Lifetime>
+            <SpeedLife>
+                <Key
+                    Time="0"
+                    Value="1" />
+                <Key
+                    Time="1"
+                    Value="0.6" />
+            </SpeedLife>
+            <Speed>
+                <Key
+                    Time="0"
+                    Value="12" />
+            </Speed>
+            <SizeXVariation>
+                <Key
+                    Time="0"
+                    Value="0.4" />
+            </SizeXVariation>
+            <GreenChannel>
+                <Key
+                    Time="0"
+                    Value="0.149" />
+            </GreenChannel>
+            <SizeXLife>
+                <Key
+                    Time="0"
+                    Value="1.9" />
+                <Key
+                    Time="1"
+                    Value="0.4" />
+            </SizeXLife>
+            <SizeX>
+                <Key
+                    Time="0"
+                    Value="1.8" />
+            </SizeX>
+            <SpeedVariation>
+                <Key
+                    Time="0"
+                    Value="4.4" />
+            </SpeedVariation>
+            <RedChannel>
+                <Key
+                    Time="0"
+                    Value="0.651" />
+            </RedChannel>
+            <AlphaChannel>
+                <Key
+                    Time="0"
+                    Value="1" />
+                <Key
+                    Time="0.7"
+                    Value="1" />
+                <Key
+                    Time="1"
+                    Value="0" />
+            </AlphaChannel>
+            <EmissionAngle>
+                <Key
+                    Time="0"
+                    Value="90" />
+            </EmissionAngle>
+            <BlueChannel>
+                <Key
+                    Time="0"
+                    Value="0.275" />
+            </BlueChannel>
+        </ParticleAssetEmitter.Fields>
+    </ParticleAssetEmitter>
+    <ParticleAssetEmitter
+        EmitterName="smoke"
+        OldestInFront="true"
+        Image="@asset=PlanetXGame:puff"
+        Frame="0">
+        <ParticleAssetEmitter.Fields>
+            <Quantity>
+                <Key
+                    Time="0"
+                    Value="200" />
+                <Key
+                    Time="0.18"
+                    Value="200" />
+                <Key
+                    Time="0.2"
+                    Value="0" />
+            </Quantity>
+            <LifetimeVariation>
+                <Key
+                    Time="0"
+                    Value="0.25" />
+            </LifetimeVariation>
+            <Lifetime>
+                <Key
+                    Time="0"
+                    Value="1.4" />
+            </Lifetime>
+            <SpeedLife>
+                <Key
+                    Time="0"
+                    Value="1" />
+                <Key
+                    Time="0.1"
+                    Value="0.9" />
+                <Key
+                    Time="0.29"
+                    Value="0" />
+            </SpeedLife>
+            <Speed>
+                <Key
+                    Time="0"
+                    Value="4" />
+            </Speed>
+            <SizeXVariation>
+                <Key
+                    Time="0"
+                    Value="0.7" />
+            </SizeXVariation>
+            <GreenChannel>
+                <Key
+                    Time="0"
+                    Value="0" />
+            </GreenChannel>
+            <SizeXLife>
+                <Key
+                    Time="0"
+                    Value="0.5" />
+                <Key
+                    Time="0.4"
+                    Value="1" />
+                <Key
+                    Time="1"
+                    Value="0.6" />
+            </SizeXLife>
+            <SizeX>
+                <Key
+                    Time="0"
+                    Value="3.3" />
+            </SizeX>
+            <SpeedVariation>
+                <Key
+                    Time="0"
+                    Value="2" />
+            </SpeedVariation>
+            <RedChannel>
+                <Key
+                    Time="0"
+                    Value="0.188" />
+            </RedChannel>
+            <AlphaChannel>
+                <Key
+                    Time="0"
+                    Value="0.8" />
+                <Key
+                    Time="0.6"
+                    Value="0.7" />
+                <Key
+                    Time="1"
+                    Value="0" />
+            </AlphaChannel>
+            <EmissionAngle>
+                <Key
+                    Time="0"
+                    Value="90" />
+            </EmissionAngle>
+            <BlueChannel>
+                <Key
+                    Time="0"
+                    Value="0.133" />
+            </BlueChannel>
+        </ParticleAssetEmitter.Fields>
+    </ParticleAssetEmitter>
+</ParticleAsset>

@@ -51,7 +51,19 @@ function PlanetXCamera::followTick(%this)
 	%this.followEvent = %this.schedule($PlanetX::CameraTickMs, "followTick");
 }
 
-/// Center on the living players' midpoint and zoom to frame both (plus a margin).
+/// A player is framed while alive, and for a grace beat after they go down, so the
+/// camera lingers on the death spot (and its effect) before easing to the survivor.
+/// $PlanetX::DeathLingerMs is the shared "watch the death" beat, defined in game.cs.
+function PlanetXCamera::isFramed(%this, %p)
+{
+	if (!isObject(%p))
+		return false;
+	if (!%p.downed)
+		return true;
+	return (getSimTime() - %p.downedAt) < $PlanetX::DeathLingerMs;
+}
+
+/// Center on the framed players' midpoint and zoom to frame both (plus a margin).
 function PlanetXCamera::updateFrame(%this)
 {
 	// The level hands us a direct reference (PlanetXGame.level is not yet assigned
@@ -60,14 +72,15 @@ function PlanetXCamera::updateFrame(%this)
 	if (!isObject(%level))
 		return;
 
-	// Gather the players still in play.
+	// Gather the framed players: everyone still up, plus a just-downed one for a
+	// grace beat so its death effect is seen before the camera eases to the survivor.
 	%a = "";
 	%b = "";
 	%p = %level.player;
-	if (isObject(%p) && !%p.downed)
+	if (%this.isFramed(%p))
 		%a = %p;
 	%p = %level.player2;
-	if (isObject(%p) && !%p.downed)
+	if (%this.isFramed(%p))
 	{
 		if (%a $= "")
 			%a = %p;
@@ -76,7 +89,7 @@ function PlanetXCamera::updateFrame(%this)
 	}
 
 	if (%a $= "")
-		return;  // both down; the game is ending - hold the last frame
+		return;  // both down and past the grace; the game is ending - hold the last frame
 
 	%posA = %a.getPosition();
 
