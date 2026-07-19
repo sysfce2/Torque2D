@@ -174,6 +174,7 @@ set(TORQUE_ENGINE_SOURCES
     ${TORQUE_SRC}/gui/guiInputCtrl.cc
     ${TORQUE_SRC}/gui/guiListBoxCtrl.cc
     ${TORQUE_SRC}/gui/guiMessageVectorCtrl.cc
+    ${TORQUE_SRC}/gui/guiProfileTheme.cc
     ${TORQUE_SRC}/gui/guiProgressCtrl.cc
     ${TORQUE_SRC}/gui/guiSliderCtrl.cc
     ${TORQUE_SRC}/gui/guiTextEditCtrl.cc
@@ -337,6 +338,7 @@ set(TORQUE_ENGINE_SOURCES
     # ---- testing ----
     ${TORQUE_SRC}/testing/unitTesting.cc
     # ---- testing/tests ----
+    ${TORQUE_SRC}/testing/tests/guiProfileThemeTests.cc
     ${TORQUE_SRC}/testing/tests/platformFileIoTests.cc
     ${TORQUE_SRC}/testing/tests/platformMemoryTests.cc
     ${TORQUE_SRC}/testing/tests/platformStringTests.cc
