@@ -182,7 +182,8 @@ public:
 
 	// Theme membership. A border stamped by a GuiProfileTheme tracks which
 	// fields were explicitly overridden; standalone borders are unaffected.
-	void setTheme(GuiProfileTheme* theme);
+	// preserveOverrides keeps an override set loaded before attachment (Taml).
+	void setTheme(GuiProfileTheme* theme, bool preserveOverrides = false);
 	inline GuiProfileTheme* getTheme() const { return mThemeMembership.mTheme; }
 	bool isThemeFieldOverridden(StringTableEntry field) const { return mThemeMembership.isOverridden(field); }
 	void clearThemeFieldOverride(StringTableEntry field) { mThemeMembership.clearOverride(field); }
@@ -192,6 +193,11 @@ public:
 	virtual bool writeField(StringTableEntry fieldname, const char* value);
 	virtual void onDeleteNotify(SimObject* object);
 
+protected:
+	static bool setThemeOverrides(void* obj, const char* data) { static_cast<GuiBorderProfile*>(obj)->mThemeMembership.parseOverrideList(data); return false; }
+	static const char* getThemeOverrides(void* obj, const char* data) { return static_cast<GuiBorderProfile*>(obj)->mThemeMembership.formatOverrideList(); }
+
+public:
 	S32 getMargin(const GuiControlState state); //Returns the margin based on the control's state.
 	S32 getBorder(const GuiControlState state); //Returns the size of the border based on the control's state.
 	const ColorI& getBorderColor(const GuiControlState state); //Returns the correct border color based on the control's state.
@@ -287,6 +293,9 @@ protected:
 	static bool setImageAsset(void* obj, const char* data) { static_cast<GuiControlProfile*>(obj)->setImageAsset(data); return false; }
 	static const char* getImageAsset(void* obj, const char* data) { return static_cast<GuiControlProfile*>(obj)->getImageAsset(); }
 
+	static bool setThemeOverrides(void* obj, const char* data) { static_cast<GuiControlProfile*>(obj)->mThemeMembership.parseOverrideList(data); return false; }
+	static const char* getThemeOverrides(void* obj, const char* data) { return static_cast<GuiControlProfile*>(obj)->mThemeMembership.formatOverrideList(); }
+
 public:
    // bitmap members
    StringTableEntry mBitmapName;                   ///< Bitmap file name for the bitmap of the control
@@ -324,7 +333,8 @@ public:
 
    // Theme membership. A profile stamped by a GuiProfileTheme tracks which
    // fields were explicitly overridden; standalone profiles are unaffected.
-   void setTheme(GuiProfileTheme* theme);
+   // preserveOverrides keeps an override set loaded before attachment (Taml).
+   void setTheme(GuiProfileTheme* theme, bool preserveOverrides = false);
    inline GuiProfileTheme* getTheme() const { return mThemeMembership.mTheme; }
    bool isThemeFieldOverridden(StringTableEntry field) const { return mThemeMembership.isOverridden(field); }
    void clearThemeFieldOverride(StringTableEntry field) { mThemeMembership.clearOverride(field); }

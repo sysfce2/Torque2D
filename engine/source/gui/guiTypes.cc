@@ -123,12 +123,18 @@ ConsoleGetType(TypeGuiCursor)
 }
 
 //------------------------------------------------------------------------------
-// The theme-managed category field name, shared by the membership glue on
+// The theme-managed field names, shared by the membership glue on
 // GuiBorderProfile and GuiControlProfile.
 static StringTableEntry themeCategoryField()
 {
 	static StringTableEntry categoryField = StringTable->insert("category");
 	return categoryField;
+}
+
+static StringTableEntry themeOverridesField()
+{
+	static StringTableEntry overridesField = StringTable->insert("themeOverrides");
+	return overridesField;
 }
 
 IMPLEMENT_CONOBJECT(GuiBorderProfile);
@@ -190,6 +196,8 @@ void GuiBorderProfile::initPersistFields()
 	addField("underfill", TypeBool, Offset(mUnderfill, GuiBorderProfile));
 
 	addField("category", TypeString, Offset(mCategory, GuiBorderProfile));
+	// The offset is unused: both accessors are supplied and the setter returns false.
+	addProtectedField("themeOverrides", TypeString, Offset(mCategory, GuiBorderProfile), &setThemeOverrides, &getThemeOverrides, "Theme-overridden field names");
 }
 
 bool GuiBorderProfile::onAdd()
@@ -207,7 +215,7 @@ void GuiBorderProfile::onRemove()
 	Parent::onRemove();
 }
 
-void GuiBorderProfile::setTheme(GuiProfileTheme* theme)
+void GuiBorderProfile::setTheme(GuiProfileTheme* theme, bool preserveOverrides)
 {
 	if (mThemeMembership.mTheme == theme)
 		return;
@@ -216,7 +224,8 @@ void GuiBorderProfile::setTheme(GuiProfileTheme* theme)
 		clearNotify(mThemeMembership.mTheme);
 
 	mThemeMembership.mTheme = theme;
-	mThemeMembership.clearAll();
+	if (!preserveOverrides)
+		mThemeMembership.clearAll();
 
 	if (theme != NULL)
 		deleteNotify(theme);
@@ -227,11 +236,12 @@ void GuiBorderProfile::onStaticModified(const char* slotName, const char* newVal
 	Parent::onStaticModified(slotName, newValue);
 
 	// On a themed border, any external field write becomes an override that
-	// stamping will preserve. The category field is theme-managed.
+	// stamping will preserve. Category and the override list itself are
+	// theme-managed.
 	if (mThemeMembership.mTheme != NULL)
 	{
 		StringTableEntry slot = StringTable->insert(slotName);
-		if (slot != themeCategoryField())
+		if (slot != themeCategoryField() && slot != themeOverridesField())
 			mThemeMembership.markOverride(slot);
 	}
 }
@@ -242,11 +252,12 @@ bool GuiBorderProfile::writeField(StringTableEntry fieldname, const char* value)
 		return false;
 
 	// Themed borders persist only explicitly overridden fields; everything
-	// else is derived from the theme. Category always persists so a loaded
-	// theme can rebind its members.
+	// else is derived from the theme. Category and the override list always
+	// persist so a loaded theme can rebind its members.
 	if (mThemeMembership.mTheme != NULL)
 	{
 		if (fieldname != themeCategoryField() &&
+			fieldname != themeOverridesField() &&
 			findField(fieldname) != NULL &&
 			!mThemeMembership.isOverridden(fieldname))
 			return false;
@@ -453,7 +464,7 @@ GuiControlProfile::~GuiControlProfile()
 {
 }
 
-void GuiControlProfile::setTheme(GuiProfileTheme* theme)
+void GuiControlProfile::setTheme(GuiProfileTheme* theme, bool preserveOverrides)
 {
    if (mThemeMembership.mTheme == theme)
       return;
@@ -462,7 +473,8 @@ void GuiControlProfile::setTheme(GuiProfileTheme* theme)
       clearNotify(mThemeMembership.mTheme);
 
    mThemeMembership.mTheme = theme;
-   mThemeMembership.clearAll();
+   if (!preserveOverrides)
+      mThemeMembership.clearAll();
 
    if (theme != NULL)
       deleteNotify(theme);
@@ -473,11 +485,12 @@ void GuiControlProfile::onStaticModified(const char* slotName, const char* newVa
    Parent::onStaticModified(slotName, newValue);
 
    // On a themed profile, any external field write becomes an override that
-   // stamping will preserve. The category field is theme-managed.
+   // stamping will preserve. Category and the override list itself are
+   // theme-managed.
    if (mThemeMembership.mTheme != NULL)
    {
       StringTableEntry slot = StringTable->insert(slotName);
-      if (slot != themeCategoryField())
+      if (slot != themeCategoryField() && slot != themeOverridesField())
          mThemeMembership.markOverride(slot);
    }
 }
@@ -488,11 +501,12 @@ bool GuiControlProfile::writeField(StringTableEntry fieldname, const char* value
       return false;
 
    // Themed profiles persist only explicitly overridden fields; everything
-   // else is derived from the theme. Category always persists so a loaded
-   // theme can rebind its members.
+   // else is derived from the theme. Category and the override list always
+   // persist so a loaded theme can rebind its members.
    if (mThemeMembership.mTheme != NULL)
    {
       if (fieldname != themeCategoryField() &&
+          fieldname != themeOverridesField() &&
           findField(fieldname) != NULL &&
           !mThemeMembership.isOverridden(fieldname))
          return false;
@@ -573,6 +587,8 @@ void GuiControlProfile::initPersistFields()
    addProtectedField("imageAsset", TypeAssetId, Offset(mImageAssetID, GuiControlProfile), &setImageAsset, &getImageAsset, "The image asset ID used to render the control");
 
    addField("category", TypeString, Offset(mCategory, GuiControlProfile));
+   // The offset is unused: both accessors are supplied and the setter returns false.
+   addProtectedField("themeOverrides", TypeString, Offset(mCategory, GuiControlProfile), &setThemeOverrides, &getThemeOverrides, "Theme-overridden field names");
 }
 
 bool GuiControlProfile::onAdd()

@@ -35,6 +35,10 @@
 #include "collection/vector.h"
 #endif
 
+#ifndef _TAML_CHILDREN_H_
+#include "persistence/taml/tamlChildren.h"
+#endif
+
 class GuiProfileTheme;
 
 //-----------------------------------------------------------------------------
@@ -50,6 +54,12 @@ struct GuiThemeMembership
     Vector<StringTableEntry> mOverrides;    ///< Fields explicitly overridden away from the theme's defaults.
 
     GuiThemeMembership() : mTheme(NULL) {}
+
+    /// Parse a whitespace-separated field-name list into the override set
+    /// (additive), and format the set back into a transient return buffer.
+    /// Used by the members' "themeOverrides" persist field.
+    void parseOverrideList(const char* list);
+    const char* formatOverrideList() const;
 
     inline bool isOverridden(StringTableEntry field) const
     {
@@ -99,7 +109,7 @@ class GuiBorderProfile;
 /// deletes them on removal; a deleted default member is recreated at the next
 /// restamp, so a theme is always complete.
 //-----------------------------------------------------------------------------
-class GuiProfileTheme : public SimObject
+class GuiProfileTheme : public SimObject, public TamlChildren
 {
 private:
     typedef SimObject Parent;
@@ -151,6 +161,8 @@ private:
     static const S32 smProfileCategoryCount;
     static const S32 smBorderCategoryCount;
 
+    bool mTamlReading;      ///< Suppresses auto-creation/stamping while Taml populates the theme.
+
     GuiControlProfile* createMemberProfile(S32 categoryIndex, const char* objectName);
     GuiBorderProfile* createMemberBorder(S32 categoryIndex);
 
@@ -162,6 +174,15 @@ public:
     void onRemove();
     virtual void onStaticModified(const char* slotName, const char* newValue = NULL);
     virtual void onDeleteNotify(SimObject* object);
+
+    // Taml persistence. Members serialize as ordinary child objects (each
+    // writing only name, category, and overridden fields); reads suppress
+    // auto-creation until the file's members are attached, then restamp.
+    virtual U32 getTamlChildCount(void) const;
+    virtual SimObject* getTamlChild(const U32 childIndex) const;
+    virtual void addTamlChild(SimObject* pSimObject);
+    virtual void onTamlPreRead(void);
+    virtual void onTamlPostRead(const TamlCustomNodes& customNodes);
 
     // The engine-defined category tables.
     static S32 getCategoryCount() { return smProfileCategoryCount; }

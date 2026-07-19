@@ -45,6 +45,50 @@
 IMPLEMENT_CONOBJECT(GuiProfileTheme);
 
 //-----------------------------------------------------------------------------
+// GuiThemeMembership override-list persistence helpers.
+//-----------------------------------------------------------------------------
+
+void GuiThemeMembership::parseOverrideList(const char* list)
+{
+    if (list == NULL || *list == '\0')
+        return;
+
+    char buffer[2048];
+    dStrncpy(buffer, list, sizeof(buffer) - 1);
+    buffer[sizeof(buffer) - 1] = '\0';
+
+    char* token = dStrtok(buffer, " \t\n");
+    while (token != NULL)
+    {
+        markOverride(StringTable->insert(token));
+        token = dStrtok(NULL, " \t\n");
+    }
+}
+
+const char* GuiThemeMembership::formatOverrideList() const
+{
+    if (mOverrides.size() == 0)
+        return "";
+
+    S32 bufferSize = 1;
+    for (S32 i = 0; i < mOverrides.size(); ++i)
+        bufferSize += dStrlen(mOverrides[i]) + 1;
+
+    char* buffer = Con::getReturnBuffer(bufferSize);
+    char* out = buffer;
+    for (S32 i = 0; i < mOverrides.size(); ++i)
+    {
+        if (i > 0)
+            *out++ = ' ';
+        dStrcpy(out, mOverrides[i]);
+        out += dStrlen(mOverrides[i]);
+    }
+    *out = '\0';
+
+    return buffer;
+}
+
+//-----------------------------------------------------------------------------
 // Category recipes. Each stamp function derives every themed field of one
 // member from the theme's values, skipping fields the member has explicitly
 // overridden. Recipes write raw members directly (never setDataField), so
@@ -922,6 +966,8 @@ const S32 GuiProfileTheme::smBorderCategoryCount = sizeof(smBorderCategories) / 
 
 GuiProfileTheme::GuiProfileTheme()
 {
+    mTamlReading = false;
+
     mFontBody = StringTable->insert("Arial");
     mFontTitle = StringTable->insert("Arial");
     mFontCode = StringTable->insert("Courier New");
@@ -1212,7 +1258,7 @@ bool GuiProfileTheme::removeProfile(GuiControlProfile* profile)
 
 void GuiProfileTheme::restamp()
 {
-    if (!isProperlyAdded())
+    if (!isProperlyAdded() || mTamlReading)
         return;
 
     // Borders first: profile recipes reference them.
@@ -1238,6 +1284,118 @@ void GuiProfileTheme::restamp()
         if (categoryIndex >= 0)
             smProfileCategories[categoryIndex].stamp(this, mExtraProfiles[i]);
     }
+}
+
+//-----------------------------------------------------------------------------
+// Taml persistence. Members serialize as ordinary child objects; their
+// writeField filter reduces each to name, category, themeOverrides, and the
+// overridden field values. Borders are written before profiles so overridden
+// border-name references resolve on read. Defaults precede extras so read-back
+// fills each category's default slot first.
+//-----------------------------------------------------------------------------
+
+U32 GuiProfileTheme::getTamlChildCount(void) const
+{
+    U32 count = (U32)mExtraProfiles.size();
+
+    for (S32 i = 0; i < smBorderCategoryCount; ++i)
+    {
+        if (mDefaultBorders[i] != NULL)
+            ++count;
+    }
+
+    for (S32 i = 0; i < smProfileCategoryCount; ++i)
+    {
+        if (mDefaultProfiles[i] != NULL)
+            ++count;
+    }
+
+    return count;
+}
+
+SimObject* GuiProfileTheme::getTamlChild(const U32 childIndex) const
+{
+    U32 index = childIndex;
+
+    for (S32 i = 0; i < smBorderCategoryCount; ++i)
+    {
+        if (mDefaultBorders[i] == NULL)
+            continue;
+        if (index == 0)
+            return mDefaultBorders[i];
+        --index;
+    }
+
+    for (S32 i = 0; i < smProfileCategoryCount; ++i)
+    {
+        if (mDefaultProfiles[i] == NULL)
+            continue;
+        if (index == 0)
+            return mDefaultProfiles[i];
+        --index;
+    }
+
+    if (index < (U32)mExtraProfiles.size())
+        return mExtraProfiles[index];
+
+    return NULL;
+}
+
+void GuiProfileTheme::addTamlChild(SimObject* pSimObject)
+{
+    GuiBorderProfile* border = dynamic_cast<GuiBorderProfile*>(pSimObject);
+    if (border != NULL)
+    {
+        const S32 categoryIndex = findBorderCategoryIndex(border->mCategory);
+        if (categoryIndex < 0 || mDefaultBorders[categoryIndex] != NULL)
+        {
+            Con::warnf("GuiProfileTheme::addTamlChild() - border child with unknown or duplicate category '%s' left unattached.", border->mCategory);
+            return;
+        }
+
+        mDefaultBorders[categoryIndex] = border;
+        border->setTheme(this, true);
+        deleteNotify(border);
+        return;
+    }
+
+    GuiControlProfile* profile = dynamic_cast<GuiControlProfile*>(pSimObject);
+    if (profile != NULL)
+    {
+        const S32 categoryIndex = findCategoryIndex(profile->mCategory);
+        if (categoryIndex < 0)
+        {
+            Con::warnf("GuiProfileTheme::addTamlChild() - profile child with unknown category '%s' left unattached.", profile->mCategory);
+            return;
+        }
+
+        if (mDefaultProfiles[categoryIndex] == NULL)
+            mDefaultProfiles[categoryIndex] = profile;
+        else
+            mExtraProfiles.push_back(profile);
+
+        profile->setTheme(this, true);
+        deleteNotify(profile);
+        return;
+    }
+
+    Con::warnf("GuiProfileTheme::addTamlChild() - unsupported child type '%s'.", pSimObject != NULL ? pSimObject->getClassName() : "NULL");
+}
+
+void GuiProfileTheme::onTamlPreRead(void)
+{
+    // Suppress auto-creation and stamping until the file's members are
+    // attached, so they claim their names and category slots first.
+    mTamlReading = true;
+}
+
+void GuiProfileTheme::onTamlPostRead(const TamlCustomNodes& customNodes)
+{
+    mTamlReading = false;
+
+    // Create any defaults the file did not carry and derive every
+    // non-overridden field from the loaded theme values.
+    restamp();
 }
 
 //-----------------------------------------------------------------------------

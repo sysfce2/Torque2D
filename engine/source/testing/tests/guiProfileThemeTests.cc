@@ -35,6 +35,12 @@
 #include "gui/guiTypes.h"
 #endif
 
+#ifndef _TAML_H_
+#include "persistence/taml/taml.h"
+#endif
+
+#include <stdio.h>
+
 //-----------------------------------------------------------------------------
 // adjustValue: HSV-value (brightness) shift that preserves hue and alpha.
 // Positive percent brightens, negative darkens. This is the C++ port of the
@@ -506,6 +512,101 @@ TEST( GuiProfileThemeTests, ScrollThumbRecipeWiresScrollBorders )
     ASSERT_EQ( thumb->getBottomBorder(), theme->getBorder( StringTable->insert( "ScrollDark" ) ) );
 
     theme->deleteObject();
+
+    SUCCEED();
+}
+
+//-----------------------------------------------------------------------------
+// TAML persistence: one theme file holds the theme values plus every member
+// as a child object carrying only its name, category, and overridden fields.
+//-----------------------------------------------------------------------------
+
+TEST( GuiProfileThemeTests, ThemeTamlRoundTripPreservesValuesAndOverrides )
+{
+    const char* fileName = "unitTestGuiProfileTheme.taml";
+
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    // Theme value, a member override, a border override, and an extra profile.
+    theme->setDataField( StringTable->insert( "colorAccent" ), NULL, "10 20 30 255" );
+    GuiControlProfile* button = theme->getProfile( StringTable->insert( "Button" ) );
+    button->setDataField( StringTable->insert( "fillColor" ), NULL, "9 8 7 6" );
+    GuiBorderProfile* bright = theme->getBorder( StringTable->insert( "Bright" ) );
+    bright->setDataField( StringTable->insert( "margin" ), NULL, "7" );
+    ASSERT_TRUE( theme->createProfile( "Button", NULL ) != NULL );
+
+    Taml taml;
+    ASSERT_TRUE( taml.write( theme, fileName ) );
+    theme->deleteObject();
+    ASSERT_TRUE( Sim::findObject( "UnitTestTheme" ) == NULL );
+
+    GuiProfileTheme* loaded = taml.read<GuiProfileTheme>( fileName );
+    ASSERT_TRUE( loaded != NULL );
+    ASSERT_TRUE( loaded->getColorAccent() == ColorI( 10, 20, 30, 255 ) );
+
+    // The default member keeps its name, override flag, and override value.
+    GuiControlProfile* loadedButton = loaded->getProfile( StringTable->insert( "Button" ) );
+    ASSERT_TRUE( loadedButton != NULL );
+    ASSERT_EQ( (SimObject*)loadedButton, Sim::findObject( "UnitTestThemeButtonProfile" ) );
+    ASSERT_EQ( loadedButton->getTheme(), loaded );
+    ASSERT_TRUE( loadedButton->isThemeFieldOverridden( StringTable->insert( "fillColor" ) ) );
+    ASSERT_TRUE( loadedButton->mFillColor == ColorI( 9, 8, 7, 6 ) );
+
+    // Non-overridden fields re-derive from the loaded theme values.
+    ASSERT_TRUE( loadedButton->mFillColorHL == GuiProfileTheme::adjustValue( ColorI( 10, 20, 30, 255 ), 10.0f ) );
+
+    // The border override survives.
+    GuiBorderProfile* loadedBright = loaded->getBorder( StringTable->insert( "Bright" ) );
+    ASSERT_TRUE( loadedBright != NULL );
+    ASSERT_TRUE( loadedBright->isThemeFieldOverridden( StringTable->insert( "margin" ) ) );
+    ASSERT_EQ( loadedBright->mMargin[0], 7 );
+
+    // The extra profile survives alongside the full default set.
+    ASSERT_EQ( loaded->getProfileCount(), GuiProfileTheme::getCategoryCount() + 1 );
+    GuiControlProfile* loadedExtra = dynamic_cast<GuiControlProfile*>( Sim::findObject( "UnitTestThemeButtonProfile2" ) );
+    ASSERT_TRUE( loadedExtra != NULL );
+    ASSERT_STREQ( loadedExtra->mCategory, "Button" );
+    ASSERT_EQ( loadedExtra->getTheme(), loaded );
+
+    loaded->deleteObject();
+    Platform::fileDelete( fileName );
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, ThemeTamlWritesOnlyOverriddenMemberFields )
+{
+    const char* fileName = "unitTestGuiProfileTheme.taml";
+
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+    GuiControlProfile* button = theme->getProfile( StringTable->insert( "Button" ) );
+    button->setDataField( StringTable->insert( "fillColor" ), NULL, "9 8 7 6" );
+
+    Taml taml;
+    ASSERT_TRUE( taml.write( theme, fileName ) );
+    theme->deleteObject();
+
+    // Read the raw file text.
+    FILE* file = fopen( fileName, "rb" );
+    ASSERT_TRUE( file != NULL );
+    fseek( file, 0, SEEK_END );
+    const long fileSize = ftell( file );
+    fseek( file, 0, SEEK_SET );
+    char* text = new char[fileSize + 1];
+    fread( text, 1, fileSize, file );
+    text[fileSize] = '\0';
+    fclose( file );
+
+    // The override is written; derived-only fields are not.
+    ASSERT_TRUE( dStrstr( (const char*)text, (const char*)"9 8 7 6" ) != NULL )
+        << "The overridden field value must be serialized.";
+    ASSERT_TRUE( dStrstr( (const char*)text, (const char*)"fontColorLinkHL" ) == NULL )
+        << "Fields derived from the theme must not be serialized.";
+
+    delete [] text;
+    Platform::fileDelete( fileName );
 
     SUCCEED();
 }
