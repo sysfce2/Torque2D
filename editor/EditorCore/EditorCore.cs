@@ -530,3 +530,17 @@ function EditorCore::deleteDialog(%this)
 {
 	%this.dialog.delete();
 }
+
+// Deferred delete for a specific dialog. Unlike deleteDialog's shared
+// %this.dialog slot, this takes the dialog as an argument, so stacked
+// dialogs can each schedule their own cleanup without racing. Never
+// schedule the native "delete" directly on an object - the scheduler
+// dispatches it inside the object's own script-callback guard, which
+// asserts; routing through a parent's script method like this one is safe.
+function EditorCore::deleteDialogObject(%this, %dialog)
+{
+	if(isObject(%dialog))
+	{
+		%dialog.delete();
+	}
+}

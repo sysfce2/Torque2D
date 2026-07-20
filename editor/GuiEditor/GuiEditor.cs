@@ -32,6 +32,14 @@ function GuiEditor::create( %this )
     exec("./scripts/GuiEditorSaveGuiDialog.cs");
     exec("./scripts/GuiEditorGridSizeDialog.cs");
     exec("./scripts/GuiEditorColorWindow.cs");
+    exec("./scripts/GuiEditorToolsWindow.cs");
+    exec("./scripts/GuiProfileEditorDialog.cs");
+    exec("./scripts/GuiProfileEditorLibrary.cs");
+    exec("./scripts/GuiProfileEditorTree.cs");
+    exec("./scripts/GuiProfileEditorInspector.cs");
+    exec("./scripts/GuiProfileEditorPreview.cs");
+    exec("./scripts/GuiProfileEditorNameDialog.cs");
+    exec("./scripts/GuiProfileEditorConfirmDialog.cs");
 
 	%this.guiPage = EditorCore.RegisterEditor("Gui Editor", %this);
 
@@ -46,6 +54,32 @@ function GuiEditor::create( %this )
         Extent = "100 100";
     };
     ThemeManager.setProfile(%this.brain, "guiEditorProfile");
+
+    // The frameset docks children into empty frames in add-order (depth-first
+    // through the splits), so the Gui Tools window must be added before the
+    // inspector window to land in the frame above it.
+    %this.guiToolsWindow = new GuiWindowCtrl()
+    {
+        Class = "GuiEditorToolsWindow";
+        HorizSizing = "right";
+        VertSizing = "bottom";
+        Position = "0 0";
+        Extent = "360 92";
+        MinExtent = "100 64";
+        text = "Gui Tools";
+        canMove = true;
+        canClose = false;
+        canMinimize = true;
+        canMaximize = false;
+        resizeWidth = true;
+        resizeHeight = true;
+    };
+    ThemeManager.setProfile(%this.guiToolsWindow, "windowProfile");
+    ThemeManager.setProfile(%this.guiToolsWindow, "windowContentProfile", "ContentProfile");
+    ThemeManager.setProfile(%this.guiToolsWindow, "windowButtonProfile", "CloseButtonProfile");
+    ThemeManager.setProfile(%this.guiToolsWindow, "windowButtonProfile", "MinButtonProfile");
+    ThemeManager.setProfile(%this.guiToolsWindow, "windowButtonProfile", "MaxButtonProfile");
+    %this.content.add(%this.guiToolsWindow);
 
     %this.inspectorWindow = new GuiWindowCtrl()
     {
@@ -210,7 +244,13 @@ function GuiEditor::createFrameSet(%this)
     %inspectorFrameID = getWord(%ids, 0);
     %centerFrameID = getWord(%ids, 1);
     %content.setFrameSize(%inspectorFrameID, 360);
-    
+
+    // Split the inspector column so the Gui Tools window docks above the
+    // Gui Inspector. The top child of a vertical split is the anchored frame.
+    %ids = %content.createVerticalSplit(%inspectorFrameID);
+    %guiToolsFrameID = getWord(%ids, 0);
+    %content.setFrameSize(%guiToolsFrameID, 92);
+
     %ids = %content.createVerticalSplit(%rightID);
     %toolFrameID = getWord(%ids, 0);
     %explorerFrameID = getWord(%ids, 1);
@@ -223,7 +263,10 @@ function GuiEditor::createFrameSet(%this)
 
 function GuiEditor::destroy( %this )
 {
-
+	if(isObject(%this.themeLibrary))
+	{
+		%this.themeLibrary.delete();
+	}
 }
 
 function GuiEditor::open(%this, %content)
@@ -365,6 +408,37 @@ function GuiEditor::SaveGuiAs(%this)
         defaultModule = %this.module;
 	};
 	%dialog.init(%width, %height);
+
+	Canvas.pushDialog(%dialog);
+}
+
+function GuiEditor::openProfileEditor(%this)
+{
+	// The theme library outlives the dialog so theme member profiles stay
+	// alive for the guis (and profile dropdowns) that reference them.
+	if(!isObject(%this.themeLibrary))
+	{
+		%this.themeLibrary = new ScriptObject()
+		{
+			class = "GuiProfileEditorLibrary";
+		};
+	}
+
+	%canvasSize = Canvas.getExtent();
+	%width = getWord(%canvasSize, 0) - 80;
+	%height = getWord(%canvasSize, 1) - 80;
+
+	%dialog = new GuiControl()
+	{
+		class = "GuiProfileEditorDialog";
+		superclass = "EditorDialog";
+		dialogSize = (%width + 8) SPC (%height + 8);
+		dialogCanClose = true;
+		dialogText = "Gui Profile Editor";
+		library = %this.themeLibrary;
+	};
+	%dialog.init(%width, %height);
+	%this.profileEditorDialog = %dialog;
 
 	Canvas.pushDialog(%dialog);
 }

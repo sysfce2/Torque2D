@@ -204,6 +204,13 @@ public:
     /// field of every member from the current theme values.
     void restamp();
 
+    /// Rename the theme and every member following the <ThemeName><Suffix>
+    /// pattern (extras rename only when their name starts with the old theme
+    /// name), updating overridden border-name references that point at this
+    /// theme's borders. All-or-nothing: any target-name collision refuses the
+    /// whole rename and returns false.
+    bool renameTheme(const char* newName);
+
     // Theme value access for category recipes.
     inline StringTableEntry getFontBody() const { return mFontBody; }
     inline StringTableEntry getFontTitle() const { return mFontTitle; }

@@ -39,6 +39,10 @@
 #include "persistence/taml/taml.h"
 #endif
 
+#ifndef _GUI_INSPECTOR_H_
+#include "gui/editor/guiInspector.h"
+#endif
+
 #include <stdio.h>
 
 //-----------------------------------------------------------------------------
@@ -666,6 +670,185 @@ TEST( GuiProfileThemeTests, ScriptBindingsExposeThemeApi )
     // The color helpers are exposed for the editor.
     ASSERT_STREQ( Con::executef( theme, 3, "adjustValue", "210 90 30 128", "-20" ), "159 68 23 128" );
     ASSERT_STREQ( Con::executef( theme, 3, "setAlpha", "10 20 30 255", "100" ), "10 20 30 100" );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+//-----------------------------------------------------------------------------
+// renameTheme: renames the theme and every member following the
+// <ThemeName><Suffix> pattern, updating overridden border-name references so
+// they keep pointing at this theme's borders. All-or-nothing: any name
+// collision refuses the whole rename.
+//-----------------------------------------------------------------------------
+
+TEST( GuiProfileThemeTests, RenameThemeRenamesThemeAndDefaultMembers )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestThemeA" );
+
+    ASSERT_TRUE( theme->renameTheme( "UnitTestThemeB" ) );
+    ASSERT_STREQ( theme->getName(), "UnitTestThemeB" );
+
+    // Defaults follow the <ThemeName><Suffix> pattern; old names are freed.
+    ASSERT_EQ( (SimObject*)theme->getProfile( StringTable->insert( "Button" ) ),
+               Sim::findObject( "UnitTestThemeBButtonProfile" ) );
+    ASSERT_EQ( (SimObject*)theme->getBorder( StringTable->insert( "Default" ) ),
+               Sim::findObject( "UnitTestThemeBDefaultBorder" ) );
+    ASSERT_TRUE( Sim::findObject( "UnitTestThemeAButtonProfile" ) == NULL );
+    ASSERT_TRUE( Sim::findObject( "UnitTestThemeADefaultBorder" ) == NULL );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, RenameThemeUpdatesOverriddenBorderSideReferences )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestThemeA" );
+
+    // Override the Button member's left border to another theme border by name.
+    GuiControlProfile* button = theme->getProfile( StringTable->insert( "Button" ) );
+    StringTableEntry borderLeft = StringTable->insert( "borderLeft" );
+    button->setDataField( borderLeft, NULL, "UnitTestThemeADarkBorder" );
+    ASSERT_TRUE( button->isThemeFieldOverridden( borderLeft ) );
+
+    ASSERT_TRUE( theme->renameTheme( "UnitTestThemeB" ) );
+
+    // The stored reference follows the border's new name; the override survives.
+    ASSERT_STREQ( button->getDataField( borderLeft, NULL ), "UnitTestThemeBDarkBorder" );
+    ASSERT_TRUE( button->isThemeFieldOverridden( borderLeft ) );
+    ASSERT_EQ( button->getLeftBorder(), theme->getBorder( StringTable->insert( "Dark" ) ) );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, RenameThemeRenamesPatternNamedExtrasAndKeepsCustomNames )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestThemeA" );
+
+    GuiControlProfile* patternExtra = theme->createProfile( "Button", NULL );
+    ASSERT_STREQ( patternExtra->getName(), "UnitTestThemeAButtonProfile2" );
+    GuiControlProfile* customExtra = theme->createProfile( "Button", "UnitTestCustomButton" );
+    ASSERT_TRUE( customExtra != NULL );
+
+    ASSERT_TRUE( theme->renameTheme( "UnitTestThemeB" ) );
+
+    ASSERT_STREQ( patternExtra->getName(), "UnitTestThemeBButtonProfile2" )
+        << "Extras named after the theme must follow the rename.";
+    ASSERT_STREQ( customExtra->getName(), "UnitTestCustomButton" )
+        << "Custom-named extras must keep their names.";
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, RenameThemeRefusesNameCollision )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestThemeA" );
+
+    // Block one of the member target names.
+    SimObject* blocker = new SimObject();
+    blocker->registerObject( "UnitTestThemeBButtonProfile" );
+
+    ASSERT_FALSE( theme->renameTheme( "UnitTestThemeB" ) )
+        << "A rename into any occupied name must be refused.";
+    ASSERT_STREQ( theme->getName(), "UnitTestThemeA" )
+        << "A refused rename must leave every name untouched.";
+    ASSERT_EQ( (SimObject*)theme->getProfile( StringTable->insert( "Button" ) ),
+               Sim::findObject( "UnitTestThemeAButtonProfile" ) );
+
+    blocker->deleteObject();
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, RenameThemeNamesMembersOfPreviouslyUnnamedTheme )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject();
+    ASSERT_TRUE( theme->getProfile( StringTable->insert( "Button" ) )->getName() == NULL );
+
+    ASSERT_TRUE( theme->renameTheme( "UnitTestThemeC" ) );
+
+    ASSERT_STREQ( theme->getName(), "UnitTestThemeC" );
+    ASSERT_EQ( (SimObject*)theme->getProfile( StringTable->insert( "Button" ) ),
+               Sim::findObject( "UnitTestThemeCButtonProfile" ) );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+//-----------------------------------------------------------------------------
+// Inspector integration: a GuiInspectorField pointed at a themed member knows
+// the member's theme, whether its field is overridden, and can clear the
+// override so the value re-derives from the theme.
+//-----------------------------------------------------------------------------
+
+TEST( GuiProfileThemeTests, InspectorFieldTracksThemeOverrideAndResets )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+    GuiControlProfile* button = theme->getProfile( StringTable->insert( "Button" ) );
+
+    // An unregistered field is enough: the theme helpers don't need a canvas.
+    GuiInspectorField* field = new GuiInspectorField();
+    field->setTarget( button );
+    AbstractClassRep::Field* fillColorField = const_cast<AbstractClassRep::Field*>(
+        button->getClassRep()->findField( StringTable->insert( "fillColor" ) ) );
+    ASSERT_TRUE( fillColorField != NULL );
+    field->setInspectorField( fillColorField );
+
+    ASSERT_EQ( field->getTargetTheme(), theme );
+    ASSERT_FALSE( field->isThemeOverridden() );
+
+    button->setDataField( StringTable->insert( "fillColor" ), NULL, "9 8 7 6" );
+    ASSERT_TRUE( field->isThemeOverridden() );
+
+    field->resetToThemeDefault();
+    ASSERT_FALSE( field->isThemeOverridden() );
+    ASSERT_TRUE( button->mFillColor == theme->getColorAccent() )
+        << "Clearing the override must re-derive the field from the theme.";
+
+    delete field;
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, InspectorFieldIgnoresNonThemedTargets )
+{
+    GuiControlProfile* standalone = new GuiControlProfile();
+    standalone->registerObject();
+
+    GuiInspectorField* field = new GuiInspectorField();
+    field->setTarget( standalone );
+
+    ASSERT_EQ( field->getTargetTheme(), (GuiProfileTheme*)NULL );
+    ASSERT_FALSE( field->isThemeOverridden() );
+
+    delete field;
+    standalone->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, RenameThemeIsExposedToScript )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestThemeA" );
+
+    ASSERT_TRUE( dAtob( Con::executef( theme, 2, "renameTheme", "UnitTestThemeB" ) ) );
+    ASSERT_STREQ( theme->getName(), "UnitTestThemeB" );
 
     theme->deleteObject();
 

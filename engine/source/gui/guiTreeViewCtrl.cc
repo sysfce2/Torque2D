@@ -184,7 +184,7 @@ void GuiTreeViewCtrl::onPreRender()
 		{
 			const GuiControl* oldFocus = mFocusControl;
 			mFocusControl = edit->getCurrentAddSet();
-			if(oldFocus != mFocusControl)
+			if(mFocusControl != nullptr && oldFocus != mFocusControl)
 			{
 				for (S32 i = 0; i < mItems.size(); i++)
 				{
@@ -241,7 +241,9 @@ void GuiTreeViewCtrl::onRender(Point2I offset, const RectI& updateRect)
 			// Render our item
 			onRenderItem(itemRect, mItems[i]);
 
-			if (mItems[i]->ID == mFocusControl->getId())
+			// The focus control is only assigned when bound to the Gui
+			// Editor; every other tree renders without one.
+			if (mFocusControl != nullptr && mItems[i]->ID == mFocusControl->getId())
 			{
 				mFocusLevel = treeItem->level;
 			}

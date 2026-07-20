@@ -223,6 +223,17 @@ ConsoleMethodWithDocs(GuiProfileTheme, restamp, ConsoleVoid, 2, 2, ())
     object->restamp();
 }
 
+/*! Renames the theme and every member following the theme-name pattern,
+    updating overridden border references that point at this theme's borders.
+    All-or-nothing: any name collision refuses the whole rename.
+    @param newName The new theme name.
+    @return True if the rename was applied.
+*/
+ConsoleMethodWithDocs(GuiProfileTheme, renameTheme, ConsoleBool, 3, 3, (newName))
+{
+    return object->renameTheme(argv[2]);
+}
+
 /*! Shifts a color's brightness by a percentage, preserving hue and alpha.
     Positive percentages brighten, negative darken.
     @param color The color as "red green blue alpha".

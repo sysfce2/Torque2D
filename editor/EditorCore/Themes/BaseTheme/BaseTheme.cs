@@ -1156,6 +1156,20 @@ function BaseTheme::makeTextEditProfile(%this)
 		borderDefault = %labelBorder;
 	};
 
+	%this.overrideLabelProfile = new GuiControlProfile()
+	{
+		fillColor = "0 0 0 0";
+
+		fontType = %this.font[2];
+		fontDirectory = %this.fontDirectory;
+		fontSize = %this.fontSize - 2;
+		fontColor = %this.color5;
+		align = "left";
+		vAlign = "top";
+
+		borderDefault = %labelBorder;
+	};
+
 	%textBorderV = new GuiBorderProfile()
 	{
 		padding = 2;

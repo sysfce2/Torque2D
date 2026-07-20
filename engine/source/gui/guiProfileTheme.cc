@@ -1266,6 +1266,142 @@ bool GuiProfileTheme::removeProfile(GuiControlProfile* profile)
     return false;
 }
 
+bool GuiProfileTheme::renameTheme(const char* newName)
+{
+    if (!isProperlyAdded())
+    {
+        Con::warnf("GuiProfileTheme::renameTheme() - the theme must be registered first.");
+        return false;
+    }
+
+    if (newName == NULL || *newName == '\0')
+    {
+        Con::warnf("GuiProfileTheme::renameTheme() - a non-empty name is required.");
+        return false;
+    }
+
+    const char* oldName = getName();
+    const bool hasOldName = (oldName != NULL && *oldName != '\0');
+    const S32 oldNameLength = hasOldName ? dStrlen(oldName) : 0;
+
+    // Every rename this operation would perform, computed up front so a
+    // collision anywhere refuses the whole batch.
+    struct PendingRename
+    {
+        SimObject* object;
+        StringTableEntry target;
+    };
+    Vector<PendingRename> renames;
+
+    char nameBuffer[256];
+
+    PendingRename themeRename = { this, StringTable->insert(newName) };
+    renames.push_back(themeRename);
+
+    // Defaults always take the theme-managed name, so a previously unnamed
+    // theme's members gain names here.
+    for (S32 i = 0; i < smBorderCategoryCount; ++i)
+    {
+        if (mDefaultBorders[i] == NULL)
+            continue;
+        dSprintf(nameBuffer, sizeof(nameBuffer), "%s%s", newName, smBorderCategories[i].suffix);
+        PendingRename rename = { mDefaultBorders[i], StringTable->insert(nameBuffer) };
+        renames.push_back(rename);
+    }
+
+    for (S32 i = 0; i < smProfileCategoryCount; ++i)
+    {
+        if (mDefaultProfiles[i] == NULL)
+            continue;
+        dSprintf(nameBuffer, sizeof(nameBuffer), "%s%s", newName, smProfileCategories[i].suffix);
+        PendingRename rename = { mDefaultProfiles[i], StringTable->insert(nameBuffer) };
+        renames.push_back(rename);
+    }
+
+    // Extras rename only when they follow the <ThemeName>... pattern.
+    for (S32 i = 0; i < mExtraProfiles.size(); ++i)
+    {
+        const char* extraName = mExtraProfiles[i]->getName();
+        if (!hasOldName || extraName == NULL || dStrncmp(extraName, oldName, oldNameLength) != 0)
+            continue;
+        dSprintf(nameBuffer, sizeof(nameBuffer), "%s%s", newName, extraName + oldNameLength);
+        PendingRename rename = { mExtraProfiles[i], StringTable->insert(nameBuffer) };
+        renames.push_back(rename);
+    }
+
+    // Collision pre-check: every target must be free or already belong to the
+    // object being renamed to it.
+    for (S32 i = 0; i < renames.size(); ++i)
+    {
+        SimObject* existing = Sim::findObject(renames[i].target);
+        if (existing != NULL && existing != renames[i].object)
+        {
+            Con::warnf("GuiProfileTheme::renameTheme() - the name '%s' is already taken; nothing was renamed.", renames[i].target);
+            return false;
+        }
+    }
+
+    // Overridden border-name references must follow the rename. Resolve the
+    // stored names before anything is renamed (the cached border pointers are
+    // resolved lazily, so the names are the source of truth).
+    struct PendingBorderRef
+    {
+        GuiControlProfile* profile;
+        S32 side;                       ///< 0 left, 1 right, 2 top, 3 bottom.
+        GuiBorderProfile* border;
+    };
+    Vector<PendingBorderRef> borderRefs;
+
+    static const char* const sideFields[4] = { "borderLeft", "borderRight", "borderTop", "borderBottom" };
+
+    for (S32 i = 0; i < smProfileCategoryCount + mExtraProfiles.size(); ++i)
+    {
+        GuiControlProfile* profile = (i < smProfileCategoryCount) ? mDefaultProfiles[i] : mExtraProfiles[i - smProfileCategoryCount];
+        if (profile == NULL)
+            continue;
+
+        StringTableEntry sideNames[4] = { profile->mLeftProfileName, profile->mRightProfileName, profile->mTopProfileName, profile->mBottomProfileName };
+        for (S32 side = 0; side < 4; ++side)
+        {
+            if (!profile->isThemeFieldOverridden(StringTable->insert(sideFields[side])) || sideNames[side] == NULL || *sideNames[side] == '\0')
+                continue;
+
+            GuiBorderProfile* border = dynamic_cast<GuiBorderProfile*>(Sim::findObject(sideNames[side]));
+            if (border != NULL)
+            {
+                PendingBorderRef ref = { profile, side, border };
+                borderRefs.push_back(ref);
+            }
+        }
+    }
+
+    for (S32 i = 0; i < renames.size(); ++i)
+        renames[i].object->assignName(renames[i].target);
+
+    // Rewrite the stashed references that point at this theme's borders;
+    // references to outside borders keep their names.
+    for (S32 i = 0; i < borderRefs.size(); ++i)
+    {
+        GuiBorderProfile* border = borderRefs[i].border;
+        if (border->getTheme() != this)
+            continue;
+
+        GuiControlProfile* profile = borderRefs[i].profile;
+        const StringTableEntry borderName = border->getName();
+        switch (borderRefs[i].side)
+        {
+        case 0: profile->mLeftProfileName = borderName;   profile->setLeftProfile(border);   break;
+        case 1: profile->mRightProfileName = borderName;  profile->setRightProfile(border);  break;
+        case 2: profile->mTopProfileName = borderName;    profile->setTopProfile(border);    break;
+        case 3: profile->mBottomProfileName = borderName; profile->setBottomProfile(border); break;
+        }
+    }
+
+    restamp();
+
+    return true;
+}
+
 void GuiProfileTheme::restamp()
 {
     if (!isProperlyAdded() || mTamlReading)
