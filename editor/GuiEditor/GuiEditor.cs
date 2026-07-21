@@ -34,6 +34,7 @@ function GuiEditor::create( %this )
     exec("./scripts/GuiEditorColorWindow.cs");
     exec("./scripts/GuiEditorToolsWindow.cs");
     exec("./scripts/GuiProfileEditorDialog.cs");
+    exec("./scripts/ProfileThemeEditForm.cs");
     exec("./scripts/GuiProfileEditorLibrary.cs");
     exec("./scripts/GuiProfileEditorTree.cs");
     exec("./scripts/GuiProfileEditorInspector.cs");
@@ -441,6 +442,24 @@ function GuiEditor::openProfileEditor(%this)
 	%this.profileEditorDialog = %dialog;
 
 	Canvas.pushDialog(%dialog);
+}
+
+// Tear the Profile Editor dialog down synchronously (not via the usual deferred
+// close). Called at shutdown before the editor and AppCore modules unload, so
+// the dialog's live preview and controls stop referencing theme and editor
+// profiles before those profiles are freed - otherwise the controls' onSleep
+// runs decRefCount on freed profiles during final teardown and crashes.
+function GuiEditor::closeProfileEditor(%this)
+{
+	if(isObject(%this.profileEditorDialog))
+	{
+		if(isObject(Canvas))
+		{
+			Canvas.popDialog(%this.profileEditorDialog);
+		}
+		%this.profileEditorDialog.delete();
+		%this.profileEditorDialog = "";
+	}
 }
 
 function GuiEditor::SaveCore(%this, %filePath, %formatIndex, %folder, %module)

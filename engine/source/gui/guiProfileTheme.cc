@@ -119,6 +119,10 @@ struct BorderRecipe
     ColorI borderColor[4];
     S32 padding[4];
     bool underfill;
+    // Every recipe's border widths are authored as reference thicknesses at
+    // scale 1 and multiplied by this when applied, so the theme's borderSize
+    // scales all borders together (0 = none, 1 = as authored, 2 = doubled).
+    S32 borderScale;
 };
 
 static void set4(S32* values, S32 v0, S32 v1, S32 v2, S32 v3) { values[0] = v0; values[1] = v1; values[2] = v2; values[3] = v3; }
@@ -132,10 +136,15 @@ static BorderRecipe baseBorderRecipe(GuiProfileTheme* theme)
 
     BorderRecipe recipe;
     set4(recipe.margin, 0);
-    set4(recipe.border, 0);
+    // Reference thickness 1: the plain Default border (worn by TextEdit, Label,
+    // Empty, Overlay) becomes 1 * borderSize, so raising borderSize gives inputs
+    // a visible, scaling border. Categories that want a heavier border override
+    // this with their own reference (Bright/Dark 2, Button 3, ...).
+    set4(recipe.border, 1);
     set4(recipe.borderColor, bg, adj(bg, 10), adj(bg, 10), alphaOf(bg, 100));
     set4(recipe.padding, 0);
     recipe.underfill = true;
+    recipe.borderScale = theme->getBorderSize();
     return recipe;
 }
 
@@ -151,7 +160,7 @@ static void applyBorderRecipe(GuiBorderProfile* border, const BorderRecipe& reci
         if (!border->isThemeFieldOverridden(StringTable->insert(marginFields[i])))
             border->mMargin[i] = recipe.margin[i];
         if (!border->isThemeFieldOverridden(StringTable->insert(borderFields[i])))
-            border->mBorder[i] = recipe.border[i];
+            border->mBorder[i] = recipe.border[i] * recipe.borderScale;
         if (!border->isThemeFieldOverridden(StringTable->insert(colorFields[i])))
             border->mBorderColor[i] = recipe.borderColor[i];
         if (!border->isThemeFieldOverridden(StringTable->insert(paddingFields[i])))
@@ -386,7 +395,7 @@ static void stampColorPickerBorder(GuiProfileTheme* theme, GuiBorderProfile* bor
 {
     BorderRecipe recipe = baseBorderRecipe(theme);
     set4(recipe.border, 1);
-    set4(recipe.borderColor, theme->getColorBackground(), theme->getColorPanel(), theme->getColorAccent(), theme->getColorBackground());
+    set4(recipe.borderColor, theme->getColorBackground(), theme->getColorSurface(), theme->getColorAccent(), theme->getColorBackground());
     set4(recipe.padding, 1);
     set4(recipe.margin, 1);
     applyBorderRecipe(border, recipe);
@@ -458,11 +467,22 @@ static void stampProfileBorders(GuiProfileTheme* theme, GuiControlProfile* profi
     }
 }
 
+/// Override a profile's font face and size (a signed delta from the theme's
+/// base font size), respecting user overrides. Called after stampDefaultProfile,
+/// which has already set the body font at the base size. This is how the three
+/// theme fonts get their roles: title on chrome, code on input/data, body on
+/// content, with a size bump or trim where a category wants one.
+static void stampProfileFont(GuiProfileTheme* theme, GuiControlProfile* profile, StringTableEntry face, S32 sizeDelta)
+{
+    STAMP_FIELD(profile, "fontType", mFontType, face);
+    STAMP_FIELD(profile, "fontSize", mFontSize, theme->getFontSize() + sizeDelta);
+}
+
 /// The Default recipe: every category recipe starts from this, so every
 /// themed field of every member is always derived from something.
 static void stampDefaultProfile(GuiProfileTheme* theme, GuiControlProfile* profile)
 {
-    const ColorI& text = theme->getColorText();
+    const ColorI& text = theme->getColorForeground();
     const ColorI& accent = theme->getColorAccent();
 
     STAMP_FIELD(profile, "tab", mTabable, false);
@@ -503,6 +523,7 @@ static void stampEmptyProfile(GuiProfileTheme* theme, GuiControlProfile* profile
 static void stampTooltipProfile(GuiProfileTheme* theme, GuiControlProfile* profile)
 {
     stampDefaultProfile(theme, profile);
+    stampProfileFont(theme, profile, theme->getFontBody(), -2);
     STAMP_FIELD(profile, "fillColor", mFillColor, alphaOf(theme->getColorBackground(), 220));
     STAMP_FIELD(profile, "fontColor", mFontColor, theme->getColorHighlight());
     stampProfileBorders(theme, profile, "Bright", NULL, NULL, NULL, NULL);
@@ -524,6 +545,7 @@ static void stampButtonProfile(GuiProfileTheme* theme, GuiControlProfile* profil
     const ColorI& bg = theme->getColorBackground();
     const ColorI& accent = theme->getColorAccent();
     stampDefaultProfile(theme, profile);
+    stampProfileFont(theme, profile, theme->getFontTitle(), 0);
     STAMP_FIELD(profile, "fillColor", mFillColor, accent);
     STAMP_FIELD(profile, "fillColorHL", mFillColorHL, adj(accent, 10));
     STAMP_FIELD(profile, "fillColorSL", mFillColorSL, theme->getColorHighlight());
@@ -544,9 +566,10 @@ static void stampCheckBoxProfile(GuiProfileTheme* theme, GuiControlProfile* prof
 
 static void stampRadioProfile(GuiProfileTheme* theme, GuiControlProfile* profile)
 {
-    const ColorI& text = theme->getColorText();
+    const ColorI& text = theme->getColorForeground();
     const ColorI& highlight = theme->getColorHighlight();
     stampDefaultProfile(theme, profile);
+    stampProfileFont(theme, profile, theme->getFontTitle(), 0);
     STAMP_FIELD(profile, "fillColor", mFillColor, text);
     STAMP_FIELD(profile, "fillColorHL", mFillColorHL, adj(text, -10));
     STAMP_FIELD(profile, "fillColorSL", mFillColorSL, theme->getColorAccent());
@@ -572,6 +595,7 @@ static void stampTextEditProfile(GuiProfileTheme* theme, GuiControlProfile* prof
     const ColorI& bg = theme->getColorBackground();
     const ColorI& accent = theme->getColorAccent();
     stampDefaultProfile(theme, profile);
+    stampProfileFont(theme, profile, theme->getFontCode(), 0);
     STAMP_FIELD(profile, "fillColor", mFillColor, accent);
     STAMP_FIELD(profile, "fillColorHL", mFillColorHL, adj(accent, 10));
     STAMP_FIELD(profile, "fillColorSL", mFillColorSL, accent);
@@ -583,7 +607,7 @@ static void stampTextEditProfile(GuiProfileTheme* theme, GuiControlProfile* prof
     STAMP_FIELD(profile, "fontColorNA", mFontColorNA, alphaOf(bg, 100));
     STAMP_FIELD(profile, "fontColorTextSL", mFontColorTextSL, bg);
     STAMP_FIELD(profile, "align", mAlignment, AlignmentType::LeftAlign);
-    STAMP_FIELD(profile, "cursorColor", mCursorColor, theme->getColorPanel());
+    STAMP_FIELD(profile, "cursorColor", mCursorColor, theme->getColorSurface());
     STAMP_FIELD(profile, "canKeyFocus", mCanKeyFocus, true);
     STAMP_FIELD(profile, "tab", mTabable, true);
 }
@@ -591,7 +615,7 @@ static void stampTextEditProfile(GuiProfileTheme* theme, GuiControlProfile* prof
 static void stampScrollProfile(GuiProfileTheme* theme, GuiControlProfile* profile)
 {
     stampDefaultProfile(theme, profile);
-    STAMP_FIELD(profile, "fillColor", mFillColor, theme->getColorPanel());
+    STAMP_FIELD(profile, "fillColor", mFillColor, theme->getColorSurface());
 }
 
 static void stampScrollTrackProfile(GuiProfileTheme* theme, GuiControlProfile* profile)
@@ -606,7 +630,7 @@ static void stampScrollTrackProfile(GuiProfileTheme* theme, GuiControlProfile* p
 
 static void stampScrollThumbProfile(GuiProfileTheme* theme, GuiControlProfile* profile)
 {
-    const ColorI& text = theme->getColorText();
+    const ColorI& text = theme->getColorForeground();
     stampDefaultProfile(theme, profile);
     STAMP_FIELD(profile, "fillColor", mFillColor, text);
     STAMP_FIELD(profile, "fillColorHL", mFillColorHL, adj(text, 10));
@@ -617,7 +641,7 @@ static void stampScrollThumbProfile(GuiProfileTheme* theme, GuiControlProfile* p
 
 static void stampScrollArrowProfile(GuiProfileTheme* theme, GuiControlProfile* profile)
 {
-    const ColorI& text = theme->getColorText();
+    const ColorI& text = theme->getColorForeground();
     stampDefaultProfile(theme, profile);
     STAMP_FIELD(profile, "fillColor", mFillColor, text);
     STAMP_FIELD(profile, "fillColorHL", mFillColorHL, adj(text, 10));
@@ -633,14 +657,16 @@ static void stampScrollArrowProfile(GuiProfileTheme* theme, GuiControlProfile* p
 static void stampTabBookProfile(GuiProfileTheme* theme, GuiControlProfile* profile)
 {
     stampDefaultProfile(theme, profile);
+    stampProfileFont(theme, profile, theme->getFontTitle(), 0);
     STAMP_FIELD(profile, "fillColor", mFillColor, alphaOf(theme->getColorBackground(), 100));
 }
 
 static void stampTabProfile(GuiProfileTheme* theme, GuiControlProfile* profile)
 {
     const ColorI& bg = theme->getColorBackground();
-    const ColorI& text = theme->getColorText();
+    const ColorI& text = theme->getColorForeground();
     stampDefaultProfile(theme, profile);
+    stampProfileFont(theme, profile, theme->getFontTitle(), 0);
     STAMP_FIELD(profile, "fillColor", mFillColor, bg);
     STAMP_FIELD(profile, "fillColorHL", mFillColorHL, adj(bg, 10));
     STAMP_FIELD(profile, "fillColorSL", mFillColorSL, adj(bg, 15));
@@ -665,8 +691,9 @@ static void stampTabPageProfile(GuiProfileTheme* theme, GuiControlProfile* profi
 static void stampListBoxProfile(GuiProfileTheme* theme, GuiControlProfile* profile)
 {
     const ColorI& bg = theme->getColorBackground();
-    const ColorI& text = theme->getColorText();
+    const ColorI& text = theme->getColorForeground();
     stampDefaultProfile(theme, profile);
+    stampProfileFont(theme, profile, theme->getFontCode(), 0);
     STAMP_FIELD(profile, "fillColor", mFillColor, bg);
     STAMP_FIELD(profile, "fillColorHL", mFillColorHL, adj(bg, 10));
     STAMP_FIELD(profile, "fillColorSL", mFillColorSL, theme->getColorAccent());
@@ -688,8 +715,9 @@ static void stampDropDownItemProfile(GuiProfileTheme* theme, GuiControlProfile* 
 static void stampDropDownProfile(GuiProfileTheme* theme, GuiControlProfile* profile)
 {
     const ColorI& bg = theme->getColorBackground();
-    const ColorI& text = theme->getColorText();
+    const ColorI& text = theme->getColorForeground();
     stampDefaultProfile(theme, profile);
+    stampProfileFont(theme, profile, theme->getFontTitle(), 0);
     STAMP_FIELD(profile, "fillColor", mFillColor, adj(text, -15));
     STAMP_FIELD(profile, "fillColorHL", mFillColorHL, adj(text, -8));
     STAMP_FIELD(profile, "fillColorSL", mFillColorSL, theme->getColorAccent());
@@ -708,6 +736,9 @@ static void stampWindowProfile(GuiProfileTheme* theme, GuiControlProfile* profil
 {
     const ColorI& bg = theme->getColorBackground();
     stampDefaultProfile(theme, profile);
+    // The window's own text is the title bar caption -- give it the title font,
+    // a notch larger than the base size.
+    stampProfileFont(theme, profile, theme->getFontTitle(), 4);
     STAMP_FIELD(profile, "fillColor", mFillColor, adj(bg, 10));
     STAMP_FIELD(profile, "fillColorHL", mFillColorHL, adj(bg, 12));
     STAMP_FIELD(profile, "fillColorSL", mFillColorSL, theme->getColorAccent());
@@ -729,9 +760,10 @@ static void stampWindowContentProfile(GuiProfileTheme* theme, GuiControlProfile*
 static void stampWindowButtonProfile(GuiProfileTheme* theme, GuiControlProfile* profile)
 {
     const ColorI& bg = theme->getColorBackground();
-    const ColorI& text = theme->getColorText();
+    const ColorI& text = theme->getColorForeground();
     const ColorI& accent = theme->getColorAccent();
     stampDefaultProfile(theme, profile);
+    stampProfileFont(theme, profile, theme->getFontTitle(), 0);
     STAMP_FIELD(profile, "fillColor", mFillColor, alphaOf(bg, 150));
     STAMP_FIELD(profile, "fillColorHL", mFillColorHL, alphaOf(accent, 150));
     STAMP_FIELD(profile, "fillColorSL", mFillColorSL, adj(accent, 10));
@@ -754,6 +786,7 @@ static void stampWindowCloseButtonProfile(GuiProfileTheme* theme, GuiControlProf
 static void stampMenuBarProfile(GuiProfileTheme* theme, GuiControlProfile* profile)
 {
     stampDefaultProfile(theme, profile);
+    stampProfileFont(theme, profile, theme->getFontTitle(), 0);
     STAMP_FIELD(profile, "fillColor", mFillColor, adj(theme->getColorBackground(), -7));
     STAMP_FIELD(profile, "canKeyFocus", mCanKeyFocus, true);
     stampProfileBorders(theme, profile, "MenuBar", NULL, NULL, NULL, NULL);
@@ -761,8 +794,9 @@ static void stampMenuBarProfile(GuiProfileTheme* theme, GuiControlProfile* profi
 
 static void stampMenuProfile(GuiProfileTheme* theme, GuiControlProfile* profile)
 {
-    const ColorI& text = theme->getColorText();
+    const ColorI& text = theme->getColorForeground();
     stampDefaultProfile(theme, profile);
+    stampProfileFont(theme, profile, theme->getFontTitle(), 0);
     STAMP_FIELD(profile, "fillColor", mFillColor, ColorI(0, 0, 0, 0));
     STAMP_FIELD(profile, "fillColorHL", mFillColorHL, ColorI(255, 255, 255, 10));
     STAMP_FIELD(profile, "fillColorSL", mFillColorSL, adj(theme->getColorAccent(), -15));
@@ -777,8 +811,9 @@ static void stampMenuProfile(GuiProfileTheme* theme, GuiControlProfile* profile)
 static void stampMenuItemProfile(GuiProfileTheme* theme, GuiControlProfile* profile)
 {
     const ColorI& bg = theme->getColorBackground();
-    const ColorI& text = theme->getColorText();
+    const ColorI& text = theme->getColorForeground();
     stampDefaultProfile(theme, profile);
+    stampProfileFont(theme, profile, theme->getFontTitle(), 0);
     STAMP_FIELD(profile, "fillColor", mFillColor, adj(bg, -5));
     STAMP_FIELD(profile, "fillColorHL", mFillColorHL, adj(theme->getColorAccent(), -15));
     STAMP_FIELD(profile, "fillColorSL", mFillColorSL, ColorI(0, 0, 0, 0));
@@ -800,6 +835,7 @@ static void stampMenuContentProfile(GuiProfileTheme* theme, GuiControlProfile* p
 static void stampOverlayProfile(GuiProfileTheme* theme, GuiControlProfile* profile)
 {
     stampDefaultProfile(theme, profile);
+    stampProfileFont(theme, profile, theme->getFontBody(), -2);
 }
 
 static void stampProgressProfile(GuiProfileTheme* theme, GuiControlProfile* profile)
@@ -809,7 +845,7 @@ static void stampProgressProfile(GuiProfileTheme* theme, GuiControlProfile* prof
     STAMP_FIELD(profile, "fillColor", mFillColor, theme->getColorBackground());
     STAMP_FIELD(profile, "fillColorHL", mFillColorHL, accent);
     STAMP_FIELD(profile, "fillColorSL", mFillColorSL, adj(accent, 10));
-    STAMP_FIELD(profile, "fontColorHL", mFontColorHL, theme->getColorText());
+    STAMP_FIELD(profile, "fontColorHL", mFontColorHL, theme->getColorForeground());
     STAMP_FIELD(profile, "fontColorSL", mFontColorSL, theme->getColorHighlight());
     stampProfileBorders(theme, profile, "Progress", NULL, "ProgressDark", NULL, "ProgressDark");
 }
@@ -817,8 +853,9 @@ static void stampProgressProfile(GuiProfileTheme* theme, GuiControlProfile* prof
 static void stampTreeViewProfile(GuiProfileTheme* theme, GuiControlProfile* profile)
 {
     const ColorI& bg = theme->getColorBackground();
-    const ColorI& text = theme->getColorText();
+    const ColorI& text = theme->getColorForeground();
     stampDefaultProfile(theme, profile);
+    stampProfileFont(theme, profile, theme->getFontCode(), 0);
     STAMP_FIELD(profile, "fillColor", mFillColor, bg);
     STAMP_FIELD(profile, "fillColorHL", mFillColorHL, adj(bg, 10));
     STAMP_FIELD(profile, "fillColorSL", mFillColorSL, adj(bg, 15));
@@ -977,8 +1014,8 @@ GuiProfileTheme::GuiProfileTheme()
     mFontSize = 12;
 
     mColorBackground.set(43, 43, 43, 255);
-    mColorPanel.set(81, 92, 102, 255);
-    mColorText.set(224, 224, 224, 255);
+    mColorSurface.set(81, 92, 102, 255);
+    mColorForeground.set(224, 224, 224, 255);
     mColorAccent.set(54, 135, 196, 255);
     mColorHighlight.set(245, 210, 50, 255);
     mColorWarning.set(196, 54, 71, 255);
@@ -1008,8 +1045,8 @@ void GuiProfileTheme::initPersistFields()
 
     addGroup("Colors");
         addField("colorBackground", TypeColorI, Offset(mColorBackground, GuiProfileTheme));
-        addField("colorPanel", TypeColorI, Offset(mColorPanel, GuiProfileTheme));
-        addField("colorText", TypeColorI, Offset(mColorText, GuiProfileTheme));
+        addField("colorSurface", TypeColorI, Offset(mColorSurface, GuiProfileTheme));
+        addField("colorForeground", TypeColorI, Offset(mColorForeground, GuiProfileTheme));
         addField("colorAccent", TypeColorI, Offset(mColorAccent, GuiProfileTheme));
         addField("colorHighlight", TypeColorI, Offset(mColorHighlight, GuiProfileTheme));
         addField("colorWarning", TypeColorI, Offset(mColorWarning, GuiProfileTheme));

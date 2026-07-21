@@ -420,6 +420,17 @@ function GuiProfileEditorLibrary::createTheme(%this, %name)
 		return 0;
 	}
 
+	// Friendlier starting point than the C++ ctor defaults: no borders until
+	// the author opts in, a readable 16px base font, and a real font directory
+	// (the engine's font cache dir, where AppCore ships its fonts) so the form's
+	// font dropdowns aren't empty. Each assignment restamps, fine for a fresh
+	// theme.
+	%theme.borderSize = 0;
+	%theme.fontSize = 16;
+	// Store the font directory relative to the game root (not the absolute
+	// expanded path) so themes stay portable.
+	%theme.fontDirectory = makeRelativePath($GUI::fontCacheDirectory, getMainDotCsDir());
+
 	%this.sourceFile[%theme.getId()] = "";
 	%this.addThemeProxies(%theme);
 	%this.markDirty(%theme);

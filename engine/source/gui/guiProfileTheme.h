@@ -143,8 +143,8 @@ private:
     StringTableEntry mFontDirectory;    ///< Directory searched for the fonts.
     S32 mFontSize;                      ///< Base font size; recipes may offset it.
     ColorI mColorBackground;            ///< Deepest background color.
-    ColorI mColorPanel;                 ///< Raised panel/control background color.
-    ColorI mColorText;                  ///< Text color.
+    ColorI mColorSurface;               ///< Raised surface/control background color.
+    ColorI mColorForeground;            ///< Foreground/content text color.
     ColorI mColorAccent;                ///< Primary accent color used during interaction.
     ColorI mColorHighlight;             ///< Secondary accent for selected/active flavor.
     ColorI mColorWarning;               ///< Destructive-action color (e.g. window close).
@@ -218,8 +218,8 @@ public:
     inline StringTableEntry getFontDirectory() const { return mFontDirectory; }
     inline S32 getFontSize() const { return mFontSize; }
     inline const ColorI& getColorBackground() const { return mColorBackground; }
-    inline const ColorI& getColorPanel() const { return mColorPanel; }
-    inline const ColorI& getColorText() const { return mColorText; }
+    inline const ColorI& getColorSurface() const { return mColorSurface; }
+    inline const ColorI& getColorForeground() const { return mColorForeground; }
     inline const ColorI& getColorAccent() const { return mColorAccent; }
     inline const ColorI& getColorHighlight() const { return mColorHighlight; }
     inline const ColorI& getColorWarning() const { return mColorWarning; }

@@ -496,7 +496,7 @@ TEST( GuiProfileThemeTests, LabelRecipeUsesBodyFontLeftAligned )
     ASSERT_EQ( label->mFontType, theme->getFontBody() );
     ASSERT_EQ( label->mFontSize, theme->getFontSize() );
     ASSERT_EQ( label->mAlignment, AlignmentType::LeftAlign );
-    ASSERT_TRUE( label->mFontColor == theme->getColorText() );
+    ASSERT_TRUE( label->mFontColor == theme->getColorForeground() );
 
     theme->deleteObject();
 

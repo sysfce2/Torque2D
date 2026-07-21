@@ -155,7 +155,10 @@ function GuiProfileEditorPreview::slotProfile(%this, %theme, %slotCategory, %sel
 // Show methods, one per tree selection kind.
 //-----------------------------------------------------------------------------
 
-// The theme root: a small sampler of core controls, all stamped by the theme.
+// The theme root: load the saved sample gui (a real, hand-authored layout) and
+// re-skin every control with this theme's generated category profiles, so the
+// preview shows an actual dialog rather than a hand-built mock. The sample ships
+// wearing the AppCore default profiles; reskin swaps them for the theme's.
 function GuiProfileEditorPreview::showTheme(%this, %theme)
 {
 	%this.clearSamples();
@@ -166,37 +169,119 @@ function GuiProfileEditorPreview::showTheme(%this, %theme)
 	%this.lastKind = "theme";
 	%this.lastTheme = %theme;
 
-	%this.addButtonSample(%theme.getProfile("Button"), 0);
-	%this.addSample(new GuiCheckBoxCtrl()
+	// Absolute path from the repo root: a "./" path would resolve against this
+	// script's own directory (editor/GuiEditor/scripts), not the game root.
+	%file = makeFullPath("editor/GuiEditor/gui/theme_sample.gui.taml", getMainDotCsDir());
+	%sample = TamlRead(%file);
+	if(!isObject(%sample))
 	{
-		Position = "0 90";
-		Extent = "160 30";
-		Text = "Check box";
-		Profile = %theme.getProfile("CheckBox");
-	});
-	%this.addSample(new GuiTextEditCtrl()
-	{
-		Position = "0 130";
-		Extent = "200 30";
-		Text = "Text edit";
-		Profile = %theme.getProfile("TextEdit");
-	});
-	%progress = new GuiProgressCtrl()
-	{
-		Position = "0 170";
-		Extent = "200 24";
-		Profile = %theme.getProfile("Progress");
-	};
-	%this.addSample(%progress);
-	%progress.setProgress(0.65);
-	%this.addSample(new GuiPanelCtrl()
-	{
-		Position = "0 210";
-		Extent = "200 90";
-		Profile = %theme.getProfile("Panel");
-	});
+		return;
+	}
 
+	// Anchor the sample top-left with a fixed size. Its saved sizing is
+	// "center", which would recenter it to negative coords in the (initially
+	// smaller) stage and make layoutStage compute a stage smaller than the
+	// sample -- clipping it.
+	%sample.HorizSizing = "right";
+	%sample.VertSizing = "bottom";
+	%sample.setPosition(0, 0);
+	%this.reskin(%sample, %theme);
+	%this.addSample(%sample);
 	%this.layoutStage();
+}
+
+// Walk the sample tree and point every profile slot at the theme's matching
+// category profile: the main Profile by control class, the secondary profiles
+// (window content/buttons, scroll parts, dropdown list/background) by slot.
+function GuiProfileEditorPreview::reskin(%this, %ctrl, %theme)
+{
+	if(!isObject(%ctrl))
+	{
+		return;
+	}
+
+	%category = %this.categoryForClass(%ctrl.getClassName());
+	if(%category !$= "" && isObject(%theme.getProfile(%category)))
+	{
+		%ctrl.setEditFieldValue("Profile", %theme.getProfile(%category));
+	}
+
+	%this.reskinSlot(%ctrl, %theme, "contentProfile", "WindowContent");
+	%this.reskinSlot(%ctrl, %theme, "closeButtonProfile", "WindowCloseButton");
+	%this.reskinSlot(%ctrl, %theme, "minButtonProfile", "WindowButton");
+	%this.reskinSlot(%ctrl, %theme, "maxButtonProfile", "WindowButton");
+	%this.reskinSlot(%ctrl, %theme, "thumbProfile", "ScrollThumb");
+	%this.reskinSlot(%ctrl, %theme, "trackProfile", "ScrollTrack");
+	%this.reskinSlot(%ctrl, %theme, "arrowProfile", "ScrollArrow");
+	%this.reskinSlot(%ctrl, %theme, "ScrollProfile", "Scroll");
+	%this.reskinSlot(%ctrl, %theme, "listBoxProfile", "DropDownItem");
+	%this.reskinSlot(%ctrl, %theme, "backgroundProfile", "Overlay");
+
+	%this.fillSampleContent(%ctrl);
+
+	for(%i = 0; %i < %ctrl.getCount(); %i++)
+	{
+		%this.reskin(%ctrl.getObject(%i), %theme);
+	}
+}
+
+// Runtime-only content the saved TAML can't carry: dropdown items and a
+// progress value. Runs on every (re)load, which is a fresh sample, so items
+// never accumulate.
+function GuiProfileEditorPreview::fillSampleContent(%this, %ctrl)
+{
+	%class = %ctrl.getClassName();
+	if(%class $= "GuiDropDownCtrl")
+	{
+		%ctrl.clearItems();
+		%ctrl.addItem("Item1");
+		%ctrl.addItem("Item2");
+		%ctrl.addItem("Item3");
+		%ctrl.addItem("Item4");
+		%ctrl.setSelected(0);
+	}
+	else if(%class $= "GuiProgressCtrl")
+	{
+		%ctrl.setProgress(0.6);
+	}
+}
+
+// Point one secondary profile slot at a theme category, but only if the control
+// actually uses that slot (so we never graft stray fields onto controls).
+function GuiProfileEditorPreview::reskinSlot(%this, %ctrl, %theme, %field, %category)
+{
+	if(%ctrl.getFieldValue(%field) $= "")
+	{
+		return;
+	}
+	%profile = %theme.getProfile(%category);
+	if(isObject(%profile))
+	{
+		%ctrl.setEditFieldValue(%field, %profile);
+	}
+}
+
+function GuiProfileEditorPreview::categoryForClass(%this, %class)
+{
+	switch$(%class)
+	{
+		case "GuiWindowCtrl": return "Window";
+		case "GuiButtonCtrl": return "Button";
+		case "GuiCheckBoxCtrl": return "CheckBox";
+		case "GuiRadioCtrl": return "Radio";
+		case "GuiProgressCtrl": return "Progress";
+		case "GuiScrollCtrl": return "Scroll";
+		case "GuiTextEditCtrl": return "TextEdit";
+		case "GuiDropDownCtrl": return "DropDown";
+		case "GuiListBoxCtrl": return "ListBox";
+		case "GuiTreeViewCtrl": return "TreeView";
+		case "GuiTabBookCtrl": return "TabBook";
+		case "GuiTabPageCtrl": return "TabPage";
+		case "GuiMenuBarCtrl": return "MenuBar";
+		case "GuiChainCtrl": return "Empty";
+		case "GuiControl": return "Label";
+		default: return "";
+	}
 }
 
 function GuiProfileEditorPreview::showCategory(%this, %theme, %category, %member)
@@ -454,8 +539,8 @@ function GuiProfileEditorPreview::showBorder(%this, %theme, %border)
 	// shape exercises the border's highlight and selected states.
 	if(isObject(%theme))
 	{
-		%this.borderProbeProfile.fillColor = %theme.colorPanel;
-		%this.borderProbeProfile.fontColor = %theme.colorText;
+		%this.borderProbeProfile.fillColor = %theme.colorSurface;
+		%this.borderProbeProfile.fontColor = %theme.colorForeground;
 	}
 	%this.borderProbeProfile.borderDefault = %border;
 

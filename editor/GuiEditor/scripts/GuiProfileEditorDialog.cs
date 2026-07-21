@@ -46,11 +46,58 @@ function GuiProfileEditorDialog::init(%this, %width, %height)
 	%paneTop = 40;
 	%paneHeight = %height - 116;
 
+	// The three sections live in a resizable frame set (like the main Gui
+	// Editor): the user drags the dividers to resize the tree, the member
+	// editor, and the preview. Adding more sections later is just another split.
+	// A GuiFrameSetCtrl fills its parent, so it's wrapped in a plain container
+	// positioned to the pane area -- otherwise it expands over the buttons.
+	%this.framePane = new GuiControl()
+	{
+		HorizSizing = "width";
+		VertSizing = "height";
+		Position = "6" SPC %paneTop;
+		Extent = (%width - 12) SPC %paneHeight;
+	};
+	ThemeManager.setProfile(%this.framePane, "emptyProfile");
+	%content.add(%this.framePane);
+
+	%this.frames = new GuiFrameSetCtrl()
+	{
+		HorizSizing = "width";
+		VertSizing = "height";
+		Position = "0 0";
+		Extent = (%width - 12) SPC %paneHeight;
+		DividerThickness = 6;
+	};
+	ThemeManager.setProfile(%this.frames, "frameSetProfile");
+	ThemeManager.setProfile(%this.frames, "dropButtonProfile", "dropButtonProfile");
+	ThemeManager.setProfile(%this.frames, "frameSetTabBookProfile", "tabBookProfile");
+	ThemeManager.setProfile(%this.frames, "frameSetTabProfile", "tabProfile");
+	ThemeManager.setProfile(%this.frames, "frameSetTabPageProfile", "tabPageProfile");
+	%this.framePane.add(%this.frames);
+
+	// tree | member editor | preview. The first child of a split is the anchored
+	// (fixed-width) frame by default, so sizing the tree and member frames leaves
+	// the preview to take the remaining space.
+	%ids = %this.frames.createHorizontalSplit(1);
+	%treeFrame = getWord(%ids, 0);
+	%restFrame = getWord(%ids, 1);
+	%this.frames.setFrameSize(%treeFrame, 240);
+
+	%ids = %this.frames.createHorizontalSplit(%restFrame);
+	%memberFrame = getWord(%ids, 0);
+	%previewFrame = getWord(%ids, 1);
+	%this.frames.setFrameSize(%memberFrame, 400);
+
+	// The frame set docks children into empty frames in add-order (depth-first
+	// through the splits), so add them tree -> member editor -> preview.
+
+	//--- Frame 1: the theme/profile tree.
 	%this.treeScroller = new GuiScrollCtrl()
 	{
-		HorizSizing = "right";
-		VertSizing = "bottom";
-		Position = "6" SPC %paneTop;
+		HorizSizing = "width";
+		VertSizing = "height";
+		Position = "0 0";
 		Extent = "240" SPC %paneHeight;
 		hScrollBar = "alwaysOff";
 		vScrollBar = "alwaysOn";
@@ -62,7 +109,7 @@ function GuiProfileEditorDialog::init(%this, %width, %height)
 	ThemeManager.setProfile(%this.treeScroller, "thumbProfile", "ThumbProfile");
 	ThemeManager.setProfile(%this.treeScroller, "trackProfile", "TrackProfile");
 	ThemeManager.setProfile(%this.treeScroller, "scrollArrowProfile", "ArrowProfile");
-	%content.add(%this.treeScroller);
+	%this.frames.add(%this.treeScroller);
 
 	%this.tree = new GuiTreeViewCtrl()
 	{
@@ -76,11 +123,36 @@ function GuiProfileEditorDialog::init(%this, %width, %height)
 	ThemeManager.setProfile(%this.tree, "treeViewProfile");
 	%this.treeScroller.add(%this.tree);
 
+	//--- Frame 2: the member editor, wrapped in a window so it can be dragged
+	// out of the frame set. The inspector and the theme form share this window;
+	// onTreeSelect toggles which one is visible.
+	%this.memberWindow = new GuiWindowCtrl()
+	{
+		HorizSizing = "width";
+		VertSizing = "height";
+		Position = "0 0";
+		Extent = "400" SPC %paneHeight;
+		MinExtent = "200 100";
+		text = "Properties";
+		canMove = true;
+		canClose = false;
+		canMinimize = false;
+		canMaximize = false;
+		resizeWidth = true;
+		resizeHeight = true;
+	};
+	ThemeManager.setProfile(%this.memberWindow, "windowProfile");
+	ThemeManager.setProfile(%this.memberWindow, "windowContentProfile", "ContentProfile");
+	ThemeManager.setProfile(%this.memberWindow, "windowButtonProfile", "CloseButtonProfile");
+	ThemeManager.setProfile(%this.memberWindow, "windowButtonProfile", "MinButtonProfile");
+	ThemeManager.setProfile(%this.memberWindow, "windowButtonProfile", "MaxButtonProfile");
+	%this.frames.add(%this.memberWindow);
+
 	%this.inspectorScroller = new GuiScrollCtrl()
 	{
-		HorizSizing = "right";
-		VertSizing = "bottom";
-		Position = "252" SPC %paneTop;
+		HorizSizing = "width";
+		VertSizing = "height";
+		Position = "0 0";
 		Extent = "400" SPC %paneHeight;
 		hScrollBar = "alwaysOff";
 		vScrollBar = "alwaysOn";
@@ -92,7 +164,7 @@ function GuiProfileEditorDialog::init(%this, %width, %height)
 	ThemeManager.setProfile(%this.inspectorScroller, "thumbProfile", "ThumbProfile");
 	ThemeManager.setProfile(%this.inspectorScroller, "trackProfile", "TrackProfile");
 	ThemeManager.setProfile(%this.inspectorScroller, "scrollArrowProfile", "ArrowProfile");
-	%content.add(%this.inspectorScroller);
+	%this.memberWindow.add(%this.inspectorScroller);
 
 	%this.inspector = new GuiInspector()
 	{
@@ -134,17 +206,61 @@ function GuiProfileEditorDialog::init(%this, %width, %height)
 	%this.inspector.addHiddenField("category");
 	%this.inspector.addHiddenField("themeOverrides");
 
+	// The custom theme form shares the member pane with the inspector and takes
+	// its place whenever a theme (rather than a member) is selected. onTreeSelect
+	// swaps which of the two scrollers is visible.
+	%this.formScroller = new GuiScrollCtrl()
+	{
+		HorizSizing = "width";
+		VertSizing = "height";
+		Position = "0 0";
+		Extent = "400" SPC %paneHeight;
+		hScrollBar = "alwaysOff";
+		vScrollBar = "dynamic";
+		constantThumbHeight = "0";
+		showArrowButtons = "1";
+		scrollBarThickness = "14";
+		Visible = false;
+	};
+	ThemeManager.setProfile(%this.formScroller, "emptyProfile");
+	ThemeManager.setProfile(%this.formScroller, "thumbProfile", "ThumbProfile");
+	ThemeManager.setProfile(%this.formScroller, "trackProfile", "TrackProfile");
+	ThemeManager.setProfile(%this.formScroller, "scrollArrowProfile", "ArrowProfile");
+	%this.memberWindow.add(%this.formScroller);
+
+	%this.themeForm = new GuiGridCtrl()
+	{
+		class = "ProfileThemeEditForm";
+		superclass = "EditorForm";
+		HorizSizing = "width";
+		VertSizing = "height";
+		Position = "0 0";
+		Extent = "386" SPC %paneHeight;
+		cellSizeX = 356;
+		cellSizeY = 50;
+		dialog = %this;
+	};
+	%this.themeForm.addListener(%this.themeForm);
+	%this.themeForm.build();
+	%this.formScroller.add(%this.themeForm);
+
+	//--- Frame 3: the live preview.
 	%this.preview = new GuiControl()
 	{
 		class = "GuiProfileEditorPreview";
-		HorizSizing = "right";
-		VertSizing = "bottom";
-		Position = "664" SPC %paneTop;
-		Extent = (%width - 670) SPC %paneHeight;
+		HorizSizing = "width";
+		VertSizing = "height";
+		Position = "0 0";
+		Extent = "400" SPC %paneHeight;
 		dialog = %this;
 	};
 	ThemeManager.setProfile(%this.preview, "emptyProfile");
-	%content.add(%this.preview);
+	%this.frames.add(%this.preview);
+
+	// The frame set only lays its frames out on a resize event; the dialog is
+	// created at its final size, so none fires and the frames stay collapsed
+	// until the user drags a divider. Force one layout pass now.
+	%this.frames.resize(0, 0, %width - 12, %paneHeight);
 
 	%this.cancelButton = new GuiButtonCtrl()
 	{
@@ -185,6 +301,10 @@ function GuiProfileEditorDialog::onRemove(%this)
 	if(isObject(%this.inspector))
 	{
 		%this.inspector.clear();
+	}
+	if(isObject(%this.themeForm))
+	{
+		%this.themeForm.unbind();
 	}
 
 	// The library persists on GuiEditor; just detach from it.
@@ -233,13 +353,26 @@ function GuiProfileEditorDialog::onTreeSelect(%this, %proxy)
 		%this.currentMember = %proxy.target;
 	}
 
-	if(isObject(%this.currentMember))
+	// A theme gets the custom form; every other selection keeps the inspector.
+	if(%kind $= "theme")
 	{
-		%this.inspector.inspect(%this.currentMember);
+		%this.inspectorScroller.setVisible(false);
+		%this.formScroller.setVisible(true);
+		%this.themeForm.bindTheme(%this.currentMember);
 	}
 	else
 	{
-		%this.inspector.clear();
+		%this.formScroller.setVisible(false);
+		%this.themeForm.unbind();
+		%this.inspectorScroller.setVisible(true);
+		if(isObject(%this.currentMember))
+		{
+			%this.inspector.inspect(%this.currentMember);
+		}
+		else
+		{
+			%this.inspector.clear();
+		}
 	}
 
 	%this.updatePreview();
@@ -360,10 +493,9 @@ function GuiProfileEditorDialog::doRenameTheme(%this, %name)
 	if(%this.library.renameThemeTo(%this.currentProxy.target, %name))
 	{
 		%this.tree.refresh();
-		if(isObject(%this.currentMember))
-		{
-			%this.inspector.inspect(%this.currentMember);
-		}
+		// The theme form (not the inspector) is showing for a theme; refresh
+		// its Name label to the new name.
+		%this.themeForm.bindTheme(%this.currentProxy.target);
 	}
 }
 
@@ -388,6 +520,7 @@ function GuiProfileEditorDialog::doDeleteTheme(%this)
 	// Detach everything that renders or inspects members before they die.
 	%this.preview.clearSamples();
 	%this.inspector.clear();
+	%this.themeForm.unbind();
 	%this.currentProxy = "";
 	%this.currentRoot = "";
 	%this.currentMember = "";
@@ -537,6 +670,7 @@ function GuiProfileEditorDialog::discardAndClose(%this)
 	// detach everything that renders or inspects members first.
 	%this.preview.clearSamples();
 	%this.inspector.clear();
+	%this.themeForm.unbind();
 	%this.library.revertAll();
 	%this.closeNow();
 }
