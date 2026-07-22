@@ -511,6 +511,32 @@ function GuiProfileEditorDialog::onProfileChanged(%this, %object)
 	{
 		%this.library.markDirty(%this.currentRoot);
 	}
+	%this.schedulePreviewRefresh();
+}
+
+// Rebuild the preview on the next tick instead of right now, coalescing rapid
+// edits. A field commit can arrive from inside an input-event/focus-change
+// callback -- e.g. a border or inspector text box losing first-responder while
+// the user clicks a live preview sample. Rebuilding there would delete the very
+// sample control the engine is mid-dispatch on, freeing it under its own
+// onTouchDown/setFirstResponder (a use-after-free crash). Deferring runs the
+// rebuild only after the current event has fully unwound.
+function GuiProfileEditorDialog::schedulePreviewRefresh(%this)
+{
+	if(!isObject(%this.preview))
+	{
+		return;
+	}
+	if(isEventPending(%this.previewRefreshEvent))
+	{
+		cancel(%this.previewRefreshEvent);
+	}
+	%this.previewRefreshEvent = %this.schedule(0, "doPreviewRefresh");
+}
+
+function GuiProfileEditorDialog::doPreviewRefresh(%this)
+{
+	%this.previewRefreshEvent = "";
 	if(isObject(%this.preview))
 	{
 		%this.preview.refresh();
@@ -670,10 +696,7 @@ function GuiProfileEditorDialog::onBorderChanged(%this)
 	{
 		%this.library.markDirty(%this.currentRoot);
 	}
-	if(isObject(%this.preview))
-	{
-		%this.preview.refresh();
-	}
+	%this.schedulePreviewRefresh();
 }
 
 //-----------------------------------------------------------------------------

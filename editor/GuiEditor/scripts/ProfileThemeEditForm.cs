@@ -131,10 +131,10 @@ function ProfileThemeEditForm::applyField(%this, %field, %value)
 	}
 	%this.theme.setFieldValue(%field, %value);
 	%this.dialog.library.markDirty(%this.theme);
-	if(isObject(%this.dialog.preview))
-	{
-		%this.dialog.preview.refresh();
-	}
+	// Defer the preview rebuild: this can fire on blur while another control is
+	// being clicked, and rebuilding synchronously would free that control mid
+	// event. See GuiProfileEditorDialog::schedulePreviewRefresh.
+	%this.dialog.schedulePreviewRefresh();
 }
 
 //-----------------------------------------------------------------------------
