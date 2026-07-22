@@ -89,6 +89,13 @@ function GuiProfileEditorDialog::init(%this, %width, %height)
 	%previewFrame = getWord(%ids, 1);
 	%this.frames.setFrameSize(%memberFrame, 400);
 
+	// A fourth frame holds the Borders pane (shown only for profiles). Splitting
+	// the preview frame keeps the order tree | Properties | Borders | preview.
+	%ids = %this.frames.createHorizontalSplit(%previewFrame);
+	%this.bordersFrame = getWord(%ids, 0);
+	%previewFrame = getWord(%ids, 1);
+	%this.frames.setFrameSize(%this.bordersFrame, 360);
+
 	// The frame set docks children into empty frames in add-order (depth-first
 	// through the splits), so add them tree -> member editor -> preview.
 
@@ -150,8 +157,8 @@ function GuiProfileEditorDialog::init(%this, %width, %height)
 
 	%this.inspectorScroller = new GuiScrollCtrl()
 	{
-		HorizSizing = "width";
-		VertSizing = "height";
+		HorizSizing = "fill";
+		VertSizing = "fill";
 		Position = "0 0";
 		Extent = "400" SPC %paneHeight;
 		hScrollBar = "alwaysOff";
@@ -206,13 +213,21 @@ function GuiProfileEditorDialog::init(%this, %width, %height)
 	%this.inspector.addHiddenField("category");
 	%this.inspector.addHiddenField("themeOverrides");
 
+	// The Borders pane owns these now; hide them from the inspector (the
+	// inspector drops the whole Border group once every field is hidden).
+	%this.inspector.addHiddenField("borderDefault");
+	%this.inspector.addHiddenField("borderLeft");
+	%this.inspector.addHiddenField("borderRight");
+	%this.inspector.addHiddenField("borderTop");
+	%this.inspector.addHiddenField("borderBottom");
+
 	// The custom theme form shares the member pane with the inspector and takes
 	// its place whenever a theme (rather than a member) is selected. onTreeSelect
 	// swaps which of the two scrollers is visible.
 	%this.formScroller = new GuiScrollCtrl()
 	{
-		HorizSizing = "width";
-		VertSizing = "height";
+		HorizSizing = "fill";
+		VertSizing = "fill";
 		Position = "0 0";
 		Extent = "400" SPC %paneHeight;
 		hScrollBar = "alwaysOff";
@@ -244,7 +259,64 @@ function GuiProfileEditorDialog::init(%this, %width, %height)
 	%this.themeForm.build();
 	%this.formScroller.add(%this.themeForm);
 
-	//--- Frame 3: the live preview.
+	//--- Frame 3: the Borders pane -- a movable window of five border setters,
+	// shown only while a profile is selected (onTreeSelect toggles it). Added
+	// before the preview so it docks into the Borders frame.
+	%this.bordersWindow = new GuiWindowCtrl()
+	{
+		HorizSizing = "width";
+		VertSizing = "height";
+		Position = "0 0";
+		Extent = "360" SPC %paneHeight;
+		MinExtent = "220 120";
+		text = "Borders";
+		canMove = true;
+		canClose = false;
+		canMinimize = false;
+		canMaximize = false;
+		resizeWidth = true;
+		resizeHeight = true;
+	};
+	ThemeManager.setProfile(%this.bordersWindow, "windowProfile");
+	ThemeManager.setProfile(%this.bordersWindow, "windowContentProfile", "ContentProfile");
+	ThemeManager.setProfile(%this.bordersWindow, "windowButtonProfile", "CloseButtonProfile");
+	ThemeManager.setProfile(%this.bordersWindow, "windowButtonProfile", "MinButtonProfile");
+	ThemeManager.setProfile(%this.bordersWindow, "windowButtonProfile", "MaxButtonProfile");
+	%this.frames.add(%this.bordersWindow);
+
+	%this.bordersScroller = new GuiScrollCtrl()
+	{
+		HorizSizing = "fill";
+		VertSizing = "fill";
+		Position = "0 0";
+		Extent = "360" SPC %paneHeight;
+		hScrollBar = "alwaysOff";
+		vScrollBar = "dynamic";
+		constantThumbHeight = "0";
+		showArrowButtons = "1";
+		scrollBarThickness = "14";
+	};
+	ThemeManager.setProfile(%this.bordersScroller, "emptyProfile");
+	ThemeManager.setProfile(%this.bordersScroller, "thumbProfile", "ThumbProfile");
+	ThemeManager.setProfile(%this.bordersScroller, "trackProfile", "TrackProfile");
+	ThemeManager.setProfile(%this.bordersScroller, "scrollArrowProfile", "ArrowProfile");
+	%this.bordersWindow.add(%this.bordersScroller);
+
+	%this.borderChain = new GuiChainCtrl()
+	{
+		HorizSizing = "width";
+		VertSizing = "height";
+		Position = "0 0";
+		Extent = "346" SPC %paneHeight;
+		IsVertical = true;
+		ChildSpacing = 8;
+	};
+	ThemeManager.setProfile(%this.borderChain, "emptyProfile");
+	%this.bordersScroller.add(%this.borderChain);
+
+	%this.buildBorderSetters();
+
+	//--- Frame 4: the live preview.
 	%this.preview = new GuiControl()
 	{
 		class = "GuiProfileEditorPreview";
@@ -261,6 +333,9 @@ function GuiProfileEditorDialog::init(%this, %width, %height)
 	// created at its final size, so none fires and the frames stay collapsed
 	// until the user drags a divider. Force one layout pass now.
 	%this.frames.resize(0, 0, %width - 12, %paneHeight);
+
+	// The Borders pane starts collapsed; onTreeSelect opens it for profiles.
+	%this.hideBorders();
 
 	%this.cancelButton = new GuiButtonCtrl()
 	{
@@ -306,6 +381,10 @@ function GuiProfileEditorDialog::onRemove(%this)
 	{
 		%this.themeForm.unbind();
 	}
+	if(isObject(%this.borderChain))
+	{
+		%this.unbindBorderSetters();
+	}
 
 	// The library persists on GuiEditor; just detach from it.
 	if(isObject(%this.library))
@@ -349,7 +428,7 @@ function GuiProfileEditorDialog::onTreeSelect(%this, %proxy)
 	}
 	else if(%kind $= "standalone")
 	{
-		%this.currentRoot = %proxy.target;
+		%this.currentRoot = isObject(%proxy.root) ? %proxy.root : %proxy.target;
 		%this.currentMember = %proxy.target;
 	}
 
@@ -373,6 +452,16 @@ function GuiProfileEditorDialog::onTreeSelect(%this, %proxy)
 		{
 			%this.inspector.clear();
 		}
+	}
+
+	// The Borders pane rides alongside the inspector, but only for profiles.
+	if(%this.isProfileKind(%kind))
+	{
+		%this.showBorders();
+	}
+	else
+	{
+		%this.hideBorders();
 	}
 
 	%this.updatePreview();
@@ -417,6 +506,165 @@ function GuiProfileEditorDialog::updatePreview(%this)
 
 // The inspector reports every applied field edit here.
 function GuiProfileEditorDialog::onProfileChanged(%this, %object)
+{
+	if(isObject(%this.currentRoot))
+	{
+		%this.library.markDirty(%this.currentRoot);
+	}
+	if(isObject(%this.preview))
+	{
+		%this.preview.refresh();
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Borders pane.
+//-----------------------------------------------------------------------------
+
+function GuiProfileEditorDialog::isProfileKind(%this, %kind)
+{
+	return %kind $= "category" || %kind $= "extra" || %kind $= "standalone";
+}
+
+// Build the five setters into the pane chain: the default (no checkbox, full
+// width) then the four sides (checkbox, indented 20px so they read as "under"
+// the default).
+function GuiProfileEditorDialog::buildBorderSetters(%this)
+{
+	%w = 340;
+	%slots = "default" TAB "top" TAB "bottom" TAB "left" TAB "right";
+	%titles = "Default" TAB "Top" TAB "Bottom" TAB "Left" TAB "Right";
+
+	for(%i = 0; %i < 5; %i++)
+	{
+		%slot = getField(%slots, %i);
+		%isDefault = %slot $= "default";
+		%indent = %isDefault ? 0 : 20;
+
+		%setter = new GuiChainCtrl()
+		{
+			class = "GuiProfileEditorBorderSetter";
+			Position = %indent SPC 0;
+			slot = %slot;
+			slotTitle = getField(%titles, %i);
+			hasCheckbox = !%isDefault;
+			setterWidth = %w - %indent;
+			dialog = %this;
+		};
+		%this.borderChain.add(%setter);
+		%this.borderSetter[%slot] = %setter;
+	}
+}
+
+function GuiProfileEditorDialog::bindBorderSetters(%this)
+{
+	if(!isObject(%this.currentMember))
+	{
+		return;
+	}
+	%container = %this.currentRoot;
+
+	// The default binds first so the sides can grey out the border it resolves to.
+	%this.borderSetter["default"].bind(%this.currentMember, %container, "");
+	%disable = %this.borderSetter["default"].currentCategory();
+
+	%sides = "top" TAB "bottom" TAB "left" TAB "right";
+	for(%i = 0; %i < 4; %i++)
+	{
+		%this.borderSetter[getField(%sides, %i)].bind(%this.currentMember, %container, %disable);
+	}
+}
+
+function GuiProfileEditorDialog::unbindBorderSetters(%this)
+{
+	%slots = "default" TAB "top" TAB "bottom" TAB "left" TAB "right";
+	for(%i = 0; %i < 5; %i++)
+	{
+		%setter = %this.borderSetter[getField(%slots, %i)];
+		if(isObject(%setter))
+		{
+			%setter.unbind();
+		}
+	}
+}
+
+// After the Default setter's border changes, update which border each side list
+// greys out (the one the default now resolves to).
+function GuiProfileEditorDialog::refreshSideDisables(%this)
+{
+	if(!isObject(%this.borderSetter["default"]))
+	{
+		return;
+	}
+	%disable = %this.borderSetter["default"].currentCategory();
+	%sides = "top" TAB "bottom" TAB "left" TAB "right";
+	for(%i = 0; %i < 4; %i++)
+	{
+		%setter = %this.borderSetter[getField(%sides, %i)];
+		%setter.clearIfMatches(%disable);
+		%setter.applyDisable(%disable);
+	}
+}
+
+function GuiProfileEditorDialog::showBorders(%this)
+{
+	%this.frames.setFrameSize(%this.bordersFrame, 360);
+	%this.bordersWindow.setVisible(true);
+	%this.bindBorderSetters();
+}
+
+function GuiProfileEditorDialog::hideBorders(%this)
+{
+	%this.unbindBorderSetters();
+	if(isObject(%this.bordersWindow))
+	{
+		%this.bordersWindow.setVisible(false);
+	}
+	%this.frames.setFrameSize(%this.bordersFrame, 0);
+}
+
+// The theme's six named border categories for the dropdowns; a standalone
+// bundle (no theme) has none.
+function GuiProfileEditorDialog::borderNamesFor(%this, %container)
+{
+	if(isObject(%container) && %container.getClassName() $= "GuiProfileTheme")
+	{
+		return %container.getBorderCategoryNames();
+	}
+	return "";
+}
+
+function GuiProfileEditorDialog::borderObjectFor(%this, %container, %category)
+{
+	if(isObject(%container) && %container.getClassName() $= "GuiProfileTheme")
+	{
+		return %container.getBorder(%category);
+	}
+	return "";
+}
+
+// Create a single-use custom border owned by the container (the caller seeds it).
+function GuiProfileEditorDialog::createCustomBorder(%this, %container, %name)
+{
+	if(isObject(%container) && %container.getClassName() $= "GuiProfileTheme")
+	{
+		return %container.createBorder(%name);
+	}
+	// Standalone bundle: a plain custom border added to the group, kept ahead
+	// of the profile so the default's object reference resolves on reload.
+	%border = new GuiBorderProfile(%name) { isCustom = true; };
+	if(isObject(%container) && %container.isMemberOfClass("SimGroup"))
+	{
+		%container.add(%border);
+		if(isObject(%this.currentMember))
+		{
+			%container.pushToBack(%this.currentMember);
+		}
+	}
+	return %border;
+}
+
+function GuiProfileEditorDialog::onBorderChanged(%this)
 {
 	if(isObject(%this.currentRoot))
 	{

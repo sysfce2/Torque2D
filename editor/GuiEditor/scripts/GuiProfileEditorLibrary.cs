@@ -107,12 +107,28 @@ function GuiProfileEditorLibrary::scanThemes(%this)
 			%this.loadedFile[%file] = true;
 			%this.addThemeProxies(%object);
 		}
-		else if(%class $= "GuiControlProfile")
+		else if(%class $= "ScriptGroup")
 		{
+			%profile = %this.bundleProfile(%object);
+			if(!isObject(%profile))
+			{
+				warn("GuiProfileEditorLibrary::scanThemes: skipping " @ %file @ " - bundle has no profile.");
+				%object.delete();
+				continue;
+			}
 			%this.themeGroup.add(%object);
 			%this.sourceFile[%object.getId()] = %file;
 			%this.loadedFile[%file] = true;
-			%this.addStandaloneProxy(%object);
+			%this.addStandaloneProxy(%profile, %object);
+		}
+		else if(%class $= "GuiControlProfile")
+		{
+			// Legacy bare standalone profile: wrap it in a bundle on load.
+			%bundle = %this.wrapStandalone(%object);
+			%this.themeGroup.add(%bundle);
+			%this.sourceFile[%bundle.getId()] = %file;
+			%this.loadedFile[%file] = true;
+			%this.addStandaloneProxy(%object, %bundle);
 		}
 		else
 		{
@@ -219,7 +235,7 @@ function GuiProfileEditorLibrary::addExtraProxy(%this, %theme, %category, %profi
 	%categoryProxy.add(%leaf);
 }
 
-function GuiProfileEditorLibrary::addStandaloneProxy(%this, %profile)
+function GuiProfileEditorLibrary::addStandaloneProxy(%this, %profile, %bundle)
 {
 	%label = %profile.getName();
 	if(%label $= "")
@@ -231,11 +247,34 @@ function GuiProfileEditorLibrary::addStandaloneProxy(%this, %profile)
 	{
 		kind = "standalone";
 		target = %profile;
+		root = %bundle;
 		baseLabel = %label;
 		treeLabel = %label;
 	};
-	%this.standaloneProxy[%profile.getId()] = %leaf;
+	%this.standaloneProxy[%bundle.getId()] = %leaf;
 	%this.standaloneFolder.add(%leaf);
+}
+
+// The GuiControlProfile inside a standalone bundle.
+function GuiProfileEditorLibrary::bundleProfile(%this, %bundle)
+{
+	for(%i = 0; %i < %bundle.getCount(); %i++)
+	{
+		%child = %bundle.getObject(%i);
+		if(%child.getClassName() $= "GuiControlProfile")
+		{
+			return %child;
+		}
+	}
+	return 0;
+}
+
+// Wrap a bare profile in a fresh bundle (used for creation and legacy loads).
+function GuiProfileEditorLibrary::wrapStandalone(%this, %profile)
+{
+	%bundle = new ScriptGroup() { class = "GuiProfileBundle"; };
+	%bundle.add(%profile);
+	return %bundle;
 }
 
 function GuiProfileEditorLibrary::getRootProxy(%this, %root)
@@ -319,12 +358,13 @@ function GuiProfileEditorLibrary::saveAll(%this)
 		%file = %this.sourceFile[%root.getId()];
 		if(%file $= "")
 		{
-			if(%root.getName() $= "")
+			%rootName = %this.rootName(%root);
+			if(%rootName $= "")
 			{
 				warn("GuiProfileEditorLibrary::saveAll: cannot save an unnamed theme or profile - name it first.");
 				continue;
 			}
-			%file = pathConcat(%path, %root.getName() @ ".taml");
+			%file = pathConcat(%path, %rootName @ ".taml");
 		}
 
 		TAMLWrite(%root, %file);
@@ -374,9 +414,17 @@ function GuiProfileEditorLibrary::revertAll(%this)
 			{
 				%this.addThemeProxies(%object);
 			}
+			else if(%object.getClassName() $= "ScriptGroup")
+			{
+				%this.addStandaloneProxy(%this.bundleProfile(%object), %object);
+			}
 			else
 			{
-				%this.addStandaloneProxy(%object);
+				%bundle = %this.wrapStandalone(%object);
+				%this.themeGroup.add(%bundle);
+				%this.sourceFile[%bundle.getId()] = %file;
+				%this.loadedFile[%file] = true;
+				%this.addStandaloneProxy(%object, %bundle);
 			}
 		}
 		else if(%file !$= "")
@@ -516,6 +564,18 @@ function GuiProfileEditorLibrary::removeExtraProfile(%this, %theme, %profile)
 	return true;
 }
 
+// The filename stem for a save root: a theme/profile by its own name, a
+// standalone bundle by its inner profile's name.
+function GuiProfileEditorLibrary::rootName(%this, %root)
+{
+	if(%root.getClassName() $= "ScriptGroup")
+	{
+		%profile = %this.bundleProfile(%root);
+		return isObject(%profile) ? %profile.getName() : "";
+	}
+	return %root.getName();
+}
+
 function GuiProfileEditorLibrary::createStandalone(%this, %name)
 {
 	if(%name $= "" || isObject(%name))
@@ -525,9 +585,10 @@ function GuiProfileEditorLibrary::createStandalone(%this, %name)
 	}
 
 	%profile = new GuiControlProfile(%name);
-	%this.themeGroup.add(%profile);
-	%this.sourceFile[%profile.getId()] = "";
-	%this.addStandaloneProxy(%profile);
-	%this.markDirty(%profile);
+	%bundle = %this.wrapStandalone(%profile);
+	%this.themeGroup.add(%bundle);
+	%this.sourceFile[%bundle.getId()] = "";
+	%this.addStandaloneProxy(%profile, %bundle);
+	%this.markDirty(%bundle);
 	return %profile;
 }

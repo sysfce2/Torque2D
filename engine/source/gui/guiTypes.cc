@@ -163,6 +163,7 @@ GuiBorderProfile::GuiBorderProfile()
 
 	mUnderfill = true;
 	mCategory = StringTable->EmptyString;
+	mIsCustom = false;
 }
 
 GuiBorderProfile::~GuiBorderProfile()
@@ -194,6 +195,8 @@ void GuiBorderProfile::initPersistFields()
 	addField("paddingNA", TypeS32, Offset(mPadding[3], GuiBorderProfile));
 
 	addField("underfill", TypeBool, Offset(mUnderfill, GuiBorderProfile));
+
+	addField("isCustom", TypeBool, Offset(mIsCustom, GuiBorderProfile));
 
 	addField("category", TypeString, Offset(mCategory, GuiBorderProfile));
 	// The offset is unused: both accessors are supplied and the setter returns false.
@@ -484,14 +487,33 @@ void GuiControlProfile::onStaticModified(const char* slotName, const char* newVa
 {
    Parent::onStaticModified(slotName, newValue);
 
+   StringTableEntry slot = StringTable->insert(slotName);
+
    // On a themed profile, any external field write becomes an override that
    // stamping will preserve. Category and the override list itself are
    // theme-managed.
    if (mThemeMembership.mTheme != NULL)
    {
-      StringTableEntry slot = StringTable->insert(slotName);
       if (slot != themeCategoryField() && slot != themeOverridesField())
          mThemeMembership.markOverride(slot);
+   }
+
+   // A border field was written directly (editor, script, or Taml into a live
+   // profile): the cached side pointers may now be stale, so re-resolve all
+   // four. A side with an empty name falls back to the current default border.
+   // The recipe path sets each side's name and pointer together and skips this.
+   static StringTableEntry borderDefaultField = StringTable->insert("borderDefault");
+   static StringTableEntry borderLeftField    = StringTable->insert("borderLeft");
+   static StringTableEntry borderRightField   = StringTable->insert("borderRight");
+   static StringTableEntry borderTopField     = StringTable->insert("borderTop");
+   static StringTableEntry borderBottomField  = StringTable->insert("borderBottom");
+   if (slot == borderDefaultField || slot == borderLeftField || slot == borderRightField ||
+       slot == borderTopField || slot == borderBottomField)
+   {
+      setLeftProfile(NULL);   getLeftProfile();
+      setRightProfile(NULL);  getRightProfile();
+      setTopProfile(NULL);    getTopProfile();
+      setBottomProfile(NULL); getBottomProfile();
    }
 }
 
@@ -613,7 +635,7 @@ GuiBorderProfile * GuiControlProfile::getLeftProfile()
       return mBorderLeft;
 
    // Attempt to find the profile specified
-   if (mLeftProfileName)
+   if (mLeftProfileName && *mLeftProfileName)
    {
       GuiBorderProfile *profile = dynamic_cast<GuiBorderProfile*> (Sim::findObject(mLeftProfileName));
 
@@ -653,7 +675,7 @@ GuiBorderProfile * GuiControlProfile::getRightProfile()
       return mBorderRight;
 
    // Attempt to find the profile specified
-   if (mRightProfileName)
+   if (mRightProfileName && *mRightProfileName)
    {
       GuiBorderProfile *profile = dynamic_cast<GuiBorderProfile*> (Sim::findObject(mRightProfileName));
 
@@ -693,7 +715,7 @@ GuiBorderProfile * GuiControlProfile::getTopProfile()
       return mBorderTop;
 
    // Attempt to find the profile specified
-   if (mTopProfileName)
+   if (mTopProfileName && *mTopProfileName)
    {
       GuiBorderProfile *profile = dynamic_cast<GuiBorderProfile*> (Sim::findObject(mTopProfileName));
 
@@ -733,7 +755,7 @@ GuiBorderProfile * GuiControlProfile::getBottomProfile()
       return mBorderBottom;
 
    // Attempt to find the profile specified
-   if (mBottomProfileName)
+   if (mBottomProfileName && *mBottomProfileName)
    {
       GuiBorderProfile *profile = dynamic_cast<GuiBorderProfile*> (Sim::findObject(mBottomProfileName));
 

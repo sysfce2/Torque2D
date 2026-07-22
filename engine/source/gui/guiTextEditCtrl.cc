@@ -1461,9 +1461,20 @@ bool GuiTextEditCtrl::handleKeyDownWithNoModifier(const GuiEvent& event)
         return handleArrowKey(GuiDirection::Right);
 
     case KEY_UP:
+        // Let a script onUpArrow (e.g. a numeric spinner) claim the up arrow.
+        if (isMethod("onUpArrow"))
+        {
+            Con::executef(this, 1, "onUpArrow");
+            return true;
+        }
         return handleArrowKey(GuiDirection::Up);
 
     case KEY_DOWN:
+        if (isMethod("onDownArrow"))
+        {
+            Con::executef(this, 1, "onDownArrow");
+            return true;
+        }
         return handleArrowKey(GuiDirection::Down);
 
     case KEY_DELETE:

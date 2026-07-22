@@ -135,6 +135,35 @@ ConsoleMethodWithDocs(GuiProfileTheme, removeProfile, ConsoleBool, 3, 3, (profil
     return object->removeProfile(profile);
 }
 
+/*! Creates a single-use custom border owned by the theme. A custom border is
+    not a category member: it keeps its own field values and never appears in
+    getBorderCategoryNames. Used by the Profile Editor's per-side "Custom..."
+    flow, named e.g. <ProfileName><Slot>CustomBorder.
+    @param name The object name for the new border.
+    @return The new GuiBorderProfile id, or 0 on failure.
+*/
+ConsoleMethodWithDocs(GuiProfileTheme, createBorder, ConsoleInt, 3, 3, (name))
+{
+    GuiBorderProfile* border = object->createBorder(argv[2]);
+    return border != NULL ? border->getId() : 0;
+}
+
+/*! Removes a custom border created with createBorder.
+    @param border The custom border to remove.
+    @return True if the border was a custom border owned by this theme and was removed.
+*/
+ConsoleMethodWithDocs(GuiProfileTheme, removeBorder, ConsoleBool, 3, 3, (border))
+{
+    GuiBorderProfile* border = dynamic_cast<GuiBorderProfile*>(Sim::findObject(argv[2]));
+    if (border == NULL)
+    {
+        Con::warnf("GuiProfileTheme::removeBorder() - could not find border '%s'.", argv[2]);
+        return false;
+    }
+
+    return object->removeBorder(border);
+}
+
 /*! Clears a member's override on one field, so the field re-derives from the
     theme. Accepts a member profile or border profile.
     @param member The member profile or border profile.

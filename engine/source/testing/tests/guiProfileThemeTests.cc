@@ -325,11 +325,11 @@ TEST( GuiProfileThemeTests, ThemeAutoCreatesBorderMembers )
     GuiProfileTheme* theme = new GuiProfileTheme();
     theme->registerObject( "UnitTestTheme" );
 
-    GuiBorderProfile* border = dynamic_cast<GuiBorderProfile*>( Sim::findObject( "UnitTestThemeDefaultBorder" ) );
+    GuiBorderProfile* border = dynamic_cast<GuiBorderProfile*>( Sim::findObject( "UnitTestThemeRimmedBorder" ) );
     ASSERT_TRUE( border != NULL ) << "Border members are named <ThemeName><BorderSuffix>.";
     ASSERT_EQ( border->getTheme(), theme );
-    ASSERT_STREQ( border->mCategory, "Default" );
-    ASSERT_EQ( theme->getBorder( StringTable->insert( "Default" ) ), border );
+    ASSERT_STREQ( border->mCategory, "Rimmed" );
+    ASSERT_EQ( theme->getBorder( StringTable->insert( "Rimmed" ) ), border );
 
     theme->deleteObject();
 
@@ -341,13 +341,13 @@ TEST( GuiProfileThemeTests, ThemeDeletionDeletesItsMembers )
     GuiProfileTheme* theme = new GuiProfileTheme();
     theme->registerObject( "UnitTestTheme" );
     ASSERT_TRUE( Sim::findObject( "UnitTestThemeButtonProfile" ) != NULL );
-    ASSERT_TRUE( Sim::findObject( "UnitTestThemeDefaultBorder" ) != NULL );
+    ASSERT_TRUE( Sim::findObject( "UnitTestThemeRimmedBorder" ) != NULL );
 
     theme->deleteObject();
 
     ASSERT_TRUE( Sim::findObject( "UnitTestThemeButtonProfile" ) == NULL )
         << "The theme owns its members and must delete them.";
-    ASSERT_TRUE( Sim::findObject( "UnitTestThemeDefaultBorder" ) == NULL )
+    ASSERT_TRUE( Sim::findObject( "UnitTestThemeRimmedBorder" ) == NULL )
         << "The theme owns its border members and must delete them.";
 
     SUCCEED();
@@ -447,8 +447,8 @@ TEST( GuiProfileThemeTests, ButtonRecipeBindsAccentHighlightAndBevelBorders )
     ASSERT_TRUE( button->mFillColorNA == GuiProfileTheme::setAlpha( theme->getColorAccent(), 80 ) );
     ASSERT_TRUE( button->mCanKeyFocus );
     ASSERT_TRUE( button->mTabable );
-    ASSERT_EQ( button->getLeftBorder(), theme->getBorder( StringTable->insert( "ButtonBright" ) ) );
-    ASSERT_EQ( button->getBottomBorder(), theme->getBorder( StringTable->insert( "ButtonDark" ) ) );
+    ASSERT_EQ( button->getLeftBorder(), theme->getBorder( StringTable->insert( "Bright" ) ) );
+    ASSERT_EQ( button->getBottomBorder(), theme->getBorder( StringTable->insert( "Dark" ) ) );
 
     theme->deleteObject();
 
@@ -511,9 +511,9 @@ TEST( GuiProfileThemeTests, ScrollThumbRecipeWiresScrollBorders )
     GuiControlProfile* thumb = theme->getProfile( StringTable->insert( "ScrollThumb" ) );
     ASSERT_TRUE( thumb != NULL );
     ASSERT_TRUE( thumb->mFillColorSL == theme->getColorAccent() );
-    ASSERT_EQ( thumb->mBorderDefault, theme->getBorder( StringTable->insert( "ScrollBright" ) ) );
-    ASSERT_EQ( thumb->getRightBorder(), theme->getBorder( StringTable->insert( "ScrollDark" ) ) );
-    ASSERT_EQ( thumb->getBottomBorder(), theme->getBorder( StringTable->insert( "ScrollDark" ) ) );
+    ASSERT_EQ( thumb->mBorderDefault, theme->getBorder( StringTable->insert( "Bright" ) ) );
+    ASSERT_EQ( thumb->getRightBorder(), theme->getBorder( StringTable->insert( "Dark" ) ) );
+    ASSERT_EQ( thumb->getBottomBorder(), theme->getBorder( StringTable->insert( "Dark" ) ) );
 
     theme->deleteObject();
 
@@ -650,7 +650,7 @@ TEST( GuiProfileThemeTests, ScriptBindingsExposeThemeApi )
 
     // The category tables are enumerable for the editor.
     ASSERT_TRUE( dStrstr( Con::executef( theme, 1, "getCategoryNames" ), (const char*)"Button" ) != NULL );
-    ASSERT_TRUE( dStrstr( Con::executef( theme, 1, "getBorderCategoryNames" ), (const char*)"ScrollBright" ) != NULL );
+    ASSERT_TRUE( dStrstr( Con::executef( theme, 1, "getBorderCategoryNames" ), (const char*)"Rimmed" ) != NULL );
 
     // Script field assignment marks an override; resetField re-derives.
     Con::evaluate( "UnitTestThemeButtonProfile.fillColor = \"9 8 7 6\";" );
@@ -849,6 +849,194 @@ TEST( GuiProfileThemeTests, RenameThemeIsExposedToScript )
 
     ASSERT_TRUE( dAtob( Con::executef( theme, 2, "renameTheme", "UnitTestThemeB" ) ) );
     ASSERT_STREQ( theme->getName(), "UnitTestThemeB" );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+//-----------------------------------------------------------------------------
+// Six named borders: a theme generates exactly Empty/Rimmed/Thick/Bright/Dark/
+// Padded, with rim widths scaled by borderSize, and the old category borders
+// are gone.
+//-----------------------------------------------------------------------------
+
+TEST( GuiProfileThemeTests, ThemeGeneratesSixNamedBorders )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    ASSERT_EQ( GuiProfileTheme::getBorderCategoryCount(), 6 );
+
+    const char* names[6] = { "Empty", "Rimmed", "Thick", "Bright", "Dark", "Padded" };
+    for ( S32 i = 0; i < 6; ++i )
+        ASSERT_TRUE( theme->getBorder( StringTable->insert( names[i] ) ) != NULL ) << names[i];
+
+    // An old category border no longer exists.
+    ASSERT_TRUE( theme->getBorder( StringTable->insert( "ButtonBright" ) ) == NULL );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, SixBorderRecipesUseExpectedValues )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );   // constructor borderSize == 1
+
+    GuiBorderProfile* empty  = theme->getBorder( StringTable->insert( "Empty" ) );
+    GuiBorderProfile* rimmed = theme->getBorder( StringTable->insert( "Rimmed" ) );
+    GuiBorderProfile* thick  = theme->getBorder( StringTable->insert( "Thick" ) );
+    GuiBorderProfile* bright = theme->getBorder( StringTable->insert( "Bright" ) );
+    GuiBorderProfile* dark   = theme->getBorder( StringTable->insert( "Dark" ) );
+    GuiBorderProfile* padded = theme->getBorder( StringTable->insert( "Padded" ) );
+
+    for ( S32 i = 0; i < 4; ++i )
+    {
+        ASSERT_EQ( empty->mBorder[i], 0 );
+        ASSERT_EQ( empty->mMargin[i], 0 );
+        ASSERT_EQ( empty->mPadding[i], 0 );
+
+        ASSERT_EQ( rimmed->mBorder[i], theme->getBorderSize() );        // 1 * borderSize
+        ASSERT_EQ( thick->mBorder[i], 2 * theme->getBorderSize() );
+
+        ASSERT_EQ( bright->mBorder[i], theme->getBorderSize() );
+        ASSERT_TRUE( bright->mBorderColor[i] == ColorI( 255, 255, 255, 50 ) );
+        ASSERT_EQ( dark->mBorder[i], theme->getBorderSize() );
+        ASSERT_TRUE( dark->mBorderColor[i] == ColorI( 0, 0, 0, 50 ) );
+
+        ASSERT_EQ( padded->mBorder[i], 0 );
+        ASSERT_EQ( padded->mMargin[i], 0 );
+        ASSERT_EQ( padded->mPadding[i], 10 );
+    }
+    ASSERT_TRUE( rimmed->mBorderColor[0] == theme->getColorBackground() );
+
+    // borderSize scales rim widths but never padding.
+    theme->setDataField( StringTable->insert( "borderSize" ), NULL, "3" );
+    ASSERT_EQ( rimmed->mBorder[0], 3 );
+    ASSERT_EQ( thick->mBorder[0], 6 );
+    ASSERT_EQ( padded->mPadding[0], 10 );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+//-----------------------------------------------------------------------------
+// Custom borders: single-use, user-authored borders owned by the theme as
+// extras. They are not category members, keep their own field values, are
+// hidden from the category list, and round-trip through Taml.
+//-----------------------------------------------------------------------------
+
+TEST( GuiProfileThemeTests, CreateAndRemoveCustomBorder )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    ASSERT_EQ( theme->getExtraBorders().size(), 0 );
+
+    GuiBorderProfile* custom = theme->createBorder( "UnitTestThemeButtonProfiletopCustomBorder" );
+    ASSERT_TRUE( custom != NULL );
+    ASSERT_TRUE( custom->mIsCustom );
+    ASSERT_EQ( custom->getTheme(), (GuiProfileTheme*)NULL )
+        << "Custom borders are not theme members: they serialize standalone.";
+    ASSERT_EQ( theme->getExtraBorders().size(), 1 );
+    ASSERT_EQ( (SimObject*)custom, Sim::findObject( "UnitTestThemeButtonProfiletopCustomBorder" ) );
+
+    // Custom borders never appear in the border category list.
+    ASSERT_TRUE( dStrstr( Con::executef( theme, 1, "getBorderCategoryNames" ), (const char*)"CustomBorder" ) == NULL );
+
+    ASSERT_TRUE( theme->removeBorder( custom ) );
+    ASSERT_EQ( theme->getExtraBorders().size(), 0 );
+    ASSERT_TRUE( Sim::findObject( "UnitTestThemeButtonProfiletopCustomBorder" ) == NULL );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, ThemeDeletionDeletesCustomBorders )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+    theme->createBorder( "UnitTestThemeCustomA" );
+    ASSERT_TRUE( Sim::findObject( "UnitTestThemeCustomA" ) != NULL );
+
+    theme->deleteObject();
+
+    ASSERT_TRUE( Sim::findObject( "UnitTestThemeCustomA" ) == NULL )
+        << "The theme owns its custom borders and must delete them.";
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, CustomBorderTamlRoundTripResolvesReferences )
+{
+    const char* fileName = "unitTestGuiProfileThemeCustomBorder.taml";
+
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    // A custom border with distinctive values, referenced by the Button member
+    // both as its default border (object reference) and as its top border
+    // (name reference).
+    GuiBorderProfile* custom = theme->createBorder( "UnitTestThemeButtonProfiledefaultCustomBorder" );
+    custom->setDataField( StringTable->insert( "padding" ), NULL, "7" );
+    custom->setDataField( StringTable->insert( "margin" ), NULL, "3" );
+
+    GuiControlProfile* button = theme->getProfile( StringTable->insert( "Button" ) );
+    button->setDataField( StringTable->insert( "borderDefault" ), NULL, "UnitTestThemeButtonProfiledefaultCustomBorder" );
+    button->setDataField( StringTable->insert( "borderTop" ), NULL, "UnitTestThemeButtonProfiledefaultCustomBorder" );
+    ASSERT_EQ( button->mBorderDefault, custom );
+    ASSERT_EQ( button->getTopBorder(), custom );
+
+    Taml taml;
+    ASSERT_TRUE( taml.write( theme, fileName ) );
+    theme->deleteObject();
+    ASSERT_TRUE( Sim::findObject( "UnitTestThemeButtonProfiledefaultCustomBorder" ) == NULL );
+
+    GuiProfileTheme* loaded = taml.read<GuiProfileTheme>( fileName );
+    ASSERT_TRUE( loaded != NULL );
+
+    // The custom border returns, flagged, with its values, owned as an extra.
+    GuiBorderProfile* loadedCustom = dynamic_cast<GuiBorderProfile*>( Sim::findObject( "UnitTestThemeButtonProfiledefaultCustomBorder" ) );
+    ASSERT_TRUE( loadedCustom != NULL );
+    ASSERT_TRUE( loadedCustom->mIsCustom );
+    ASSERT_EQ( loadedCustom->mPadding[0], 7 );
+    ASSERT_EQ( loadedCustom->mMargin[0], 3 );
+    ASSERT_EQ( loaded->getExtraBorders().size(), 1 );
+
+    // Both the object reference and the name reference resolve to it.
+    GuiControlProfile* loadedButton = loaded->getProfile( StringTable->insert( "Button" ) );
+    ASSERT_EQ( loadedButton->mBorderDefault, loadedCustom );
+    ASSERT_EQ( loadedButton->getTopBorder(), loadedCustom );
+
+    loaded->deleteObject();
+    Platform::fileDelete( fileName );
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, ProfileSideBorderReresolvesAndEmptyFallsBackToDefault )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    GuiControlProfile* button = theme->getProfile( StringTable->insert( "Button" ) );
+    GuiBorderProfile* dark   = theme->getBorder( StringTable->insert( "Dark" ) );
+    GuiBorderProfile* rimmed = theme->getBorder( StringTable->insert( "Rimmed" ) );
+
+    // Writing a side border name on a live profile must re-resolve the cached
+    // side pointer the renderer reads (getTopBorder), not leave it stale.
+    button->setDataField( StringTable->insert( "borderTop" ), NULL, dark->getName() );
+    ASSERT_EQ( button->getTopBorder(), dark );
+
+    // An empty side name falls back to the current default border.
+    button->setDataField( StringTable->insert( "borderDefault" ), NULL, rimmed->getName() );
+    button->setDataField( StringTable->insert( "borderTop" ), NULL, "" );
+    ASSERT_EQ( button->getTopBorder(), rimmed )
+        << "An empty side border must fall back to the default border.";
 
     theme->deleteObject();
 

@@ -155,6 +155,7 @@ private:
     Vector<GuiControlProfile*> mDefaultProfiles;
     Vector<GuiControlProfile*> mExtraProfiles;
     Vector<GuiBorderProfile*> mDefaultBorders;
+    Vector<GuiBorderProfile*> mExtraBorders;    ///< User-authored single-use "custom" borders owned by the theme (not category members).
 
     static const ProfileCategory smProfileCategories[];
     static const BorderCategory smBorderCategories[];
@@ -195,10 +196,13 @@ public:
     // Members.
     S32 getProfileCount() const;
     inline const Vector<GuiControlProfile*>& getExtraProfiles() const { return mExtraProfiles; }
+    inline const Vector<GuiBorderProfile*>& getExtraBorders() const { return mExtraBorders; }
     GuiControlProfile* getProfile(StringTableEntry categoryName) const;   ///< The category's default member.
     GuiBorderProfile* getBorder(StringTableEntry categoryName) const;     ///< The border category's default member.
     GuiControlProfile* createProfile(const char* categoryName, const char* objectName);  ///< Create an extra profile in a category.
     bool removeProfile(GuiControlProfile* profile);                       ///< Delete an extra; defaults are refused.
+    GuiBorderProfile* createBorder(const char* objectName);               ///< Create a single-use custom border owned by the theme.
+    bool removeBorder(GuiBorderProfile* border);                          ///< Delete a custom border.
 
     /// Create any missing default members and re-derive every non-overridden
     /// field of every member from the current theme values.

@@ -172,6 +172,7 @@ public:
 	S32 mPadding[static_cast<S32>(4)];					//The distance between the border and content of the control.
 	bool mUnderfill;									//True if the control's fill color should appear under the border.
 	StringTableEntry mCategory;							//The theme category this border belongs to. See GuiProfileTheme.
+	bool mIsCustom;								//True for a single-use user-authored border owned by a theme as an extra (not a category member).
 public:
 	DECLARE_CONOBJECT(GuiBorderProfile);
 	GuiBorderProfile();
