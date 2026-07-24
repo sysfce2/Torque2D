@@ -27,6 +27,7 @@ function GuiEditorExplorerWindow::onAdd(%this)
 		Position="0 0";
 		Extent="228 355";
 		BindToGuiEditor="1";
+		AllowReorder="1";
 	};
 	ThemeManager.setProfile(%this.tree, "treeViewProfile");
 	%this.scroller.add(%this.tree);

@@ -45,6 +45,7 @@ protected:
 	bool mIsDragLegal;
 	ReorderMethod mReorderMethod;
 	bool mIsBoundToGuiEditor;
+	bool mAllowReorder;
 	const GuiControl* mFocusControl;
 
 public:
@@ -68,6 +69,12 @@ public:
 
 private:
 	TreeItem* grabItemPtr(S32 index);
+	// The tree always stores a SimObject* in LBItem::itemData; recover it
+	// safely (item may be null) so callers can dynamic_cast to the real type.
+	SimObject* getItemObject(TreeItem* item);
+	// Commits a completed drag-reorder. Fully guarded: bails on any missing or
+	// wrong-typed item rather than trusting itemData is a GuiControl/SimGroup.
+	void reorderFromDrag();
 
 public:
 	// GuiControl
@@ -91,6 +98,8 @@ public:
 	//void resize(const Point2I& newPosition, const Point2I& newExtent);
 	virtual void onRenderItem(RectI& itemRect, LBItem* item);
 	virtual void onRenderDragLine(RectI& itemRect);
+	void updateSize();
+	void ScrollToIndex(const S32 targetIndex);
 
 	S32 getHitIndex(const GuiEvent& event);
 	virtual void handleItemClick(LBItem* hitItem, S32 hitIndex, const GuiEvent& event);
