@@ -276,6 +276,20 @@ static void stampProfileBorders(GuiProfileTheme* theme, GuiControlProfile* profi
         profile->mBottomProfileName = (border != NULL) ? border->getName() : NULL;
         profile->setBottomProfile(border);
     }
+
+    // Render and layout read the cached side pointers directly (getLeftBorder(),
+    // etc.), never the lazy resolver, so a side that falls back to the default
+    // must have its pointer resolved here and now. Recipes write raw members and
+    // never trigger onStaticModified -- the path that normally repopulates these
+    // -- so resolve the sides ourselves, exactly as onStaticModified does. Each
+    // fallback side above was reset to NULL, so these pick up the current
+    // borderDefault; sides carrying their own border early-out unchanged. Without
+    // this, a freshly stamped profile whose sides fall back to a non-empty default
+    // border renders borderless until a later field edit forces a re-resolve.
+    profile->getLeftProfile();
+    profile->getRightProfile();
+    profile->getTopProfile();
+    profile->getBottomProfile();
 }
 
 /// Override a profile's font face and size (a signed delta from the theme's

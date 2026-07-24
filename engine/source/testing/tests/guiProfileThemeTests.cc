@@ -1043,4 +1043,45 @@ TEST( GuiProfileThemeTests, ProfileSideBorderReresolvesAndEmptyFallsBackToDefaul
     SUCCEED();
 }
 
+TEST( GuiProfileThemeTests, FreshlyStampedProfileResolvesFallbackSidesToDefaultBorder )
+{
+    // Regression: render and layout read the raw cached side pointers
+    // (getLeftBorder(), etc.), never the lazy resolver. The recipe stamp writes
+    // raw members and never triggers onStaticModified -- the path that normally
+    // repopulates those pointers -- so it must resolve the sides itself. Before
+    // the fix a freshly stamped profile whose sides fall back to a non-empty
+    // default border was left with NULL side pointers, so it rendered borderless
+    // on first display and only gained its border after some later field edit.
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    // Empty: borderDefault is Rimmed and every side is empty, so all four sides
+    // must resolve to the Rimmed border with no field writes at all.
+    GuiControlProfile* empty = theme->getProfile( StringTable->insert( "Empty" ) );
+    ASSERT_TRUE( empty != NULL );
+    GuiBorderProfile* rimmed = theme->getBorder( StringTable->insert( "Rimmed" ) );
+    ASSERT_EQ( empty->mBorderDefault, rimmed );
+    ASSERT_EQ( empty->getLeftBorder(), rimmed )
+        << "A fallback side must be resolved by the stamp, not left NULL.";
+    ASSERT_EQ( empty->getRightBorder(), rimmed );
+    ASSERT_EQ( empty->getTopBorder(), rimmed );
+    ASSERT_EQ( empty->getBottomBorder(), rimmed );
+
+    // ScrollThumb mixes fallback and named sides, and its recipe changes the
+    // default border (stampDefaultProfile sets Rimmed, then the ScrollThumb
+    // recipe sets Bright): the fallback sides must track the *final* default.
+    GuiControlProfile* thumb = theme->getProfile( StringTable->insert( "ScrollThumb" ) );
+    GuiBorderProfile* bright = theme->getBorder( StringTable->insert( "Bright" ) );
+    GuiBorderProfile* dark   = theme->getBorder( StringTable->insert( "Dark" ) );
+    ASSERT_EQ( thumb->getLeftBorder(), bright )
+        << "A fallback side must resolve to the recipe's final default border.";
+    ASSERT_EQ( thumb->getTopBorder(), bright );
+    ASSERT_EQ( thumb->getRightBorder(), dark );
+    ASSERT_EQ( thumb->getBottomBorder(), dark );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
 #endif // TORQUE_SHIPPING
