@@ -371,6 +371,10 @@ function GuiProfileEditorLibrary::saveAll(%this)
 		%this.sourceFile[%root.getId()] = %file;
 		%this.loadedFile[%file] = true;
 		%this.unmarkDirty(%root);
+
+		// Bake the font caches the saved theme needs. This is the one place a
+		// pause is acceptable, and it is why nothing bakes while editing.
+		%this.bakeFontsFor(%root);
 	}
 
 	for(%i = 0; %i < %this.doomedFileCount; %i++)
@@ -591,4 +595,244 @@ function GuiProfileEditorLibrary::createStandalone(%this, %name)
 	%this.addStandaloneProxy(%profile, %bundle);
 	%this.markDirty(%bundle);
 	return %profile;
+}
+
+//-----------------------------------------------------------------------------
+// Font discovery and cache baking. A theme and an individual profile both name
+// a face out of a font directory, so the enumeration and baking live here on
+// the shared library rather than on either form. Neither depends on library
+// state -- they are here to be reachable from both panes via dialog.library.
+//-----------------------------------------------------------------------------
+
+// Returns a tab-separated, sorted, de-duplicated list of face names found in
+// the directory (both source .ttf/.otf faces and baked .uft/.fnt caches).
+function GuiProfileEditorLibrary::enumerateFonts(%this, %dir)
+{
+	if(%dir $= "")
+	{
+		return "";
+	}
+	%path = makeFullPath(%dir, getMainDotCsDir());
+	if(!isDirectory(%path))
+	{
+		return "";
+	}
+
+	%files = getFileList(%path);
+	%out = "";
+	%n = getFieldCount(%files);
+	for(%i = 0; %i < %n; %i++)
+	{
+		%file = getField(%files, %i);
+		if(%file $= "")
+		{
+			continue;
+		}
+
+		%ext = strlwr(fileExt(%file));
+		if(getSubStr(%ext, 0, 1) $= ".")
+		{
+			%ext = getSubStr(%ext, 1, strlen(%ext) - 1);
+		}
+
+		%face = "";
+		if(%ext $= "ttf" || %ext $= "otf")
+		{
+			%face = fileBase(fileName(%file));
+		}
+		else if(%ext $= "uft" || %ext $= "fnt")
+		{
+			%face = %this.faceFromCacheName(fileBase(fileName(%file)));
+		}
+		else
+		{
+			continue;
+		}
+
+		if(%face $= "" || %this.tabListContains(%out, %face))
+		{
+			continue;
+		}
+		%out = (%out $= "") ? %face : (%out TAB %face);
+	}
+
+	return %this.sortTabList(%out);
+}
+
+// A baked cache is named "<face> <size> (<charset>).uft"; recover the face.
+function GuiProfileEditorLibrary::faceFromCacheName(%this, %base)
+{
+	%paren = strpos(%base, " (");
+	if(%paren >= 0)
+	{
+		%base = getSubStr(%base, 0, %paren);
+	}
+	%wc = getWordCount(%base);
+	if(%wc >= 2)
+	{
+		%last = getWord(%base, %wc - 1);
+		if(%last $= (%last + 0))
+		{
+			%base = getWords(%base, 0, %wc - 2);
+		}
+	}
+	return trim(%base);
+}
+
+function GuiProfileEditorLibrary::tabListContains(%this, %list, %value)
+{
+	%n = getFieldCount(%list);
+	for(%i = 0; %i < %n; %i++)
+	{
+		if(getField(%list, %i) $= %value)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+function GuiProfileEditorLibrary::sortTabList(%this, %list)
+{
+	%n = getFieldCount(%list);
+	if(%n < 2)
+	{
+		return %list;
+	}
+	for(%i = 0; %i < %n; %i++)
+	{
+		%arr[%i] = getField(%list, %i);
+	}
+	for(%i = 1; %i < %n; %i++)
+	{
+		%key = %arr[%i];
+		%j = %i - 1;
+		while(%j >= 0 && stricmp(%arr[%j], %key) > 0)
+		{
+			%arr[%j + 1] = %arr[%j];
+			%j--;
+		}
+		%arr[%j + 1] = %key;
+	}
+	%out = %arr[0];
+	for(%i = 1; %i < %n; %i++)
+	{
+		%out = %out TAB %arr[%i];
+	}
+	return %out;
+}
+
+// Fill a drop-down with the faces, selecting %selected. The current selection is
+// never lost, even when the directory did not list it.
+function GuiProfileEditorLibrary::fillFontDropdown(%this, %drop, %faces, %selected)
+{
+	%drop.clearItems();
+
+	%selIndex = -1;
+	%count = 0;
+	%n = getFieldCount(%faces);
+	for(%i = 0; %i < %n; %i++)
+	{
+		%face = getField(%faces, %i);
+		if(%face $= "")
+		{
+			continue;
+		}
+		%drop.addItem(%face);
+		if(%face $= %selected)
+		{
+			%selIndex = %count;
+		}
+		%count++;
+	}
+
+	if(%selIndex < 0 && %selected !$= "")
+	{
+		%drop.insertItem(0, %selected);
+		%selIndex = 0;
+	}
+	if(%selIndex >= 0)
+	{
+		%drop.setSelected(%selIndex);
+	}
+}
+
+// Best-effort bake of one font cache. Does nothing if the cache is already
+// there or the inputs are incomplete.
+//
+// This is deliberately NOT called while the user is editing. Nothing needs it
+// to be: GFont::create synthesizes the face from the platform font and
+// rasterizes glyphs on demand, so the preview draws a newly chosen face or size
+// without any cache at all. The cache only matters once the theme is saved and
+// has to render somewhere the platform font may not exist.
+//
+// Baking on every commit is also expensive enough to be felt. Measured cold on
+// a debug build: populating the whole BMP-0 range costs ~4.3 seconds (and warns
+// once per unmapped code point), where the printable Latin-1 range costs
+// nothing measurable; the old writeSingleFontCache then added a flat ~1.7
+// seconds because it scanned the project for every *.uft and rewrote each one
+// whose name contained the face. Hence the narrow range and the targeted
+// writeFontCache, which writes exactly this face and size.
+function GuiProfileEditorLibrary::bakeFont(%this, %face, %dir, %size)
+{
+	if(%face $= "" || %dir $= "" || %size <= 0)
+	{
+		return;
+	}
+
+	%cacheFile = %dir @ "/" @ %face SPC %size SPC "(ansi).uft";
+	if(isFile(%cacheFile))
+	{
+		return;
+	}
+
+	%prev = $GUI::fontCacheDirectory;
+	$GUI::fontCacheDirectory = %dir;
+	// Printable Latin-1. Anything outside it still renders -- it just rasterizes
+	// on demand instead of coming from the cache.
+	populateFontCacheRange(%face, %size, 32, 255);
+	writeOneFontCache(%face, %size);
+	$GUI::fontCacheDirectory = %prev;
+}
+
+// Bake every face/size a root actually uses. Called from the dialog's Save,
+// where a short pause is expected, rather than from the edit path.
+function GuiProfileEditorLibrary::bakeFontsFor(%this, %root)
+{
+	if(!isObject(%root))
+	{
+		return;
+	}
+
+	if(%root.getClassName() $= "GuiProfileTheme")
+	{
+		// The theme's three faces at its base size, plus whatever its members
+		// ended up with -- a recipe may offset the size, and a member may have
+		// overridden the face outright.
+		%this.bakeFont(%root.fontTitle, %root.fontDirectory, %root.fontSize);
+		%this.bakeFont(%root.fontBody, %root.fontDirectory, %root.fontSize);
+		%this.bakeFont(%root.fontCode, %root.fontDirectory, %root.fontSize);
+
+		%names = %root.getCategoryNames();
+		for(%i = 0; %i < getWordCount(%names); %i++)
+		{
+			%profiles = %root.getProfiles(getWord(%names, %i));
+			for(%p = 0; %p < getWordCount(%profiles); %p++)
+			{
+				%this.bakeProfileFont(getWord(%profiles, %p));
+			}
+		}
+		return;
+	}
+
+	// A standalone bundle: just the profile it wraps.
+	%this.bakeProfileFont(%this.bundleProfile(%root));
+}
+
+function GuiProfileEditorLibrary::bakeProfileFont(%this, %profile)
+{
+	if(isObject(%profile))
+	{
+		%this.bakeFont(%profile.fontType, %profile.fontDirectory, %profile.fontSize);
+	}
 }

@@ -170,7 +170,6 @@ function ProfileThemeEditForm::commitFontSize(%this)
 	}
 	%this.fontSizeBox.setText(%v);
 	%this.applyField("fontSize", %v);
-	%this.bakeCurrentFonts();
 }
 
 function ProfileThemeEditForm::commitDirectory(%this)
@@ -274,7 +273,9 @@ function ProfileThemeEditForm::showColor(%this, %swatch, %value)
 }
 
 //-----------------------------------------------------------------------------
-// Font enumeration + dropdown population.
+// Font selection. The enumeration, drop-down filling and cache baking all live
+// on the shared library (GuiProfileEditorLibrary) because the profile pane
+// names a face out of a directory exactly the way a theme does.
 //-----------------------------------------------------------------------------
 
 function ProfileThemeEditForm::onDropDownSelect(%this, %ctrl)
@@ -285,7 +286,6 @@ function ProfileThemeEditForm::onDropDownSelect(%this, %ctrl)
 	}
 	%face = %ctrl.getText();
 	%this.applyField(%ctrl.themeField, %face);
-	%this.bakeFont(%face);
 }
 
 function ProfileThemeEditForm::rebuildFontDropdowns(%this)
@@ -294,201 +294,13 @@ function ProfileThemeEditForm::rebuildFontDropdowns(%this)
 	{
 		return;
 	}
-	%faces = %this.enumerateFonts(%this.theme.fontDirectory);
-	%this.fillFontDropdown(%this.fontTitleDrop, %faces, %this.theme.fontTitle);
-	%this.fillFontDropdown(%this.fontBodyDrop, %faces, %this.theme.fontBody);
-	%this.fillFontDropdown(%this.fontCodeDrop, %faces, %this.theme.fontCode);
+	%library = %this.dialog.library;
+	%faces = %library.enumerateFonts(%this.theme.fontDirectory);
+	%library.fillFontDropdown(%this.fontTitleDrop, %faces, %this.theme.fontTitle);
+	%library.fillFontDropdown(%this.fontBodyDrop, %faces, %this.theme.fontBody);
+	%library.fillFontDropdown(%this.fontCodeDrop, %faces, %this.theme.fontCode);
 }
 
-// Returns a tab-separated, sorted, de-duplicated list of face names found in
-// the directory (both source .ttf/.otf faces and baked .uft/.fnt caches).
-function ProfileThemeEditForm::enumerateFonts(%this, %dir)
-{
-	if(%dir $= "")
-	{
-		return "";
-	}
-	%path = makeFullPath(%dir, getMainDotCsDir());
-	if(!isDirectory(%path))
-	{
-		return "";
-	}
-
-	%files = getFileList(%path);
-	%out = "";
-	%n = getFieldCount(%files);
-	for(%i = 0; %i < %n; %i++)
-	{
-		%file = getField(%files, %i);
-		if(%file $= "")
-		{
-			continue;
-		}
-
-		%ext = strlwr(fileExt(%file));
-		if(getSubStr(%ext, 0, 1) $= ".")
-		{
-			%ext = getSubStr(%ext, 1, strlen(%ext) - 1);
-		}
-
-		%face = "";
-		if(%ext $= "ttf" || %ext $= "otf")
-		{
-			%face = fileBase(fileName(%file));
-		}
-		else if(%ext $= "uft" || %ext $= "fnt")
-		{
-			%face = %this.faceFromCacheName(fileBase(fileName(%file)));
-		}
-		else
-		{
-			continue;
-		}
-
-		if(%face $= "" || %this.tabListContains(%out, %face))
-		{
-			continue;
-		}
-		%out = (%out $= "") ? %face : (%out TAB %face);
-	}
-
-	return %this.sortTabList(%out);
-}
-
-// A baked cache is named "<face> <size> (<charset>).uft"; recover the face.
-function ProfileThemeEditForm::faceFromCacheName(%this, %base)
-{
-	%paren = strpos(%base, " (");
-	if(%paren >= 0)
-	{
-		%base = getSubStr(%base, 0, %paren);
-	}
-	%wc = getWordCount(%base);
-	if(%wc >= 2)
-	{
-		%last = getWord(%base, %wc - 1);
-		if(%last $= (%last + 0))
-		{
-			%base = getWords(%base, 0, %wc - 2);
-		}
-	}
-	return trim(%base);
-}
-
-function ProfileThemeEditForm::tabListContains(%this, %list, %value)
-{
-	%n = getFieldCount(%list);
-	for(%i = 0; %i < %n; %i++)
-	{
-		if(getField(%list, %i) $= %value)
-		{
-			return true;
-		}
-	}
-	return false;
-}
-
-function ProfileThemeEditForm::sortTabList(%this, %list)
-{
-	%n = getFieldCount(%list);
-	if(%n < 2)
-	{
-		return %list;
-	}
-	for(%i = 0; %i < %n; %i++)
-	{
-		%arr[%i] = getField(%list, %i);
-	}
-	for(%i = 1; %i < %n; %i++)
-	{
-		%key = %arr[%i];
-		%j = %i - 1;
-		while(%j >= 0 && stricmp(%arr[%j], %key) > 0)
-		{
-			%arr[%j + 1] = %arr[%j];
-			%j--;
-		}
-		%arr[%j + 1] = %key;
-	}
-	%out = %arr[0];
-	for(%i = 1; %i < %n; %i++)
-	{
-		%out = %out TAB %arr[%i];
-	}
-	return %out;
-}
-
-function ProfileThemeEditForm::fillFontDropdown(%this, %drop, %faces, %selected)
-{
-	%drop.clearItems();
-
-	%selIndex = -1;
-	%count = 0;
-	%n = getFieldCount(%faces);
-	for(%i = 0; %i < %n; %i++)
-	{
-		%face = getField(%faces, %i);
-		if(%face $= "")
-		{
-			continue;
-		}
-		%drop.addItem(%face);
-		if(%face $= %selected)
-		{
-			%selIndex = %count;
-		}
-		%count++;
-	}
-
-	// Never lose the current selection, even if the directory didn't list it.
-	if(%selIndex < 0 && %selected !$= "")
-	{
-		%drop.insertItem(0, %selected);
-		%selIndex = 0;
-	}
-	if(%selIndex >= 0)
-	{
-		%drop.setSelected(%selIndex);
-	}
-}
-
-//-----------------------------------------------------------------------------
-// Font cache baking (best-effort), so the preview can render a chosen face.
-//-----------------------------------------------------------------------------
-
-function ProfileThemeEditForm::bakeFont(%this, %face)
-{
-	if(!isObject(%this.theme))
-	{
-		return;
-	}
-	%dir = %this.theme.fontDirectory;
-	%size = %this.theme.fontSize;
-	if(%face $= "" || %dir $= "" || %size <= 0)
-	{
-		return;
-	}
-
-	%cacheFile = %dir @ "/" @ %face SPC %size SPC "(ansi).uft";
-	if(isFile(%cacheFile))
-	{
-		return;
-	}
-
-	%prev = $GUI::fontCacheDirectory;
-	$GUI::fontCacheDirectory = %dir;
-	populateFontCacheRange(%face, %size, 0, 65535);
-	writeSingleFontCache(%face);
-	$GUI::fontCacheDirectory = %prev;
-}
-
-function ProfileThemeEditForm::bakeCurrentFonts(%this)
-{
-	if(!isObject(%this.theme))
-	{
-		return;
-	}
-	%this.bakeFont(%this.theme.fontTitle);
-	%this.bakeFont(%this.theme.fontBody);
-	%this.bakeFont(%this.theme.fontCode);
-}
+// Font caches are not baked while the theme is being edited: the preview
+// renders a newly chosen face straight from the platform font, and baking one
+// costs seconds. GuiProfileEditorLibrary::bakeFontsFor does it on Save.

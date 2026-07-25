@@ -37,10 +37,13 @@ function GuiEditor::create( %this )
     exec("./scripts/GuiProfileEditorBorderGrid.cs");
     exec("./scripts/GuiProfileEditorBorderSetter.cs");
     exec("./scripts/GuiProfileEditorBorderForm.cs");
+    exec("./scripts/GuiProfileEditorFieldSpec.cs");
+    exec("./scripts/GuiProfileEditorFieldRow.cs");
+    exec("./scripts/GuiProfileEditorStateColorRow.cs");
+    exec("./scripts/GuiProfileEditorProfileForm.cs");
     exec("./scripts/ProfileThemeEditForm.cs");
     exec("./scripts/GuiProfileEditorLibrary.cs");
     exec("./scripts/GuiProfileEditorTree.cs");
-    exec("./scripts/GuiProfileEditorInspector.cs");
     exec("./scripts/GuiProfileEditorPreview.cs");
     exec("./scripts/GuiProfileEditorNameDialog.cs");
     exec("./scripts/GuiProfileEditorConfirmDialog.cs");

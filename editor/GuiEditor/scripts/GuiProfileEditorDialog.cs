@@ -2,7 +2,7 @@
 //-----------------------------------------------------------------------------
 // The Gui Profile Editor: a near-full-screen dialog showing a tree of every
 // theme and standalone profile in the project's themes folder, a field
-// inspector for the selected member, and a live preview control. Edits apply
+// editing pane for the selected member, and a live preview control. Edits apply
 // immediately to the live objects; Save writes the dirty themes to their
 // files, Cancel (or the window X) reverts dirty themes from their files.
 // The themes themselves are owned by GuiEditor's persistent library and
@@ -41,7 +41,9 @@ function GuiProfileEditorDialog::init(%this, %width, %height)
 	%this.toolbar.addButton("onNewProfile", 25, "New Profile in Category", "getCategorySelected");
 	%this.toolbar.addButton("onRemoveProfile", 23, "Remove Extra Profile", "getExtraSelected");
 	%this.toolbar.addButton("onNewStandalone", 25, "New Stand Alone Profile", "");
-	%this.toolbar.addButton("onResetMember", 11, "Reset All Overrides on Member", "getMemberSelected");
+	// Frame 22 is the circular revert arrow; frame 11 (a plus) was reading as
+	// another "new" button next to the three that really are.
+	%this.toolbar.addButton("onResetMember", 22, "Reset All Overrides on Member", "getMemberSelected");
 
 	%paneTop = 40;
 	%paneHeight = %height - 116;
@@ -84,10 +86,12 @@ function GuiProfileEditorDialog::init(%this, %width, %height)
 	%restFrame = getWord(%ids, 1);
 	%this.frames.setFrameSize(%treeFrame, 240);
 
+	// Kept on the dialog because the Properties pane's width is meaningful: the
+	// profile form flows its fields into more columns as this frame widens.
 	%ids = %this.frames.createHorizontalSplit(%restFrame);
-	%memberFrame = getWord(%ids, 0);
+	%this.memberFrame = getWord(%ids, 0);
 	%previewFrame = getWord(%ids, 1);
-	%this.frames.setFrameSize(%memberFrame, 400);
+	%this.frames.setFrameSize(%this.memberFrame, 400);
 
 	// A fourth frame holds the Borders pane (shown only for profiles). Splitting
 	// the preview frame keeps the order tree | Properties | Borders | preview.
@@ -131,8 +135,8 @@ function GuiProfileEditorDialog::init(%this, %width, %height)
 	%this.treeScroller.add(%this.tree);
 
 	//--- Frame 2: the member editor, wrapped in a window so it can be dragged
-	// out of the frame set. The inspector and the theme form share this window;
-	// onTreeSelect toggles which one is visible.
+	// out of the frame set. The three custom forms -- profile, theme and border --
+	// share this window; onTreeSelect toggles which one is visible.
 	%this.memberWindow = new GuiWindowCtrl()
 	{
 		HorizSizing = "width";
@@ -155,7 +159,16 @@ function GuiProfileEditorDialog::init(%this, %width, %height)
 	ThemeManager.setProfile(%this.memberWindow, "windowButtonProfile", "MaxButtonProfile");
 	%this.frames.add(%this.memberWindow);
 
-	%this.inspectorScroller = new GuiScrollCtrl()
+	// The custom profile pane: it replaced the generic GuiInspector for profile
+	// nodes, so the member window now holds three custom forms and no inspector.
+	// It shows only the fields the selected profile's category actually uses --
+	// see GuiProfileEditorProfileForm and GuiProfileEditorFieldSpec.
+	// Starts hidden like the other two panes: nothing is selected yet, so there is
+	// no profile to show. onTreeSelect brings whichever pane the selection calls
+	// for. (The inspector this replaced started visible and got away with it by
+	// rendering as an empty box; this pane always draws its header and
+	// essentials, so an unbound one looks like a real profile.)
+	%this.profileFormScroller = new GuiScrollCtrl()
 	{
 		HorizSizing = "fill";
 		VertSizing = "fill";
@@ -166,64 +179,31 @@ function GuiProfileEditorDialog::init(%this, %width, %height)
 		constantThumbHeight = "0";
 		showArrowButtons = "1";
 		scrollBarThickness = "14";
+		Visible = false;
 	};
-	ThemeManager.setProfile(%this.inspectorScroller, "emptyProfile");
-	ThemeManager.setProfile(%this.inspectorScroller, "thumbProfile", "ThumbProfile");
-	ThemeManager.setProfile(%this.inspectorScroller, "trackProfile", "TrackProfile");
-	ThemeManager.setProfile(%this.inspectorScroller, "scrollArrowProfile", "ArrowProfile");
-	%this.memberWindow.add(%this.inspectorScroller);
+	ThemeManager.setProfile(%this.profileFormScroller, "emptyProfile");
+	ThemeManager.setProfile(%this.profileFormScroller, "thumbProfile", "ThumbProfile");
+	ThemeManager.setProfile(%this.profileFormScroller, "trackProfile", "TrackProfile");
+	ThemeManager.setProfile(%this.profileFormScroller, "scrollArrowProfile", "ArrowProfile");
+	%this.memberWindow.add(%this.profileFormScroller);
 
-	%this.inspector = new GuiInspector()
+	%this.profileForm = new GuiChainCtrl()
 	{
-		Class = "GuiProfileEditorInspector";
+		class = "GuiProfileEditorProfileForm";
 		HorizSizing = "width";
-		VertSizing = "height";
 		Position = "0 0";
 		Extent = "386" SPC %paneHeight;
-		FieldCellSize = "288 40";
-		ControlOffset = "10 18";
-		ConstantThumbHeight = false;
-		ScrollBarThickness = 12;
-		ShowArrowButtons = true;
+		IsVertical = true;
+		ChildSpacing = 6;
+		formWidth = 386;
 		dialog = %this;
 	};
-	ThemeManager.setProfile(%this.inspector, "emptyProfile");
-	ThemeManager.setProfile(%this.inspector, "panelProfile", "GroupPanelProfile");
-	ThemeManager.setProfile(%this.inspector, "emptyProfile", "GroupGridProfile");
-	ThemeManager.setProfile(%this.inspector, "labelProfile", "LabelProfile");
-	ThemeManager.setProfile(%this.inspector, "overrideLabelProfile", "OverrideLabelProfile");
-	ThemeManager.setProfile(%this.inspector, "textEditProfile", "textEditProfile");
-	ThemeManager.setProfile(%this.inspector, "dropDownProfile", "dropDownProfile");
-	ThemeManager.setProfile(%this.inspector, "dropDownItemProfile", "dropDownItemProfile");
-	ThemeManager.setProfile(%this.inspector, "emptyProfile", "backgroundProfile");
-	ThemeManager.setProfile(%this.inspector, "scrollingPanelProfile", "ScrollProfile");
-	ThemeManager.setProfile(%this.inspector, "scrollingPanelThumbProfile", "ThumbProfile");
-	ThemeManager.setProfile(%this.inspector, "scrollingPanelTrackProfile", "TrackProfile");
-	ThemeManager.setProfile(%this.inspector, "scrollingPanelArrowProfile", "ArrowProfile");
-	ThemeManager.setProfile(%this.inspector, "checkboxProfile", "checkboxProfile");
-	ThemeManager.setProfile(%this.inspector, "buttonProfile", "buttonProfile");
-	ThemeManager.setProfile(%this.inspector, "tipProfile", "tooltipProfile");
-	ThemeManager.setProfile(%this.inspector, "colorPickerProfile", "colorPopupProfile");
-	ThemeManager.setProfile(%this.inspector, "colorPopupProfile", "colorPopupPanelProfile");
-	ThemeManager.setProfile(%this.inspector, "emptyProfile", "colorPopupPickerProfile");
-	ThemeManager.setProfile(%this.inspector, "colorPickerSelectorProfile", "colorPopupSelectorProfile");
-	%this.inspectorScroller.add(%this.inspector);
+	%this.profileFormScroller.add(%this.profileForm);
+	%this.profileForm.build();
 
-	// These fields are theme bookkeeping, not something to hand-edit.
-	%this.inspector.addHiddenField("category");
-	%this.inspector.addHiddenField("themeOverrides");
-
-	// The Borders pane owns these now; hide them from the inspector (the
-	// inspector drops the whole Border group once every field is hidden).
-	%this.inspector.addHiddenField("borderDefault");
-	%this.inspector.addHiddenField("borderLeft");
-	%this.inspector.addHiddenField("borderRight");
-	%this.inspector.addHiddenField("borderTop");
-	%this.inspector.addHiddenField("borderBottom");
-
-	// The custom theme form shares the member pane with the inspector and takes
-	// its place whenever a theme (rather than a member) is selected. onTreeSelect
-	// swaps which of the two scrollers is visible.
+	// The custom theme form takes the member pane whenever a theme (rather than a
+	// member) is selected. onTreeSelect swaps which of the three scrollers is
+	// visible.
 	%this.formScroller = new GuiScrollCtrl()
 	{
 		HorizSizing = "fill";
@@ -260,8 +240,8 @@ function GuiProfileEditorDialog::init(%this, %width, %height)
 	%this.formScroller.add(%this.themeForm);
 
 	// The custom border form is the third pane sharing the member window: it
-	// replaces the inspector whenever a border node (rather than a profile) is
-	// selected. onTreeSelect swaps which of the three scrollers is visible.
+	// takes over whenever a border node (rather than a profile) is selected.
+	// onTreeSelect swaps which of the three scrollers is visible.
 	%this.borderFormScroller = new GuiScrollCtrl()
 	{
 		HorizSizing = "fill";
@@ -284,8 +264,8 @@ function GuiProfileEditorDialog::init(%this, %width, %height)
 	%this.borderForm = new GuiControl()
 	{
 		class = "GuiProfileEditorBorderForm";
-		HorizSizing = "width";
-		VertSizing = "height";
+		HorizSizing = "fill";
+		VertSizing = "fill";
 		Position = "0 0";
 		Extent = "386" SPC %paneHeight;
 		dialog = %this;
@@ -407,9 +387,9 @@ function GuiProfileEditorDialog::onRemove(%this)
 	{
 		%this.preview.clearSamples();
 	}
-	if(isObject(%this.inspector))
+	if(isObject(%this.profileForm))
 	{
-		%this.inspector.clear();
+		%this.profileForm.unbind();
 	}
 	if(isObject(%this.themeForm))
 	{
@@ -470,12 +450,13 @@ function GuiProfileEditorDialog::onTreeSelect(%this, %proxy)
 		%this.currentMember = %proxy.target;
 	}
 
-	// The Properties window holds three panes: the theme form, the border form,
-	// and the inspector. A theme gets the theme form; a border gets the border
-	// form; everything else keeps the inspector.
+	// The Properties window holds three custom panes, one per node kind: a theme
+	// gets the theme form, a border gets the border form, and a profile gets the
+	// profile form.
 	if(%kind $= "theme")
 	{
-		%this.inspectorScroller.setVisible(false);
+		%this.profileFormScroller.setVisible(false);
+		%this.profileForm.unbind();
 		%this.borderFormScroller.setVisible(false);
 		%this.borderForm.unbind();
 		%this.formScroller.setVisible(true);
@@ -483,7 +464,8 @@ function GuiProfileEditorDialog::onTreeSelect(%this, %proxy)
 	}
 	else if(%kind $= "border")
 	{
-		%this.inspectorScroller.setVisible(false);
+		%this.profileFormScroller.setVisible(false);
+		%this.profileForm.unbind();
 		%this.formScroller.setVisible(false);
 		%this.themeForm.unbind();
 		%this.borderFormScroller.setVisible(true);
@@ -495,18 +477,11 @@ function GuiProfileEditorDialog::onTreeSelect(%this, %proxy)
 		%this.themeForm.unbind();
 		%this.borderFormScroller.setVisible(false);
 		%this.borderForm.unbind();
-		%this.inspectorScroller.setVisible(true);
-		if(isObject(%this.currentMember))
-		{
-			%this.inspector.inspect(%this.currentMember);
-		}
-		else
-		{
-			%this.inspector.clear();
-		}
+		%this.profileFormScroller.setVisible(true);
+		%this.profileForm.bind(%this.currentMember, %kind);
 	}
 
-	// The Borders pane rides alongside the inspector, but only for profiles.
+	// The Borders pane rides alongside the profile form, but only for profiles.
 	if(%this.isProfileKind(%kind))
 	{
 		%this.showBorders();
@@ -556,7 +531,7 @@ function GuiProfileEditorDialog::updatePreview(%this)
 	}
 }
 
-// The inspector reports every applied field edit here.
+// The profile form reports every applied field edit here.
 function GuiProfileEditorDialog::onProfileChanged(%this, %object)
 {
 	if(isObject(%this.currentRoot))
@@ -568,7 +543,7 @@ function GuiProfileEditorDialog::onProfileChanged(%this, %object)
 
 // Rebuild the preview on the next tick instead of right now, coalescing rapid
 // edits. A field commit can arrive from inside an input-event/focus-change
-// callback -- e.g. a border or inspector text box losing first-responder while
+// callback -- e.g. a border or profile-form text box losing first-responder while
 // the user clicks a live preview sample. Rebuilding there would delete the very
 // sample control the engine is mid-dispatch on, freeing it under its own
 // onTouchDown/setFirstResponder (a use-after-free crash). Deferring runs the
@@ -816,7 +791,7 @@ function GuiProfileEditorDialog::doRenameTheme(%this, %name)
 	if(%this.library.renameThemeTo(%this.currentProxy.target, %name))
 	{
 		%this.tree.refresh();
-		// The theme form (not the inspector) is showing for a theme; refresh
+		// The theme form is the pane showing for a theme node; refresh
 		// its Name label to the new name.
 		%this.themeForm.bindTheme(%this.currentProxy.target);
 	}
@@ -842,7 +817,8 @@ function GuiProfileEditorDialog::doDeleteTheme(%this)
 
 	// Detach everything that renders or inspects members before they die.
 	%this.preview.clearSamples();
-	%this.inspector.clear();
+	%this.profileForm.unbind();
+	%this.borderForm.unbind();
 	%this.themeForm.unbind();
 	%this.currentProxy = "";
 	%this.currentRoot = "";
@@ -876,7 +852,7 @@ function GuiProfileEditorDialog::onRemoveProfile(%this)
 	%profile = %this.currentProxy.target;
 
 	%this.preview.clearSamples();
-	%this.inspector.clear();
+	%this.profileForm.unbind();
 	%this.currentProxy = "";
 	%this.currentRoot = "";
 	%this.currentMember = "";
@@ -908,7 +884,17 @@ function GuiProfileEditorDialog::onResetMember(%this)
 	}
 
 	%this.currentRoot.resetProfile(%this.currentMember);
-	%this.inspector.inspect(%this.currentMember);
+
+	// Reload whichever pane is showing the member the overrides were cleared on.
+	if(%this.currentProxy.kind $= "border")
+	{
+		%this.borderForm.bind(%this.currentMember, %this.currentProxy.treeLabel);
+	}
+	else
+	{
+		%this.profileForm.refresh();
+	}
+
 	%this.library.markDirty(%this.currentRoot);
 	%this.updatePreview();
 }
@@ -992,7 +978,8 @@ function GuiProfileEditorDialog::discardAndClose(%this)
 	// Reverting deletes dirty themes and reloads them from their files, so
 	// detach everything that renders or inspects members first.
 	%this.preview.clearSamples();
-	%this.inspector.clear();
+	%this.profileForm.unbind();
+	%this.borderForm.unbind();
 	%this.themeForm.unbind();
 	%this.library.revertAll();
 	%this.closeNow();

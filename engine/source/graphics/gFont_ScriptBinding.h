@@ -208,7 +208,46 @@ ConsoleFunctionWithDocs(writeSingleFontCache, ConsoleVoid, 2, 2, (fontName))
 	}
 }
 
-/*! 
+/*! Write one font's cache file to disk.
+    The other two writers are broad: writeFontCache() serializes every cached
+    font, and writeSingleFontCache() scans the project for *.uft and rewrites
+    each one whose path contains the face name. This one touches exactly the
+    face and size asked for, which is what a tool wants after populating a
+    single font -- the scanning version costs the same second and a half however
+    little changed, and gets slower as caches accumulate.
+    The cache path comes from GFont::getFontCacheFilename, so it lands under
+    $GUI::fontCacheDirectory -- the same place populateFontCacheRange reads from.
+	@param faceName The name of the font.
+	@param size The size of the font.
+	@return True if the cache was written.
+*/
+ConsoleFunctionWithDocs(writeOneFontCache, ConsoleBool, 3, 3, (faceName, size))
+{
+	const U32 faceSize = dAtoi(argv[2]);
+
+	Resource<GFont> font = GFont::create(argv[1], faceSize, Con::getVariable("$GUI::fontCacheDirectory"));
+	if (font.isNull())
+	{
+		Con::errorf("writeOneFontCache - could not load font '%s %d'!", argv[1], faceSize);
+		return false;
+	}
+
+	char fileName[1024];
+	GFont::getFontCacheFilename(argv[1], faceSize, sizeof(fileName), fileName);
+
+	FileStream stream;
+	if (!ResourceManager->openFileForWrite(stream, fileName))
+	{
+		Con::errorf("writeOneFontCache - could not open '%s' for write!", fileName);
+		return false;
+	}
+
+	font->write(stream);
+	stream.close();
+	return true;
+}
+
+/*!
     Populate the font cache for all fonts with characters from the specified string.
     @param inString The string to use to set the font caches
     @return No return value.
