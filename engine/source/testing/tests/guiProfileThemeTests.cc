@@ -286,8 +286,8 @@ TEST( GuiProfileThemeTests, BorderProfileSupportsThemeMembershipAndCategory )
     ASSERT_TRUE( border->isThemeFieldOverridden( margin ) );
 
     // Border profiles carry a category persist field like control profiles.
-    border->setDataField( StringTable->insert( "category" ), NULL, "Bright" );
-    ASSERT_STREQ( border->getDataField( StringTable->insert( "category" ), NULL ), "Bright" );
+    border->setDataField( StringTable->insert( "category" ), NULL, "Light" );
+    ASSERT_STREQ( border->getDataField( StringTable->insert( "category" ), NULL ), "Light" );
 
     border->deleteObject();
     theme->deleteObject();
@@ -447,7 +447,7 @@ TEST( GuiProfileThemeTests, ButtonRecipeBindsAccentHighlightAndBevelBorders )
     ASSERT_TRUE( button->mFillColorNA == GuiProfileTheme::setAlpha( theme->getColorAccent(), 80 ) );
     ASSERT_TRUE( button->mCanKeyFocus );
     ASSERT_TRUE( button->mTabable );
-    ASSERT_EQ( button->getLeftBorder(), theme->getBorder( StringTable->insert( "Bright" ) ) );
+    ASSERT_EQ( button->getLeftBorder(), theme->getBorder( StringTable->insert( "Light" ) ) );
     ASSERT_EQ( button->getBottomBorder(), theme->getBorder( StringTable->insert( "Dark" ) ) );
 
     theme->deleteObject();
@@ -479,7 +479,7 @@ TEST( GuiProfileThemeTests, TooltipRecipeUsesHighlightTextOverDimmedBackground )
     ASSERT_TRUE( tooltip != NULL );
     ASSERT_TRUE( tooltip->mFillColor == GuiProfileTheme::setAlpha( theme->getColorBackground(), 220 ) );
     ASSERT_TRUE( tooltip->mFontColor == theme->getColorHighlight() );
-    ASSERT_EQ( tooltip->mBorderDefault, theme->getBorder( StringTable->insert( "Bright" ) ) );
+    ASSERT_EQ( tooltip->mBorderDefault, theme->getBorder( StringTable->insert( "Highlight" ) ) );
 
     theme->deleteObject();
 
@@ -511,9 +511,51 @@ TEST( GuiProfileThemeTests, ScrollThumbRecipeWiresScrollBorders )
     GuiControlProfile* thumb = theme->getProfile( StringTable->insert( "ScrollThumb" ) );
     ASSERT_TRUE( thumb != NULL );
     ASSERT_TRUE( thumb->mFillColorSL == theme->getColorAccent() );
-    ASSERT_EQ( thumb->mBorderDefault, theme->getBorder( StringTable->insert( "Bright" ) ) );
+    ASSERT_EQ( thumb->mBorderDefault, theme->getBorder( StringTable->insert( "BevelLight" ) ) );
+    ASSERT_EQ( thumb->getRightBorder(), theme->getBorder( StringTable->insert( "BevelDark" ) ) );
+    ASSERT_EQ( thumb->getBottomBorder(), theme->getBorder( StringTable->insert( "BevelDark" ) ) );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, EmptyProfileIsTransparentAndUsesTheEmptyBorder )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    GuiControlProfile* empty = theme->getProfile( StringTable->insert( "Empty" ) );
+    ASSERT_TRUE( empty != NULL );
+    // Empty shares Default's transparent fill but must wear the Empty border so
+    // it never draws an edge (Default keeps Rimmed).
+    ASSERT_TRUE( empty->mFillColor == ColorI( 0, 0, 0, 0 ) );
+    ASSERT_EQ( empty->mBorderDefault, theme->getBorder( StringTable->insert( "Empty" ) ) );
+
+    GuiControlProfile* deflt = theme->getProfile( StringTable->insert( "Default" ) );
+    ASSERT_TRUE( deflt != NULL );
+    ASSERT_EQ( deflt->mBorderDefault, theme->getBorder( StringTable->insert( "Rimmed" ) ) );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, SliderAndThumbProfilesAreStamped )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    GuiControlProfile* slider = theme->getProfile( StringTable->insert( "Slider" ) );
+    ASSERT_TRUE( slider != NULL ) << "The theme must stamp a Slider (groove) profile.";
+    ASSERT_STREQ( slider->mCategory, "Slider" );
+
+    GuiControlProfile* thumb = theme->getProfile( StringTable->insert( "SliderThumb" ) );
+    ASSERT_TRUE( thumb != NULL ) << "The theme must stamp a SliderThumb profile.";
+    ASSERT_STREQ( thumb->mCategory, "SliderThumb" );
+    ASSERT_TRUE( thumb->mFillColorSL == theme->getColorAccent() );
+    ASSERT_EQ( thumb->mBorderDefault, theme->getBorder( StringTable->insert( "Light" ) ) );
     ASSERT_EQ( thumb->getRightBorder(), theme->getBorder( StringTable->insert( "Dark" ) ) );
-    ASSERT_EQ( thumb->getBottomBorder(), theme->getBorder( StringTable->insert( "Dark" ) ) );
 
     theme->deleteObject();
 
@@ -536,7 +578,7 @@ TEST( GuiProfileThemeTests, ThemeTamlRoundTripPreservesValuesAndOverrides )
     theme->setDataField( StringTable->insert( "colorAccent" ), NULL, "10 20 30 255" );
     GuiControlProfile* button = theme->getProfile( StringTable->insert( "Button" ) );
     button->setDataField( StringTable->insert( "fillColor" ), NULL, "9 8 7 6" );
-    GuiBorderProfile* bright = theme->getBorder( StringTable->insert( "Bright" ) );
+    GuiBorderProfile* bright = theme->getBorder( StringTable->insert( "Light" ) );
     bright->setDataField( StringTable->insert( "margin" ), NULL, "7" );
     ASSERT_TRUE( theme->createProfile( "Button", NULL ) != NULL );
 
@@ -561,7 +603,7 @@ TEST( GuiProfileThemeTests, ThemeTamlRoundTripPreservesValuesAndOverrides )
     ASSERT_TRUE( loadedButton->mFillColorHL == GuiProfileTheme::adjustValue( ColorI( 10, 20, 30, 255 ), 10.0f ) );
 
     // The border override survives.
-    GuiBorderProfile* loadedBright = loaded->getBorder( StringTable->insert( "Bright" ) );
+    GuiBorderProfile* loadedBright = loaded->getBorder( StringTable->insert( "Light" ) );
     ASSERT_TRUE( loadedBright != NULL );
     ASSERT_TRUE( loadedBright->isThemeFieldOverridden( StringTable->insert( "margin" ) ) );
     ASSERT_EQ( loadedBright->mMargin[0], 7 );
@@ -645,8 +687,8 @@ TEST( GuiProfileThemeTests, ScriptBindingsExposeThemeApi )
     ASSERT_EQ( dAtoi( Con::executef( theme, 2, "getProfile", "Button" ) ), (S32)button->getId() );
 
     // getBorder returns the border member for a border category.
-    GuiBorderProfile* bright = theme->getBorder( StringTable->insert( "Bright" ) );
-    ASSERT_EQ( dAtoi( Con::executef( theme, 2, "getBorder", "Bright" ) ), (S32)bright->getId() );
+    GuiBorderProfile* bright = theme->getBorder( StringTable->insert( "Light" ) );
+    ASSERT_EQ( dAtoi( Con::executef( theme, 2, "getBorder", "Light" ) ), (S32)bright->getId() );
 
     // The category tables are enumerable for the editor.
     ASSERT_TRUE( dStrstr( Con::executef( theme, 1, "getCategoryNames" ), (const char*)"Button" ) != NULL );
@@ -856,24 +898,54 @@ TEST( GuiProfileThemeTests, RenameThemeIsExposedToScript )
 }
 
 //-----------------------------------------------------------------------------
-// Six named borders: a theme generates exactly Empty/Rimmed/Thick/Bright/Dark/
-// Padded, with rim widths scaled by borderSize, and the old category borders
-// are gone.
+// The named-border palette: a theme generates the six primitives (Light replaces
+// the old Bright) plus the descriptive extended borders, all visible in the
+// editor and theme-tracked.
 //-----------------------------------------------------------------------------
 
-TEST( GuiProfileThemeTests, ThemeGeneratesSixNamedBorders )
+TEST( GuiProfileThemeTests, ThemeGeneratesTheNamedBorderPalette )
 {
     GuiProfileTheme* theme = new GuiProfileTheme();
     theme->registerObject( "UnitTestTheme" );
 
-    ASSERT_EQ( GuiProfileTheme::getBorderCategoryCount(), 6 );
-
-    const char* names[6] = { "Empty", "Rimmed", "Thick", "Bright", "Dark", "Padded" };
-    for ( S32 i = 0; i < 6; ++i )
+    const char* names[] = { "Empty", "Rimmed", "Thick", "Light", "Dark", "Padded",
+        "Highlight", "PaddedRim", "BevelLight", "BevelDark", "PaddedLight",
+        "PaddedDark", "RimmedExpander", "CondenserLight", "CondenserDark" };
+    const S32 count = sizeof( names ) / sizeof( names[0] );
+    ASSERT_EQ( GuiProfileTheme::getBorderCategoryCount(), count );
+    for ( S32 i = 0; i < count; ++i )
         ASSERT_TRUE( theme->getBorder( StringTable->insert( names[i] ) ) != NULL ) << names[i];
 
-    // An old category border no longer exists.
+    // The old Bright name and old category borders are gone.
+    ASSERT_TRUE( theme->getBorder( StringTable->insert( "Bright" ) ) == NULL );
     ASSERT_TRUE( theme->getBorder( StringTable->insert( "ButtonBright" ) ) == NULL );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, ExtendedBordersAreThemeMembersAndAppearInTheEditor )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    // An extended border is a real member with the expected values...
+    GuiBorderProfile* paddedRim = theme->getBorder( StringTable->insert( "PaddedRim" ) );
+    ASSERT_TRUE( paddedRim != NULL );
+    for ( S32 i = 0; i < 4; ++i )
+        ASSERT_EQ( paddedRim->mPadding[i], 10 );
+
+    // ...the Tooltip profile wires to the highlight-colored Highlight border...
+    GuiControlProfile* tooltip = theme->getProfile( StringTable->insert( "Tooltip" ) );
+    ASSERT_EQ( tooltip->mBorderDefault, theme->getBorder( StringTable->insert( "Highlight" ) ) );
+    ASSERT_TRUE( tooltip->mBorderDefault->mBorderColor[0] == theme->getColorHighlight() );
+
+    // ...and the extended borders are listed for the editor, same as the base six.
+    const char* names = Con::executef( theme, 1, "getBorderCategoryNames" );
+    ASSERT_TRUE( dStrstr( names, (const char*)"PaddedRim" ) != NULL );
+    ASSERT_TRUE( dStrstr( names, (const char*)"Highlight" ) != NULL );
+    ASSERT_TRUE( dStrstr( names, (const char*)"Rimmed" ) != NULL );
 
     theme->deleteObject();
 
@@ -888,7 +960,7 @@ TEST( GuiProfileThemeTests, SixBorderRecipesUseExpectedValues )
     GuiBorderProfile* empty  = theme->getBorder( StringTable->insert( "Empty" ) );
     GuiBorderProfile* rimmed = theme->getBorder( StringTable->insert( "Rimmed" ) );
     GuiBorderProfile* thick  = theme->getBorder( StringTable->insert( "Thick" ) );
-    GuiBorderProfile* bright = theme->getBorder( StringTable->insert( "Bright" ) );
+    GuiBorderProfile* bright = theme->getBorder( StringTable->insert( "Light" ) );
     GuiBorderProfile* dark   = theme->getBorder( StringTable->insert( "Dark" ) );
     GuiBorderProfile* padded = theme->getBorder( StringTable->insert( "Padded" ) );
 
@@ -1055,29 +1127,30 @@ TEST( GuiProfileThemeTests, FreshlyStampedProfileResolvesFallbackSidesToDefaultB
     GuiProfileTheme* theme = new GuiProfileTheme();
     theme->registerObject( "UnitTestTheme" );
 
-    // Empty: borderDefault is Rimmed and every side is empty, so all four sides
-    // must resolve to the Rimmed border with no field writes at all.
-    GuiControlProfile* empty = theme->getProfile( StringTable->insert( "Empty" ) );
-    ASSERT_TRUE( empty != NULL );
+    // Default: borderDefault is Rimmed and every side is empty, so all four sides
+    // must resolve to the Rimmed border with no field writes at all. (Empty is no
+    // longer usable here since its recipe now wears the Empty border on purpose.)
+    GuiControlProfile* deflt = theme->getProfile( StringTable->insert( "Default" ) );
+    ASSERT_TRUE( deflt != NULL );
     GuiBorderProfile* rimmed = theme->getBorder( StringTable->insert( "Rimmed" ) );
-    ASSERT_EQ( empty->mBorderDefault, rimmed );
-    ASSERT_EQ( empty->getLeftBorder(), rimmed )
+    ASSERT_EQ( deflt->mBorderDefault, rimmed );
+    ASSERT_EQ( deflt->getLeftBorder(), rimmed )
         << "A fallback side must be resolved by the stamp, not left NULL.";
-    ASSERT_EQ( empty->getRightBorder(), rimmed );
-    ASSERT_EQ( empty->getTopBorder(), rimmed );
-    ASSERT_EQ( empty->getBottomBorder(), rimmed );
+    ASSERT_EQ( deflt->getRightBorder(), rimmed );
+    ASSERT_EQ( deflt->getTopBorder(), rimmed );
+    ASSERT_EQ( deflt->getBottomBorder(), rimmed );
 
     // ScrollThumb mixes fallback and named sides, and its recipe changes the
     // default border (stampDefaultProfile sets Rimmed, then the ScrollThumb
-    // recipe sets Bright): the fallback sides must track the *final* default.
+    // recipe sets its bevel): the fallback sides must track the *final* default.
     GuiControlProfile* thumb = theme->getProfile( StringTable->insert( "ScrollThumb" ) );
-    GuiBorderProfile* bright = theme->getBorder( StringTable->insert( "Bright" ) );
-    GuiBorderProfile* dark   = theme->getBorder( StringTable->insert( "Dark" ) );
-    ASSERT_EQ( thumb->getLeftBorder(), bright )
+    GuiBorderProfile* bevel = theme->getBorder( StringTable->insert( "BevelLight" ) );
+    GuiBorderProfile* bevelDark = theme->getBorder( StringTable->insert( "BevelDark" ) );
+    ASSERT_EQ( thumb->getLeftBorder(), bevel )
         << "A fallback side must resolve to the recipe's final default border.";
-    ASSERT_EQ( thumb->getTopBorder(), bright );
-    ASSERT_EQ( thumb->getRightBorder(), dark );
-    ASSERT_EQ( thumb->getBottomBorder(), dark );
+    ASSERT_EQ( thumb->getTopBorder(), bevel );
+    ASSERT_EQ( thumb->getRightBorder(), bevelDark );
+    ASSERT_EQ( thumb->getBottomBorder(), bevelDark );
 
     theme->deleteObject();
 

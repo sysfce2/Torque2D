@@ -277,6 +277,7 @@ function GuiProfileEditorPreview::categoryForClass(%this, %class)
 		case "GuiTreeViewCtrl": return "TreeView";
 		case "GuiTabBookCtrl": return "TabBook";
 		case "GuiTabPageCtrl": return "TabPage";
+		case "GuiSliderCtrl": return "Slider";
 		case "GuiMenuBarCtrl": return "MenuBar";
 		case "GuiChainCtrl": return "Empty";
 		case "GuiControl": return "Label";
@@ -314,12 +315,12 @@ function GuiProfileEditorPreview::showCategory(%this, %theme, %category, %member
 		%this.addSample(new GuiControl()
 		{
 			Position = "0 0";
-			Extent = "260 30";
-			Text = "The quick brown fox";
+			Extent = "340 30";
+			Text = "The quick brown fox jumps over the lazy dog.";
 			Profile = %member;
 		});
 	}
-	else if(%category $= "Panel" || %category $= "WindowContent" || %category $= "MenuContent" || %category $= "TabPage")
+	else if(%category $= "Panel")
 	{
 		%this.addSample(new GuiPanelCtrl()
 		{
@@ -352,7 +353,7 @@ function GuiProfileEditorPreview::showCategory(%this, %theme, %category, %member
 			Profile = %theme.getProfile("Empty");
 		});
 	}
-	else if(%category $= "TabBook" || %category $= "Tab")
+	else if(%category $= "TabBook" || %category $= "Tab" || %category $= "TabPage")
 	{
 		%book = new GuiTabBookCtrl()
 		{
@@ -365,12 +366,12 @@ function GuiProfileEditorPreview::showCategory(%this, %theme, %category, %member
 		%book.add(new GuiTabPageCtrl()
 		{
 			Text = "One";
-			Profile = %theme.getProfile("TabPage");
+			Profile = %this.slotProfile(%theme, "TabPage", %category, %member);
 		});
 		%book.add(new GuiTabPageCtrl()
 		{
 			Text = "Two";
-			Profile = %theme.getProfile("TabPage");
+			Profile = %this.slotProfile(%theme, "TabPage", %category, %member);
 		});
 	}
 	else if(%category $= "ListBox")
@@ -407,7 +408,7 @@ function GuiProfileEditorPreview::showCategory(%this, %theme, %category, %member
 		%dropDown.addItem("Third choice");
 		%dropDown.setSelected(0);
 	}
-	else if(%category $= "Window" || %category $= "WindowButton" || %category $= "WindowCloseButton")
+	else if(%category $= "Window" || %category $= "WindowContent" || %category $= "WindowButton" || %category $= "WindowCloseButton")
 	{
 		%this.addSample(new GuiWindowCtrl()
 		{
@@ -420,22 +421,22 @@ function GuiProfileEditorPreview::showCategory(%this, %theme, %category, %member
 			canMaximize = true;
 			titleHeight = 30;
 			Profile = %this.slotProfile(%theme, "Window", %category, %member);
-			contentProfile = %theme.getProfile("WindowContent");
+			contentProfile = %this.slotProfile(%theme, "WindowContent", %category, %member);
 			closeButtonProfile = %this.slotProfile(%theme, "WindowCloseButton", %category, %member);
 			minButtonProfile = %this.slotProfile(%theme, "WindowButton", %category, %member);
 			maxButtonProfile = %this.slotProfile(%theme, "WindowButton", %category, %member);
 		});
 	}
-	else if(%category $= "MenuBar" || %category $= "Menu" || %category $= "MenuItem")
+	else if(%category $= "MenuBar" || %category $= "Menu" || %category $= "MenuItem" || %category $= "MenuContent")
 	{
 		%menuBar = new GuiMenuBarCtrl()
 		{
 			Position = "0 0";
-			Extent = "260 30";
+			Extent = "340 30";
 			Profile = %this.slotProfile(%theme, "MenuBar", %category, %member);
 			MenuProfile = %this.slotProfile(%theme, "Menu", %category, %member);
 			MenuItemProfile = %this.slotProfile(%theme, "MenuItem", %category, %member);
-			MenuContentProfile = %theme.getProfile("MenuContent");
+			MenuContentProfile = %this.slotProfile(%theme, "MenuContent", %category, %member);
 			backgroundProfile = %theme.getProfile("Overlay");
 
 			new GuiMenuItemCtrl()
@@ -444,15 +445,31 @@ function GuiProfileEditorPreview::showCategory(%this, %theme, %category, %member
 
 				new GuiMenuItemCtrl() { Text = "New"; };
 				new GuiMenuItemCtrl() { Text = "Open"; };
+				new GuiMenuItemCtrl() { Text = "Open Recent"; };
 				new GuiMenuItemCtrl() { Text = "-"; };
 				new GuiMenuItemCtrl() { Text = "Save"; };
+				new GuiMenuItemCtrl() { Text = "Save As..."; };
+				new GuiMenuItemCtrl() { Text = "-"; };
+				new GuiMenuItemCtrl() { Text = "Exit"; };
 			};
 			new GuiMenuItemCtrl()
 			{
 				Text = "Edit";
 
+				new GuiMenuItemCtrl() { Text = "Undo"; };
+				new GuiMenuItemCtrl() { Text = "Redo"; };
+				new GuiMenuItemCtrl() { Text = "-"; };
 				new GuiMenuItemCtrl() { Text = "Cut"; };
+				new GuiMenuItemCtrl() { Text = "Copy"; };
 				new GuiMenuItemCtrl() { Text = "Paste"; };
+			};
+			new GuiMenuItemCtrl()
+			{
+				Text = "View";
+
+				new GuiMenuItemCtrl() { Text = "Zoom In"; };
+				new GuiMenuItemCtrl() { Text = "Zoom Out"; };
+				new GuiMenuItemCtrl() { Text = "Reset Zoom"; };
 			};
 		};
 		%this.addSample(%menuBar);
@@ -515,9 +532,48 @@ function GuiProfileEditorPreview::showCategory(%this, %theme, %category, %member
 			selectorProfile = %theme.getProfile("ColorSelector");
 		});
 	}
+	else if(%category $= "Slider" || %category $= "SliderThumb")
+	{
+		// A horizontal and a vertical slider, so both groove orientations show.
+		// The main profile styles the groove, thumbProfile styles the thumb.
+		%this.addSample(new GuiSliderCtrl()
+		{
+			Position = "0 0";
+			Extent = "220 30";
+			range = "0 100";
+			ticks = "10";
+			value = "60";
+			Profile = %this.slotProfile(%theme, "Slider", %category, %member);
+			thumbProfile = %this.slotProfile(%theme, "SliderThumb", %category, %member);
+		});
+
+		%this.addSample(new GuiSliderCtrl()
+		{
+			Position = "0 50";
+			Extent = "30 160";
+			range = "0 100";
+			ticks = "10";
+			value = "40";
+			Profile = %this.slotProfile(%theme, "Slider", %category, %member);
+			thumbProfile = %this.slotProfile(%theme, "SliderThumb", %category, %member);
+		});
+	}
+	else if(%category $= "Tooltip")
+	{
+		// Tooltips can't be hovered in the preview, so show the profile as a
+		// static swatch (no button) with text that reaches toward the edges so
+		// the fill, border, and padding all read.
+		%this.addSample(new GuiControl()
+		{
+			Position = "0 0";
+			Extent = "320 40";
+			Text = "A short hint that describes a control.";
+			Profile = %member;
+		});
+	}
 	else
 	{
-		// Default, Empty, Tooltip, Overlay, DragAndDrop, and anything new.
+		// Default, Empty, Overlay, DragAndDrop, and anything new.
 		%this.addGenericSample(%member);
 	}
 
@@ -607,21 +663,30 @@ function GuiProfileEditorPreview::addStateSamples(%this, %category, %member)
 	}
 	else if(%category $= "Radio")
 	{
-		%active = new GuiRadioCtrl()
+		// Several radios sharing a groupNum toggle exclusively; plus a disabled one.
+		for(%i = 0; %i < 4; %i++)
 		{
-			Position = "0 0";
-			Extent = "160 30";
-			Text = "Radio";
-			Profile = %member;
-		};
-		%this.addSample(%active);
-		%active.setStateOn(true);
+			%radio = new GuiRadioCtrl()
+			{
+				Position = "0" SPC (%i * 34);
+				Extent = "180 30";
+				Text = "Option" SPC (%i + 1);
+				groupNum = "700";
+				Profile = %member;
+			};
+			%this.addSample(%radio);
+			if(%i == 0)
+			{
+				%radio.setStateOn(true);
+			}
+		}
 
 		%disabled = new GuiRadioCtrl()
 		{
-			Position = "0 40";
-			Extent = "160 30";
+			Position = "0" SPC (4 * 34);
+			Extent = "180 30";
 			Text = "Disabled";
+			groupNum = "700";
 			Profile = %member;
 		};
 		%this.addSample(%disabled);
@@ -677,8 +742,8 @@ function GuiProfileEditorPreview::addGenericSample(%this, %profile)
 	%this.addSample(new GuiControl()
 	{
 		Position = "0 0";
-		Extent = "240 80";
-		Text = "The quick brown fox";
+		Extent = "340 80";
+		Text = "The quick brown fox jumps over the lazy dog.";
 		Profile = %profile;
 	});
 

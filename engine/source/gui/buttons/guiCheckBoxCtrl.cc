@@ -92,7 +92,13 @@ void GuiCheckBoxCtrl::onRender(Point2I offset, const RectI &updateRect)
 	{
 		boxRect.extent.y = contentRect.point.y + contentRect.extent.y - boxRect.point.y;
 	}
-	
+
+	// A heavily padded border can shrink the content rect below the box's size,
+	// leaving a negative extent above. Clamp so subclasses (e.g. the radio's
+	// circle radius) never derive a negative size from it.
+	if (boxRect.extent.x < 0) boxRect.extent.x = 0;
+	if (boxRect.extent.y < 0) boxRect.extent.y = 0;
+
 	//Draw the checkbox
 	renderInnerControl(boxRect, currentState);
 

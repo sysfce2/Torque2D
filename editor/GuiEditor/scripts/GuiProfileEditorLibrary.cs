@@ -468,12 +468,12 @@ function GuiProfileEditorLibrary::createTheme(%this, %name)
 		return 0;
 	}
 
-	// Friendlier starting point than the C++ ctor defaults: no borders until
-	// the author opts in, a readable 16px base font, and a real font directory
-	// (the engine's font cache dir, where AppCore ships its fonts) so the form's
-	// font dropdowns aren't empty. Each assignment restamps, fine for a fresh
-	// theme.
-	%theme.borderSize = 0;
+	// Friendlier starting point than the C++ ctor defaults: borders on so the
+	// recipes' bevels and rims actually show (a theme looks intentional out of
+	// the box), a readable 16px base font, and a real font directory (the engine's
+	// font cache dir, where AppCore ships its fonts) so the form's font dropdowns
+	// aren't empty. Each assignment restamps, fine for a fresh theme.
+	%theme.borderSize = 1;
 	%theme.fontSize = 16;
 	// Store the font directory relative to the game root (not the absolute
 	// expanded path) so themes stay portable.
