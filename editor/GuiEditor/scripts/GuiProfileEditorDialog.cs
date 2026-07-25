@@ -259,6 +259,40 @@ function GuiProfileEditorDialog::init(%this, %width, %height)
 	%this.themeForm.build();
 	%this.formScroller.add(%this.themeForm);
 
+	// The custom border form is the third pane sharing the member window: it
+	// replaces the inspector whenever a border node (rather than a profile) is
+	// selected. onTreeSelect swaps which of the three scrollers is visible.
+	%this.borderFormScroller = new GuiScrollCtrl()
+	{
+		HorizSizing = "fill";
+		VertSizing = "fill";
+		Position = "0 0";
+		Extent = "400" SPC %paneHeight;
+		hScrollBar = "alwaysOff";
+		vScrollBar = "dynamic";
+		constantThumbHeight = "0";
+		showArrowButtons = "1";
+		scrollBarThickness = "14";
+		Visible = false;
+	};
+	ThemeManager.setProfile(%this.borderFormScroller, "emptyProfile");
+	ThemeManager.setProfile(%this.borderFormScroller, "thumbProfile", "ThumbProfile");
+	ThemeManager.setProfile(%this.borderFormScroller, "trackProfile", "TrackProfile");
+	ThemeManager.setProfile(%this.borderFormScroller, "scrollArrowProfile", "ArrowProfile");
+	%this.memberWindow.add(%this.borderFormScroller);
+
+	%this.borderForm = new GuiControl()
+	{
+		class = "GuiProfileEditorBorderForm";
+		HorizSizing = "width";
+		VertSizing = "height";
+		Position = "0 0";
+		Extent = "386" SPC %paneHeight;
+		dialog = %this;
+	};
+	%this.borderForm.build();
+	%this.borderFormScroller.add(%this.borderForm);
+
 	//--- Frame 3: the Borders pane -- a movable window of five border setters,
 	// shown only while a profile is selected (onTreeSelect toggles it). Added
 	// before the preview so it docks into the Borders frame.
@@ -381,6 +415,10 @@ function GuiProfileEditorDialog::onRemove(%this)
 	{
 		%this.themeForm.unbind();
 	}
+	if(isObject(%this.borderForm))
+	{
+		%this.borderForm.unbind();
+	}
 	if(isObject(%this.borderChain))
 	{
 		%this.unbindBorderSetters();
@@ -432,17 +470,31 @@ function GuiProfileEditorDialog::onTreeSelect(%this, %proxy)
 		%this.currentMember = %proxy.target;
 	}
 
-	// A theme gets the custom form; every other selection keeps the inspector.
+	// The Properties window holds three panes: the theme form, the border form,
+	// and the inspector. A theme gets the theme form; a border gets the border
+	// form; everything else keeps the inspector.
 	if(%kind $= "theme")
 	{
 		%this.inspectorScroller.setVisible(false);
+		%this.borderFormScroller.setVisible(false);
+		%this.borderForm.unbind();
 		%this.formScroller.setVisible(true);
 		%this.themeForm.bindTheme(%this.currentMember);
+	}
+	else if(%kind $= "border")
+	{
+		%this.inspectorScroller.setVisible(false);
+		%this.formScroller.setVisible(false);
+		%this.themeForm.unbind();
+		%this.borderFormScroller.setVisible(true);
+		%this.borderForm.bind(%this.currentMember, %proxy.treeLabel);
 	}
 	else
 	{
 		%this.formScroller.setVisible(false);
 		%this.themeForm.unbind();
+		%this.borderFormScroller.setVisible(false);
+		%this.borderForm.unbind();
 		%this.inspectorScroller.setVisible(true);
 		if(isObject(%this.currentMember))
 		{

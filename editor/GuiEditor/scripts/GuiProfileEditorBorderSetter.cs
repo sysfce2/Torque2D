@@ -3,9 +3,9 @@
 // One row of the Profile Editor's Borders pane: edits a single border slot of
 // a GuiControlProfile (its default border, or one of the top/bottom/left/right
 // sides). A dropdown picks one of the theme's six named borders or "Custom...";
-// choosing Custom opens a compact editor of the sixteen values that matter for
-// a border (margin / border / border-color / padding, each across the four
-// states normal / HL / SL / NA), backed by a hidden single-use border profile.
+// choosing Custom expands a GuiProfileEditorBorderGrid -- the shared editor of
+// the sixteen border values (and underfill) -- backed by a hidden single-use
+// border profile.
 //
 // The base control is a vertical GuiChainCtrl (a GuiControl subclass) wearing a
 // panel profile, so it auto-sizes as the editor expands/collapses and ripples
@@ -20,7 +20,6 @@
 
 $BorderSetter::CustomRow = "Custom...";
 $BorderSetter::HeaderHeight = 30;
-$BorderSetter::EditorHeight = 236;
 // The editor panelProfile insets its content by 10px of padding on the left and
 // right; children must fit inside that or they clip. (All editor themes match.)
 $BorderSetter::PanelHPad = 20;
@@ -93,113 +92,27 @@ function GuiProfileEditorBorderSetter::onAdd(%this)
 	ThemeManager.setProfile(%this.dropdown, "scrollingPanelArrowProfile", "ArrowProfile");
 	%this.header.add(%this.dropdown);
 
-	//--- Editor: the sixteen-value grid, collapsed until "Custom..." is chosen.
+	//--- Editor: the shared sixteen-value grid, collapsed until "Custom..." is
+	// chosen. The grid owns the fields and commits; this row just hosts it.
 	%this.editor = new GuiControl()
 	{
 		Position = "0 0";
-		Extent = %w SPC $BorderSetter::EditorHeight;
+		Extent = %w SPC 0;
 		Visible = false;
 	};
 	ThemeManager.setProfile(%this.editor, "emptyProfile");
 	%this.add(%this.editor);
 
-	%this.buildEditor();
-	%this.editor.setExtent(%w, 0);   // start collapsed
-}
-
-// The four border-profile field state suffixes and their captions (box 0 is the
-// normal state, drawn with no caption).
-function GuiProfileEditorBorderSetter::stateSuffix(%this, %i)
-{
-	return getWord("_ HL SL NA", %i);
-}
-
-function GuiProfileEditorBorderSetter::stateField(%this, %field, %i)
-{
-	return (%i == 0) ? %field : (%field @ %this.stateSuffix(%i));
-}
-
-// Build the four property blocks (label, four inputs, four captions).
-function GuiProfileEditorBorderSetter::buildEditor(%this)
-{
-	%w = %this.setterWidth - $BorderSetter::PanelHPad;
-	%blockH = 58;
-	%boxW = 42;
-	%boxGap = 4;
-	%x0 = 8;
-
-	%rows = "Margin" TAB "margin" TAB "num" NL "Border" TAB "border" TAB "num" NL "Border Color" TAB "borderColor" TAB "color" NL "Padding" TAB "padding" TAB "num";
-
-	%count = getRecordCount(%rows);
-	for(%r = 0; %r < %count; %r++)
+	%this.grid = new GuiControl()
 	{
-		%rec = getRecord(%rows, %r);
-		%title = getField(%rec, 0);
-		%field = getField(%rec, 1);
-		%isColor = getField(%rec, 2) $= "color";
-		%y = %r * %blockH + 2;
-
-		%rowLabel = new GuiControl()
-		{
-			Position = %x0 SPC %y;
-			Extent = (%w - %x0 - 4) SPC 16;
-			Text = %title;
-			align = "left";
-		};
-		ThemeManager.setProfile(%rowLabel, "labelProfile");
-		%this.editor.add(%rowLabel);
-
-		for(%i = 0; %i < 4; %i++)
-		{
-			%bx = %x0 + %i * (%boxW + %boxGap);
-			%by = %y + 18;
-
-			if(%isColor)
-			{
-				%box = new GuiColorPopupCtrl()
-				{
-					Position = %bx SPC %by;
-					Extent = %boxW SPC 22;
-				};
-				ThemeManager.setProfile(%box, "colorPickerProfile");
-				ThemeManager.setProfile(%box, "emptyProfile", "backgroundProfile");
-				ThemeManager.setProfile(%box, "colorPopupProfile", "popupProfile");
-				ThemeManager.setProfile(%box, "emptyProfile", "pickerProfile");
-				ThemeManager.setProfile(%box, "colorPickerSelectorProfile", "selectorProfile");
-				%box.isColor = true;
-				%box.Command = %this.getID() @ ".commitBox(" @ %box.getID() @ ");";
-			}
-			else
-			{
-				%box = new GuiTextEditCtrl()
-				{
-					class = "GuiProfileEditorBorderInput";
-					Position = %bx SPC %by;
-					Extent = %boxW SPC 22;
-					inputMode = "Number";
-					align = "center";
-				};
-				ThemeManager.setProfile(%box, "textEditProfile");
-				%box.isColor = false;
-				%box.setter = %this;
-				%box.AltCommand = %this.getID() @ ".commitBox(" @ %box.getID() @ ");";
-			}
-			%box.borderField = %field;
-			%box.stateIndex = %i;
-			%this.editor.add(%box);
-			%this.box[%field, %i] = %box;
-
-			%cap = new GuiControl()
-			{
-				Position = %bx SPC (%by + 24);
-				Extent = %boxW SPC 14;
-				Text = (%i == 0) ? "" : %this.stateSuffix(%i);
-				align = "center";
-			};
-			ThemeManager.setProfile(%cap, "labelProfile");
-			%this.editor.add(%cap);
-		}
-	}
+		class = "GuiProfileEditorBorderGrid";
+		Position = "0 0";
+		gridWidth = %w;
+		owner = %this;
+	};
+	%this.editor.add(%this.grid);
+	%this.grid.build();
+	%this.editor.setExtent(%w, 0);   // start collapsed
 }
 
 //-----------------------------------------------------------------------------
@@ -513,7 +426,7 @@ function GuiProfileEditorBorderSetter::chooseCustom(%this)
 	// Seed the custom border from whatever the slot currently shows.
 	if(isObject(%source) && %source != %border)
 	{
-		%this.copyBorderValues(%source, %border);
+		%this.grid.copyValues(%source, %border);
 	}
 
 	if(%this.slot $= "default")
@@ -531,54 +444,8 @@ function GuiProfileEditorBorderSetter::chooseCustom(%this)
 function GuiProfileEditorBorderSetter::showCustom(%this, %border)
 {
 	%this.customBorder = %border;
-	%this.refreshEditor(%border);
+	%this.grid.bind(%border);
 	%this.setEditorExpanded(true);
-}
-
-function GuiProfileEditorBorderSetter::refreshEditor(%this, %border)
-{
-	%this.populating = true;
-	%numFields = "margin" TAB "border" TAB "padding";
-	for(%f = 0; %f < 3; %f++)
-	{
-		%field = getField(%numFields, %f);
-		for(%i = 0; %i < 4; %i++)
-		{
-			%this.box[%field, %i].setText(%border.getFieldValue(%this.stateField(%field, %i)));
-		}
-	}
-	for(%i = 0; %i < 4; %i++)
-	{
-		%this.box["borderColor", %i].setColorI(%border.getFieldValue(%this.stateField("borderColor", %i)));
-	}
-	%this.populating = false;
-}
-
-function GuiProfileEditorBorderSetter::copyBorderValues(%this, %from, %to)
-{
-	%fields = "margin" TAB "border" TAB "borderColor" TAB "padding";
-	for(%f = 0; %f < 4; %f++)
-	{
-		%field = getField(%fields, %f);
-		for(%i = 0; %i < 4; %i++)
-		{
-			%name = %this.stateField(%field, %i);
-			%to.setFieldValue(%name, %from.getFieldValue(%name));
-		}
-	}
-}
-
-// A single input box committed a value into the custom border.
-function GuiProfileEditorBorderSetter::commitBox(%this, %box)
-{
-	if(%this.populating || !isObject(%this.customBorder))
-	{
-		return;
-	}
-	%name = %this.stateField(%box.borderField, %box.stateIndex);
-	%value = %box.isColor ? %box.getColorI() : %box.getText();
-	%this.customBorder.setFieldValue(%name, %value);
-	%this.commit();
 }
 
 //-----------------------------------------------------------------------------
@@ -591,7 +458,7 @@ function GuiProfileEditorBorderSetter::setEditorExpanded(%this, %open)
 	if(%open)
 	{
 		%this.editor.setVisible(true);
-		%this.editor.setExtent(%w, $BorderSetter::EditorHeight);
+		%this.editor.setExtent(%w, %this.grid.gridHeight);
 	}
 	else
 	{
@@ -608,6 +475,12 @@ function GuiProfileEditorBorderSetter::commit(%this)
 	}
 }
 
+// The shared grid notifies its owner after every edit of the custom border.
+function GuiProfileEditorBorderSetter::onBorderGridCommit(%this)
+{
+	%this.commit();
+}
+
 //-----------------------------------------------------------------------------
 // The dropdown forwards its selection to the owning setter.
 //-----------------------------------------------------------------------------
@@ -617,36 +490,5 @@ function GuiProfileEditorBorderDropDown::onSelect(%this, %index, %text, %id)
 	if(isObject(%this.setter))
 	{
 		%this.setter.onSelect(%text);
-	}
-}
-
-
-//-----------------------------------------------------------------------------
-// The numeric input boxes: click selects all, up/down arrows nudge by 1.
-//-----------------------------------------------------------------------------
-
-function GuiProfileEditorBorderInput::onTouchDown(%this)
-{
-	// The engine places the cursor on click; re-select so a click selects all.
-	%this.selectAllText();
-}
-
-function GuiProfileEditorBorderInput::onUpArrow(%this)
-{
-	%this.nudge(1);
-}
-
-function GuiProfileEditorBorderInput::onDownArrow(%this)
-{
-	%this.nudge(-1);
-}
-
-function GuiProfileEditorBorderInput::nudge(%this, %delta)
-{
-	%this.setText(%this.getText() + %delta);
-	%this.selectAllText();
-	if(isObject(%this.setter))
-	{
-		%this.setter.commitBox(%this);
 	}
 }
