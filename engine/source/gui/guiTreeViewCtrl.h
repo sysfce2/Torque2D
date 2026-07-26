@@ -76,12 +76,26 @@ private:
 	// wrong-typed item rather than trusting itemData is a GuiControl/SimGroup.
 	void reorderFromDrag();
 
+	// Keyboard navigation has to work in visible-row space. Collapsed branches
+	// stay in mItems with isVisible false and never render, so stepping raw
+	// indices - which is what the list box base class does - walks the selection
+	// into rows the user cannot see. These count the way onRender does.
+	S32 getAdjacentVisibleIndex(S32 fromIndex, S32 direction);
+	S32 getEdgeVisibleIndex(bool wantFirst);
+	// Moves (rather than extends) the selection, so arrows behave the same on
+	// multi-select trees as on single-select ones.
+	void setSelectedIndex(S32 index);
+	// Opens/closes a branch the way handleItemClick's triangle hit does, so the
+	// keyboard and the mouse leave the tree in the same state.
+	bool setItemExpanded(S32 index, bool isOpen);
+	bool itemHasBranches(S32 index);
+
 public:
 	// GuiControl
 	//bool onWake();
 	//void onSleep();
 	//void onPreRender();
-	//bool onKeyDown(const GuiEvent& event);
+	bool onKeyDown(const GuiEvent& event);
 	void onTouchDown(const GuiEvent& event);
 	//void onMiddleMouseDown(const GuiEvent& event);
 	//void onTouchMove(const GuiEvent& event);

@@ -72,6 +72,126 @@ void GuiTreeViewCtrl::initPersistFields()
 	addField("AllowReorder", TypeBool, Offset(mAllowReorder, GuiTreeViewCtrl));
 }
 
+S32 GuiTreeViewCtrl::getAdjacentVisibleIndex(S32 fromIndex, S32 direction)
+{
+	for (S32 i = fromIndex + direction; i >= 0 && i < mItems.size(); i += direction)
+	{
+		TreeItem* treeItem = dynamic_cast<TreeItem*>(mItems[i]);
+		if (!treeItem || treeItem->isVisible)
+			return i;
+	}
+	return -1;
+}
+
+S32 GuiTreeViewCtrl::getEdgeVisibleIndex(bool wantFirst)
+{
+	S32 found = -1;
+	for (S32 i = 0; i < mItems.size(); i++)
+	{
+		TreeItem* treeItem = dynamic_cast<TreeItem*>(mItems[i]);
+		if (!treeItem || treeItem->isVisible)
+		{
+			if (wantFirst)
+				return i;
+			found = i;
+		}
+	}
+	return found;
+}
+
+void GuiTreeViewCtrl::setSelectedIndex(S32 index)
+{
+	if (index < 0 || index >= mItems.size())
+		return;
+
+	// addSelection() only replaces the selection when the control is in
+	// single-select mode. Arrows move the selection rather than extending it,
+	// so drop what is there first on multi-select trees.
+	if (mMultipleSelections)
+		clearSelection();
+
+	// addSelection() scrolls the row into view for us.
+	addSelection(index);
+}
+
+bool GuiTreeViewCtrl::itemHasBranches(S32 index)
+{
+	if (index < 0 || index >= mItems.size())
+		return false;
+
+	TreeItem* treeItem = dynamic_cast<TreeItem*>(mItems[index]);
+	return treeItem && treeItem->branchList.size() > 0;
+}
+
+bool GuiTreeViewCtrl::setItemExpanded(S32 index, bool isOpen)
+{
+	if (index < 0 || index >= mItems.size())
+		return false;
+
+	TreeItem* treeItem = dynamic_cast<TreeItem*>(mItems[index]);
+	if (!treeItem || treeItem->branchList.size() == 0 || treeItem->isOpen == isOpen)
+		return false;
+
+	treeItem->isOpen = isOpen;
+	setBranchesVisible(treeItem, isOpen);
+	// The set of visible rows just changed; resize so the scroll range tracks
+	// the rows that actually render - same as the triangle click path.
+	updateSize();
+	setUpdate();
+	return true;
+}
+
+bool GuiTreeViewCtrl::onKeyDown(const GuiEvent& event)
+{
+	// A dead-end tree still swallows the key: bare arrows are registered as
+	// canvas accelerators (Nudge in the Gui Editor), and letting them through
+	// from a focused tree would nudge the control being edited instead.
+	if (!mVisible || !mActive || !mAwake || mItems.size() == 0)
+		return true;
+
+	S32 index = getSelectedItem();
+
+	switch (event.keyCode)
+	{
+	case KEY_UP:
+		// Nothing selected yet: start from the ends of the visible list.
+		setSelectedIndex(index == -1 ? getEdgeVisibleIndex(false)
+									 : getAdjacentVisibleIndex(index, -1));
+		return true;
+
+	case KEY_DOWN:
+		setSelectedIndex(index == -1 ? getEdgeVisibleIndex(true)
+									 : getAdjacentVisibleIndex(index, 1));
+		return true;
+
+	case KEY_LEFT:
+		// Collapse the branch, or step out to the trunk when there is nothing
+		// left to close.
+		if (index != -1 && !setItemExpanded(index, false))
+			setSelectedIndex(getItemTrunk(index));
+		return true;
+
+	case KEY_RIGHT:
+		// Open the branch, or step into it when it is already open.
+		if (index != -1 && !setItemExpanded(index, true) && itemHasBranches(index))
+			setSelectedIndex(getAdjacentVisibleIndex(index, 1));
+		return true;
+
+	case KEY_HOME:
+		setSelectedIndex(getEdgeVisibleIndex(true));
+		return true;
+
+	case KEY_END:
+		setSelectedIndex(getEdgeVisibleIndex(false));
+		return true;
+
+	default:
+		// RETURN / DELETE and everything else keep the list box behaviour; they
+		// hand script the raw mItems index, which is what the tree bindings use.
+		return Parent::onKeyDown(event);
+	};
+}
+
 void GuiTreeViewCtrl::onTouchDown(const GuiEvent& event)
 {
 	mTouchPoint = event.mousePoint;
