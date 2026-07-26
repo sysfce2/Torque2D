@@ -453,30 +453,29 @@ function GuiProfileEditorDialog::onTreeSelect(%this, %proxy)
 	// The Properties window holds three custom panes, one per node kind: a theme
 	// gets the theme form, a border gets the border form, and a profile gets the
 	// profile form.
-	if(%kind $= "theme")
+	if(%this.isHeaderKind(%kind))
 	{
-		%this.profileFormScroller.setVisible(false);
-		%this.profileForm.unbind();
-		%this.borderFormScroller.setVisible(false);
-		%this.borderForm.unbind();
+		// Header rows ("Gui Themes", "Profiles", "Borders", "Stand Alone") are
+		// grouping labels with nothing to edit. Every pane hides, so the window
+		// goes empty instead of leaving the last profile's rows on screen -
+		// unbind() only drops the binding, it does not clear what is drawn.
+		%this.hideMemberPanes();
+	}
+	else if(%kind $= "theme")
+	{
+		%this.hideMemberPanes();
 		%this.formScroller.setVisible(true);
 		%this.themeForm.bindTheme(%this.currentMember);
 	}
 	else if(%kind $= "border")
 	{
-		%this.profileFormScroller.setVisible(false);
-		%this.profileForm.unbind();
-		%this.formScroller.setVisible(false);
-		%this.themeForm.unbind();
+		%this.hideMemberPanes();
 		%this.borderFormScroller.setVisible(true);
 		%this.borderForm.bind(%this.currentMember, %proxy.treeLabel);
 	}
 	else
 	{
-		%this.formScroller.setVisible(false);
-		%this.themeForm.unbind();
-		%this.borderFormScroller.setVisible(false);
-		%this.borderForm.unbind();
+		%this.hideMemberPanes();
 		%this.profileFormScroller.setVisible(true);
 		%this.profileForm.bind(%this.currentMember, %kind);
 	}
@@ -577,6 +576,25 @@ function GuiProfileEditorDialog::doPreviewRefresh(%this)
 function GuiProfileEditorDialog::isProfileKind(%this, %kind)
 {
 	return %kind $= "category" || %kind $= "extra" || %kind $= "standalone";
+}
+
+// The tree's grouping rows: the "Gui Themes" root and the "Stand Alone",
+// "Profiles" and "Borders" folders. They carry no editable target.
+function GuiProfileEditorDialog::isHeaderKind(%this, %kind)
+{
+	return %kind $= "root" || %kind $= "folder";
+}
+
+// Drops all three member panes out of the Properties window. Each pane is also
+// unbound so it stops tracking whatever it last showed.
+function GuiProfileEditorDialog::hideMemberPanes(%this)
+{
+	%this.profileFormScroller.setVisible(false);
+	%this.profileForm.unbind();
+	%this.formScroller.setVisible(false);
+	%this.themeForm.unbind();
+	%this.borderFormScroller.setVisible(false);
+	%this.borderForm.unbind();
 }
 
 // Build the five setters into the pane chain: the default (no checkbox, full
