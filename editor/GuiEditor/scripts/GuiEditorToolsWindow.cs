@@ -14,6 +14,7 @@ function GuiEditorToolsWindow::onAdd(%this)
 	%this.add(%this.buttonBar);
 
 	%this.buttonBar.addButton("onProfileEditor", 49, "Open the Gui Profile Editor", "");
+	%this.buttonBar.addButton("onSetTheme", 46, "Set this Gui's theme", "");
 }
 
 function GuiEditorToolsWindow::onRemove(%this)
@@ -27,4 +28,9 @@ function GuiEditorToolsWindow::onRemove(%this)
 function GuiEditorToolsWindow::onProfileEditor(%this)
 {
 	GuiEditor.openProfileEditor();
+}
+
+function GuiEditorToolsWindow::onSetTheme(%this)
+{
+	GuiEditor.openThemeDialog();
 }

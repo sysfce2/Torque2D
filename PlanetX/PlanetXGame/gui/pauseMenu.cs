@@ -28,7 +28,7 @@ function PlanetXPauseMenu::build(%this)
 
 	%this.dialog = new GuiControl()
 	{
-		Profile = "GuiWindowProfile";
+		Profile = "PlanetXWindowProfile";
 		HorizSizing = "center";
 		VertSizing = "center";
 		Position = ((1024 - %w) / 2) SPC ((768 - %h) / 2);
@@ -38,6 +38,7 @@ function PlanetXPauseMenu::build(%this)
 	%heading = new GuiControl()
 	{
 		Profile = "PlanetXLabelProfile";
+		FontSizeAdjust = 2;
 		HorizSizing = "center";
 		VertSizing = "bottom";
 		Position = "0 30";
@@ -59,6 +60,7 @@ function PlanetXPauseMenu::addButton(%this, %y, %text, %action)
 	%btn = new GuiButtonCtrl()
 	{
 		Profile = "PlanetXButtonProfile";
+		FontSizeAdjust = 2;
 		HorizSizing = "center";
 		VertSizing = "bottom";
 		Position = "100" SPC %y;

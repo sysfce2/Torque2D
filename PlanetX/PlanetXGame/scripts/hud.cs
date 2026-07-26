@@ -10,20 +10,9 @@
 
 function PlanetXHud::onAdd(%this)
 {
-	// A coral-filled clone of the stock progress profile for the heat bar. It
-	// is a shared resource, so it persists across levels (created once).
-	if (!isObject(PlanetXHeatProfile))
-	{
-		new GuiControlProfile(PlanetXHeatProfile)
-		{
-			fillColor = "48 0 34 255";
-			fillColorHL = "234 72 72 255";
-			fillColorSL = "255 120 110 255";
-			borderDefault = GuiProgressBorderProfile;
-			borderBottom = GuiProgressDarkBorderProfile;
-			borderRight = GuiProgressDarkBorderProfile;
-		};
-	}
+	// The heat bar wears PlanetXHeatProfile - a coral Progress variant that lives
+	// in the theme as an extra profile, not built here, so it is editable in the
+	// Profile Editor and follows the palette like everything else.
 
 	// One panel holds every HUD widget; deleting it frees them all. It is
 	// full-screen and sits ON TOP of the scene window, so it MUST be mouse-
@@ -32,7 +21,7 @@ function PlanetXHud::onAdd(%this)
 	// with it off, the panel and all its children are skipped by findHitControl.
 	%this.panel = new GuiControl()
 	{
-		Profile = "GuiDefaultProfile";
+		Profile = "PlanetXEmptyProfile";
 		HorizSizing = "relative";
 		VertSizing = "relative";
 		Position = "0 0";
@@ -44,6 +33,7 @@ function PlanetXHud::onAdd(%this)
 	%hullLabel = new GuiControl()
 	{
 		Profile = "PlanetXLabelProfile";
+		FontSizeAdjust = 2;
 		HorizSizing = "right";
 		VertSizing = "bottom";
 		Position = "20 14";
@@ -54,7 +44,7 @@ function PlanetXHud::onAdd(%this)
 
 	%this.healthBar = new GuiProgressCtrl()
 	{
-		Profile = "GuiProgressProfile";
+		Profile = "PlanetXProgressProfile";
 		HorizSizing = "right";
 		VertSizing = "bottom";
 		Position = "116 20";
@@ -66,6 +56,7 @@ function PlanetXHud::onAdd(%this)
 	%this.heatLabel = new GuiControl()
 	{
 		Profile = "PlanetXLabelProfile";
+		FontSizeAdjust = 2;
 		HorizSizing = "right";
 		VertSizing = "bottom";
 		Position = "20 54";
@@ -92,6 +83,7 @@ function PlanetXHud::onAdd(%this)
 		%hullLabel2 = new GuiControl()
 		{
 			Profile = "PlanetXLabelProfile";
+			FontSizeAdjust = 2;
 			HorizSizing = "left";
 			VertSizing = "bottom";
 			Position = "914 14";
@@ -103,7 +95,7 @@ function PlanetXHud::onAdd(%this)
 
 		%this.healthBar2 = new GuiProgressCtrl()
 		{
-			Profile = "GuiProgressProfile";
+			Profile = "PlanetXProgressProfile";
 			HorizSizing = "left";
 			VertSizing = "bottom";
 			Position = "668 20";
@@ -115,6 +107,7 @@ function PlanetXHud::onAdd(%this)
 		%this.heatLabel2 = new GuiControl()
 		{
 			Profile = "PlanetXLabelProfile";
+			FontSizeAdjust = 2;
 			HorizSizing = "left";
 			VertSizing = "bottom";
 			Position = "914 54";
@@ -143,6 +136,7 @@ function PlanetXHud::onAdd(%this)
 	%levelLabel = new GuiControl()
 	{
 		Profile = "PlanetXLabelProfile";
+		FontSizeAdjust = 2;
 		HorizSizing = "center";
 		VertSizing = "bottom";
 		Position = "362 14";
@@ -154,7 +148,8 @@ function PlanetXHud::onAdd(%this)
 
 	%this.hint = new GuiControl()
 	{
-		Profile = "PlanetXTextProfile";
+		Profile = "PlanetXLabelProfile";
+		FontSizeAdjust = 2;
 		HorizSizing = "center";
 		VertSizing = "bottom";
 		Position = "262 56";

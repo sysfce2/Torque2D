@@ -309,6 +309,10 @@ public:
    static void initPersistFields();
    bool onAdd();
 
+   /// Creates GuiDefaultProfile and the GuiDefaultBorderProfile it wears. Called
+   /// once at start-up, right after Sim::init(), so the one name the GUI cannot
+   /// run without always resolves. See the definition for why the engine owns it.
+   static void createDefaultProfile();
 
    GuiBorderProfile* getLeftProfile();
    void setLeftProfile(GuiBorderProfile* prof);

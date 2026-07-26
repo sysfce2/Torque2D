@@ -733,14 +733,31 @@ ConsoleFunctionWithDocs(trace, ConsoleVoid, 2, 2, ( enable ))
 
 //----------------------------------------------------------------
 
-/*! Use the trace function to enable (or disable) function call tracing. If enabled, tracing will print a message every time a function is entered, showing what arguments it received, and it will print a message every time a function is exited, showing the return value (or last value of last statement) for that function.
-	@param enable A boolean value. If set to true, tracing is enabled, otherwise it is disabled.
+/*! Turns editor mode on or off. In editor mode, naming an object stashes the name
+	on the object instead of registering it, so that naming a control you are
+	editing does not create a global object name (see SimObject::assignName). The
+	Gui Editor turns this on while it is open.
+	@param enable A boolean value. If set to true, editor mode is enabled, otherwise it is disabled.
 	@return No return value
 */
 ConsoleFunctionWithDocs(editorMode, ConsoleVoid, 2, 2, (enable))
 {
 	TORQUE_UNUSED(argc);
 	gEvalState.editorModeOn = dAtob(argv[1]);
+}
+
+//----------------------------------------------------------------
+
+/*! Is editor mode on? Tools that need to create a genuinely named object while an
+	editor is open - one a saved file will refer to by name - check this so they can
+	step out of editor mode and put it back.
+	@return True when editor mode is on.
+	@see editorMode
+*/
+ConsoleFunctionWithDocs(isEditorMode, ConsoleBool, 1, 1, ())
+{
+	TORQUE_UNUSED(argc);
+	return gEvalState.editorModeOn;
 }
 
 //----------------------------------------------------------------

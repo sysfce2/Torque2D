@@ -573,7 +573,7 @@ function GuiProfileEditorPreview::showCategory(%this, %theme, %category, %member
 	}
 	else
 	{
-		// Default, Empty, Overlay, DragAndDrop, and anything new.
+		// Empty, Overlay, DragAndDrop, and anything new.
 		%this.addGenericSample(%member);
 	}
 

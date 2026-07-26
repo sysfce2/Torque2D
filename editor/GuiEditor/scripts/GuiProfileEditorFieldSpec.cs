@@ -47,7 +47,6 @@ function GuiProfileEditorFieldSpec::onAdd(%this)
 	// NA. Every entry is derived from the control's render path, not from the
 	// theme recipe -- a recipe stamps far more than its control ever reads.
 	%table =
-		"Default"            TAB "full"   TAB "1111" TAB "focus"                        NL
 		"Empty"              TAB "none"   TAB "1000" TAB ""                             NL
 		"Tooltip"            TAB "direct" TAB "1000" TAB ""                             NL
 		"Panel"              TAB "none"   TAB "1000" TAB ""                             NL

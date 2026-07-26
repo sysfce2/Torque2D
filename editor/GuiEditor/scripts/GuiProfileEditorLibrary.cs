@@ -122,10 +122,108 @@ function GuiProfileEditorLibrary::applyFontsPath(%this, %root)
 	}
 }
 
+// Every theme this editor knows about: the ones AppCore loaded at boot, which
+// stay in the Gui data group, and the ones this library read or created, which
+// live in its own group. A theme is in exactly one of the two, so the lists never
+// overlap.
+function GuiProfileEditorLibrary::getThemes(%this)
+{
+	%themes = %this.collectThemes(GuiDataGroup, "");
+	return %this.collectThemes(%this.themeGroup, %themes);
+}
+
+function GuiProfileEditorLibrary::collectThemes(%this, %group, %themes)
+{
+	if(!isObject(%group))
+	{
+		return %themes;
+	}
+
+	for(%i = 0; %i < %group.getCount(); %i++)
+	{
+		%object = %group.getObject(%i);
+		if(%object.getClassName() $= "GuiProfileTheme")
+		{
+			%themes = (%themes $= "") ? %object.getId() : (%themes SPC %object.getId());
+		}
+	}
+
+	return %themes;
+}
+
+// Find a profile by name among the ones this library knows about - the members
+// of every loaded theme and the stand-alone profiles.
+//
+// Needed because isObject/nameToID cannot always answer. The Gui Editor runs the
+// engine in editor mode, where SimObject::assignName stashes an object's name
+// instead of registering it, so that naming a control being edited does not
+// create a global. Anything created during an editor session is invisible to the
+// name dictionary until it has been saved and read back.
+function GuiProfileEditorLibrary::findProfileByName(%this, %name)
+{
+	if(%name $= "")
+	{
+		return 0;
+	}
+
+	%themes = %this.getThemes();
+	for(%i = 0; %i < getWordCount(%themes); %i++)
+	{
+		%theme = getWord(%themes, %i);
+		%categories = %theme.getCategoryNames();
+		for(%c = 0; %c < getWordCount(%categories); %c++)
+		{
+			%members = %theme.getProfiles(getWord(%categories, %c));
+			for(%m = 0; %m < getWordCount(%members); %m++)
+			{
+				%member = getWord(%members, %m);
+				if(%member.getName() $= %name)
+				{
+					return %member;
+				}
+			}
+		}
+	}
+
+	for(%i = 0; %i < %this.standaloneFolder.getCount(); %i++)
+	{
+		%profile = %this.standaloneFolder.getObject(%i).target;
+		if(isObject(%profile) && %profile.getName() $= %name)
+		{
+			return %profile;
+		}
+	}
+
+	return 0;
+}
+
+// Is this one of the stand-alone profiles the editor manages? Asked before an
+// apply overwrites a slot: a stand-alone profile is the supported alternative to
+// theming and is left alone unless the user says otherwise. A script profile -
+// GuiDefaultProfile, one of AppCore's - is not one of these and gets no such
+// protection.
+function GuiProfileEditorLibrary::isStandaloneProfile(%this, %profile)
+{
+	for(%i = 0; %i < %this.standaloneFolder.getCount(); %i++)
+	{
+		if(%this.standaloneFolder.getObject(%i).target == %profile)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 // Load any theme files not already loaded. Safe to call on every dialog
 // open: files belonging to live objects are skipped.
 function GuiProfileEditorLibrary::scanThemes(%this)
 {
+	// AppCore reads the project's themes at boot, and the editor loads the
+	// project's AppCore - so by the time this runs the objects usually exist
+	// already. Take them over rather than reading their files a second time,
+	// which would produce a second theme colliding on every member name.
+	%this.adoptLoadedThemes();
+
 	%path = %this.getThemesPath();
 	createPath(%path @ "/");
 
@@ -193,6 +291,48 @@ function GuiProfileEditorLibrary::scanThemes(%this)
 			warn("GuiProfileEditorLibrary::scanThemes: skipping " @ %file @ " - not a theme or profile.");
 			%object.delete();
 		}
+	}
+}
+
+// Take over the themes already in memory: give each one a proxy and a source
+// file so the tree, dirty tracking and saving treat it like any other, and mark
+// its file loaded so the scan above skips it.
+//
+// They are deliberately left in the Gui data group rather than moved into
+// themeGroup: a theme AppCore loaded belongs to the running project, and this
+// library's onRemove deletes what themeGroup holds.
+function GuiProfileEditorLibrary::adoptLoadedThemes(%this)
+{
+	if(!isObject(GuiDataGroup))
+	{
+		return;
+	}
+
+	for(%i = 0; %i < GuiDataGroup.getCount(); %i++)
+	{
+		%theme = GuiDataGroup.getObject(%i);
+		if(%theme.getClassName() !$= "GuiProfileTheme" || isObject(%this.themeProxy[%theme.getId()]))
+		{
+			continue;
+		}
+
+		if(%theme.getName() $= "")
+		{
+			warn("GuiProfileEditorLibrary::adoptLoadedThemes: skipping an unnamed theme.");
+			continue;
+		}
+
+		// Where the file is, rather than where it was read from. Nothing records
+		// the latter on the theme: a dynamic field would be written into the theme
+		// file itself (an absolute path, on whichever machine last loaded it), and
+		// saving names the file after the theme anyway - so the two only differ for
+		// a file somebody renamed by hand.
+		%file = pathConcat(%this.getThemesPath(), %theme.getName() @ ".taml");
+
+		%this.sourceFile[%theme.getId()] = %file;
+		%this.loadedFile[%file] = true;
+		%this.applyFontsPath(%theme);
+		%this.addThemeProxies(%theme);
 	}
 }
 
@@ -458,6 +598,7 @@ function GuiProfileEditorLibrary::revertAll(%this)
 
 		%file = %this.sourceFile[%root.getId()];
 		%this.removeProxiesFor(%root);
+		%this.releaseRoot(%root);
 		%root.delete();
 
 		if(%file !$= "" && isFile(%file))
@@ -497,6 +638,75 @@ function GuiProfileEditorLibrary::revertAll(%this)
 	}
 
 	%this.doomedFileCount = 0;
+
+	// The re-read themes are new objects; the Gui that was wearing the old ones
+	// was left on GuiDefaultProfile by releaseRoot and has to be put back.
+	if(isObject(%this.owner))
+	{
+		%this.owner.reattachTheme();
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Freeing a theme or profile the Gui under edit may be wearing.
+//
+// A control's profile field is a raw pointer that nothing updates when the
+// profile goes away, so anything about to delete one tells the owner first and
+// lets it move the affected controls onto GuiDefaultProfile.
+//-----------------------------------------------------------------------------
+
+function GuiProfileEditorLibrary::releaseRoot(%this, %root)
+{
+	if(!isObject(%this.owner))
+	{
+		return;
+	}
+
+	if(%root.getClassName() $= "GuiProfileTheme")
+	{
+		%this.owner.detachTheme(%root, 0);
+	}
+	else
+	{
+		%this.owner.detachTheme(0, %this.bundleProfile(%root));
+	}
+}
+
+function GuiProfileEditorLibrary::releaseProfile(%this, %profile)
+{
+	if(isObject(%this.owner))
+	{
+		%this.owner.detachTheme(0, %profile);
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Naming.
+//
+// A profile has to have a real, registered name: a Gui refers to its profile by
+// name, and that is what TAML writes on both sides. But the Gui Editor runs the
+// engine in editor mode, where SimObject::assignName stashes the name on the
+// object instead of registering it - which is right for a control being edited
+// (naming one should not create a global) and wrong for everything this library
+// makes. Step out of editor mode while naming, and put it back.
+//-----------------------------------------------------------------------------
+
+function GuiProfileEditorLibrary::beginNaming(%this)
+{
+	%this.namingLeftEditorMode = isEditorMode();
+	if(%this.namingLeftEditorMode)
+	{
+		editorMode(false);
+	}
+}
+
+function GuiProfileEditorLibrary::endNaming(%this)
+{
+	if(%this.namingLeftEditorMode)
+	{
+		editorMode(true);
+	}
+	%this.namingLeftEditorMode = false;
 }
 
 //-----------------------------------------------------------------------------
@@ -523,9 +733,13 @@ function GuiProfileEditorLibrary::createTheme(%this, %name)
 		return 0;
 	}
 
+	%this.beginNaming();
 	%theme = new GuiProfileTheme();
 	%this.themeGroup.add(%theme);
-	if(!%theme.renameTheme(%name))
+	%named = %theme.renameTheme(%name);
+	%this.endNaming();
+
+	if(!%named)
 	{
 		%theme.delete();
 		return 0;
@@ -553,12 +767,17 @@ function GuiProfileEditorLibrary::deleteTheme(%this, %theme)
 
 	%this.dirtySet.removeIfMember(%theme);
 	%this.removeProxiesFor(%theme);
+	%this.releaseRoot(%theme);
 	%theme.delete();
 }
 
 function GuiProfileEditorLibrary::renameThemeTo(%this, %theme, %name)
 {
-	if(!%theme.renameTheme(%name))
+	%this.beginNaming();
+	%renamed = %theme.renameTheme(%name);
+	%this.endNaming();
+
+	if(!%renamed)
 	{
 		return false;
 	}
@@ -595,7 +814,10 @@ function GuiProfileEditorLibrary::renameThemeTo(%this, %theme, %name)
 
 function GuiProfileEditorLibrary::createExtraProfile(%this, %theme, %category)
 {
+	%this.beginNaming();
 	%profile = %theme.createProfile(%category);
+	%this.endNaming();
+
 	if(!isObject(%profile))
 	{
 		return 0;
@@ -608,7 +830,15 @@ function GuiProfileEditorLibrary::createExtraProfile(%this, %theme, %category)
 
 function GuiProfileEditorLibrary::removeExtraProfile(%this, %theme, %profile)
 {
+	// Only an extra has a leaf, and only an extra can be removed - so this is also
+	// the test for "is about to be deleted", which is when the Gui has to let go
+	// of it.
 	%leaf = %this.extraProxy[%profile.getId()];
+	if(isObject(%leaf))
+	{
+		%this.releaseProfile(%profile);
+	}
+
 	%removed = %theme.removeProfile(%profile);
 	if(!%removed)
 	{
@@ -644,7 +874,10 @@ function GuiProfileEditorLibrary::createStandalone(%this, %name)
 		return 0;
 	}
 
+	%this.beginNaming();
 	%profile = new GuiControlProfile(%name);
+	%this.endNaming();
+
 	// Without this the profile carries no font directory, and the first control to
 	// wear it takes $GUI::fontCacheDirectory instead -- the EDITOR's font folder
 	// while the editor is loaded.

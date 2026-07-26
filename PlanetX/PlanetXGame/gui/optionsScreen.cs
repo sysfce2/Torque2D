@@ -46,23 +46,23 @@ function PlanetXOptionsScreen::build(%this)
 
 	%this.dialog = new GuiControl()
 	{
-		Profile = "GuiWindowProfile";
+		Profile = "PlanetXWindowProfile";
 		HorizSizing = "center";
 		VertSizing = "center";
 		Position = ((1024 - %w) / 2) SPC ((768 - %h) / 2);
 		Extent = %w SPC %h;
 	};
 
-	%this.addLabel(0, 16, %w, 40, "OPTIONS", "PlanetXLabelProfile", "center", "");
+	%this.addLabel(0, 16, %w, 40, "OPTIONS", "PlanetXLabelProfile", "center", "", 2);
 
 	// --- Sound ---------------------------------------------------------------
-	%this.addLabel(60, 64, 300, 26, "SOUND", "PlanetXCardTitleProfile", "left", "");
+	%this.addLabel(60, 64, 300, 26, "SOUND", "PlanetXLabelProfile", "left", "", 1.24);
 	%this.buildSlider(98,  "MASTER", "MasterVolume", "Audio.setMasterVolume($pref::PlanetX::MasterVolume);");
 	%this.buildSlider(136, "MUSIC",  "MusicVolume",  "Audio.SetMusicVolume($pref::PlanetX::MusicVolume);");
 	%this.buildSlider(174, "SFX",    "SoundVolume",  "Audio.SetSoundVolume($pref::PlanetX::SoundVolume);");
 
 	// --- Controls ------------------------------------------------------------
-	%this.addLabel(60, 214, 300, 26, "CONTROLS", "PlanetXCardTitleProfile", "left", "");
+	%this.addLabel(60, 214, 300, 26, "CONTROLS", "PlanetXLabelProfile", "left", "", 1.24);
 
 	%p1x = 70;
 	%p2x = 440;
@@ -87,6 +87,7 @@ function PlanetXOptionsScreen::build(%this)
 	%back = new GuiButtonCtrl()
 	{
 		Profile = "PlanetXButtonProfile";
+		FontSizeAdjust = 2;
 		HorizSizing = "center";
 		VertSizing = "bottom";
 		Position = ((%w - 260) / 2) SPC 588;
@@ -99,7 +100,10 @@ function PlanetXOptionsScreen::build(%this)
 
 /// Small helper: a plain text control added to the dialog. %color "" leaves the
 /// profile's default font color.
-function PlanetXOptionsScreen::addLabel(%this, %x, %y, %w, %h, %text, %profile, %align, %color)
+// %fontAdjust multiplies the profile's font size (blank = leave it alone). It is
+// how this screen gets menu-sized and card-sized text out of the theme's one
+// Label profile, instead of cloning the profile per size.
+function PlanetXOptionsScreen::addLabel(%this, %x, %y, %w, %h, %text, %profile, %align, %color, %fontAdjust)
 {
 	%label = new GuiControl()
 	{
@@ -111,6 +115,11 @@ function PlanetXOptionsScreen::addLabel(%this, %x, %y, %w, %h, %text, %profile, 
 		Text = %text;
 		Align = %align;
 	};
+
+	if (%fontAdjust !$= "")
+	{
+		%label.FontSizeAdjust = %fontAdjust;
+	}
 
 	if (%color !$= "")
 	{
@@ -127,13 +136,14 @@ function PlanetXOptionsScreen::addLabel(%this, %x, %y, %w, %h, %text, %profile, 
 /// module (AltCommand), and saves once on release (Command).
 function PlanetXOptionsScreen::buildSlider(%this, %y, %labelText, %prefKey, %audioCall)
 {
-	%this.addLabel(80, %y, 180, 26, %labelText, "PlanetXCardTitleProfile", "left", "");
+	%this.addLabel(80, %y, 180, 26, %labelText, "PlanetXLabelProfile", "left", "", 1.24);
 
-	// GuiButtonProfile (not GuiDefaultProfile, whose fill is transparent) so the
-	// procedurally-drawn thumb renders as a visible, opaque handle.
+	// The theme's Slider profile draws the groove; its thumb comes from the
+	// SliderThumb profile the control picks up by name.
 	%slider = new GuiSliderCtrl()
 	{
-		Profile = "GuiButtonProfile";
+		Profile = "PlanetXSliderProfile";
+		ThumbProfile = "PlanetXSliderThumbProfile";
 		HorizSizing = "right";
 		VertSizing = "bottom";
 		Position = "270" SPC (%y - 2);
@@ -152,7 +162,7 @@ function PlanetXOptionsScreen::buildSlider(%this, %y, %labelText, %prefKey, %aud
 /// A player column heading in that player's color.
 function PlanetXOptionsScreen::buildColumnHeader(%this, %colX, %text, %color)
 {
-	%this.addLabel(%colX + 8, 252, 300, 28, %text, "PlanetXCardTitleProfile", "left", %color);
+	%this.addLabel(%colX + 8, 252, 300, 28, %text, "PlanetXLabelProfile", "left", %color, 1.24);
 }
 
 /// A rebind row: the action label plus a button showing the current key. Clicking
@@ -162,11 +172,11 @@ function PlanetXOptionsScreen::buildKeyRow(%this, %colX, %y, %player, %action)
 	%prefKey = %player @ %action;
 	%actionLabel = strupr(%action);
 
-	%this.addLabel(%colX + 8, %y, 100, 30, %actionLabel, "PlanetXCardTitleProfile", "left", "");
+	%this.addLabel(%colX + 8, %y, 100, 30, %actionLabel, "PlanetXLabelProfile", "left", "", 1.24);
 
 	%btn = new GuiButtonCtrl()
 	{
-		Profile = "PlanetXCardButtonProfile";
+		Profile = "PlanetXButtonProfile";
 		HorizSizing = "right";
 		VertSizing = "bottom";
 		Position = (%colX + 118) SPC %y;
@@ -187,25 +197,18 @@ function PlanetXOptionsScreen::buildKeyRow(%this, %colX, %y, %player, %action)
 /// tears this overlay down when it finishes (keyCapture.cs).
 function PlanetXOptionsScreen::captureKey(%this, %button)
 {
-	// GuiInputCtrl only becomes the keyboard first responder if its profile allows
-	// key focus - GuiControl::setFirstResponder is gated on canKeyFocus, which is
-	// off in the stock profiles - and the engine's fallback GuiInputCtrlProfile does
-	// not exist in this project. Without this the capture control never receives keys
-	// and the "press a key" prompt can't be answered or dismissed. Built once, kept.
-	if (!isObject(PlanetXCaptureProfile))
-	{
-		%profile = new GuiControlProfile();
-		%profile.assignFieldsFrom(GuiDefaultProfile);
-		%profile.canKeyFocus = true;
-		%profile.tab = true;
-		%profile.setName("PlanetXCaptureProfile");
-	}
+	// The capture control wears PlanetXCaptureProfile, an Empty variant in the
+	// theme with canKeyFocus and tab turned on. GuiInputCtrl only becomes the
+	// keyboard first responder if its profile allows key focus
+	// (GuiControl::setFirstResponder is gated on canKeyFocus, which is off in
+	// every other profile), so without it the "press a key" prompt can never be
+	// answered or dismissed.
 
 	// Full-screen modal layer: blocks the options controls beneath and holds the
 	// prompt. Transparent itself - the panel inside carries the visible box.
 	%overlay = new GuiControl()
 	{
-		Profile = "GuiDefaultProfile";
+		Profile = "PlanetXEmptyProfile";
 		HorizSizing = "relative";
 		VertSizing = "relative";
 		Position = "0 0";
@@ -214,7 +217,7 @@ function PlanetXOptionsScreen::captureKey(%this, %button)
 
 	%panel = new GuiControl()
 	{
-		Profile = "GuiWindowProfile";
+		Profile = "PlanetXWindowProfile";
 		HorizSizing = "center";
 		VertSizing = "center";
 		Position = "312 324";
@@ -225,6 +228,7 @@ function PlanetXOptionsScreen::captureKey(%this, %button)
 	%prompt = new GuiControl()
 	{
 		Profile = "PlanetXLabelProfile";
+		FontSizeAdjust = 2;
 		HorizSizing = "center";
 		VertSizing = "center";
 		Position = "20 24";
@@ -270,11 +274,11 @@ function PlanetXOptionsScreen::closeCapture(%this, %overlay)
 /// The Mouse/Automatic aim toggle for a player.
 function PlanetXOptionsScreen::buildAimToggle(%this, %colX, %y, %player)
 {
-	%this.addLabel(%colX + 8, %y, 100, 30, "AIM", "PlanetXCardTitleProfile", "left", "");
+	%this.addLabel(%colX + 8, %y, 100, 30, "AIM", "PlanetXLabelProfile", "left", "", 1.24);
 
 	%btn = new GuiButtonCtrl()
 	{
-		Profile = "PlanetXCardButtonProfile";
+		Profile = "PlanetXButtonProfile";
 		HorizSizing = "right";
 		VertSizing = "bottom";
 		Position = (%colX + 118) SPC %y;

@@ -64,7 +64,7 @@ function PlanetXUpgradeScreen::build(%this)
 
 	%this.dialog = new GuiControl()
 	{
-		Profile = "GuiWindowProfile";
+		Profile = "PlanetXWindowProfile";
 		HorizSizing = "center";
 		VertSizing = "center";
 		Position = ((1024 - %dialogW) / 2) SPC ((768 - %dialogH) / 2);
@@ -74,6 +74,7 @@ function PlanetXUpgradeScreen::build(%this)
 	%heading = new GuiControl()
 	{
 		Profile = "PlanetXLabelProfile";
+		FontSizeAdjust = 2;
 		HorizSizing = "center";
 		VertSizing = "bottom";
 		Position = "0 24";
@@ -88,7 +89,8 @@ function PlanetXUpgradeScreen::build(%this)
 	// Prompt line: whose turn it is, or that they are ready to deploy.
 	%this.prompt = new GuiControl()
 	{
-		Profile = "PlanetXCardTitleProfile";
+		Profile = "PlanetXLabelProfile";
+		FontSizeAdjust = 1.24;
 		HorizSizing = "center";
 		VertSizing = "bottom";
 		Position = "0 74";
@@ -108,6 +110,7 @@ function PlanetXUpgradeScreen::build(%this)
 	%this.deployButton = new GuiButtonCtrl()
 	{
 		Profile = "PlanetXButtonProfile";
+		FontSizeAdjust = 2;
 		HorizSizing = "center";
 		VertSizing = "bottom";
 		Position = ((%dialogW - 280) / 2) SPC 530;
@@ -127,7 +130,7 @@ function PlanetXUpgradeScreen::buildCard(%this, %i, %key, %x, %y, %w, %h)
 
 	%card = new GuiControl()
 	{
-		Profile = "GuiDefaultProfile";
+		Profile = "PlanetXEmptyProfile";
 		HorizSizing = "right";
 		VertSizing = "bottom";
 		Position = %x SPC %y;
@@ -140,7 +143,7 @@ function PlanetXUpgradeScreen::buildCard(%this, %i, %key, %x, %y, %w, %h)
 	%imgH = 224;
 	%img = new GuiSpriteCtrl()
 	{
-		Profile = "GuiDefaultProfile";
+		Profile = "PlanetXEmptyProfile";
 		HorizSizing = "right";
 		VertSizing = "bottom";
 		Position = ((%w - %imgW) / 2) SPC 8;
@@ -157,7 +160,8 @@ function PlanetXUpgradeScreen::buildCard(%this, %i, %key, %x, %y, %w, %h)
 	// Title wraps to a second line for the longer names.
 	%title = new GuiControl()
 	{
-		Profile = "PlanetXCardTitleProfile";
+		Profile = "PlanetXLabelProfile";
+		FontSizeAdjust = 1.24;
 		HorizSizing = "right";
 		VertSizing = "bottom";
 		Position = "6 236";
@@ -170,7 +174,7 @@ function PlanetXUpgradeScreen::buildCard(%this, %i, %key, %x, %y, %w, %h)
 
 	%desc = new GuiControl()
 	{
-		Profile = "PlanetXCardBodyProfile";
+		Profile = "PlanetXLabelProfile";
 		HorizSizing = "right";
 		VertSizing = "bottom";
 		Position = "12 290";
@@ -183,7 +187,7 @@ function PlanetXUpgradeScreen::buildCard(%this, %i, %key, %x, %y, %w, %h)
 
 	%btn = new GuiButtonCtrl()
 	{
-		Profile = "PlanetXCardButtonProfile";
+		Profile = "PlanetXButtonProfile";
 		HorizSizing = "right";
 		VertSizing = "bottom";
 		Position = ((%w - 176) / 2) SPC 366;

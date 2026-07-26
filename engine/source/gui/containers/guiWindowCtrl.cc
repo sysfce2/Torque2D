@@ -42,7 +42,10 @@ GuiWindowCtrl::GuiWindowCtrl(void)
    mCanMinimize = true;
    mCanMaximize = true;
 
-   mTitleHeight = 20;
+   // Tall enough for a themed title bar: a theme's Window profile carries the
+   // theme's font at its title size plus the chrome border's margin and padding,
+   // and 20 clipped it. A window that wants a tighter bar still sets its own.
+   mTitleHeight = 28;
    mResizeRightWidth = 10;
    mResizeBottomHeight = 10;
    mDepressed = false;

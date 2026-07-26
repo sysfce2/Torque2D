@@ -47,8 +47,30 @@ function GuiEditor::create( %this )
     exec("./scripts/GuiProfileEditorPreview.cs");
     exec("./scripts/GuiProfileEditorNameDialog.cs");
     exec("./scripts/GuiProfileEditorConfirmDialog.cs");
+    exec("./scripts/GuiEditorThemeApplier.cs");
+    exec("./scripts/GuiEditorThemeDialog.cs");
 
 	%this.guiPage = EditorCore.RegisterEditor("Gui Editor", %this);
+
+    // The theme library and the applier are both wanted before the Profile
+    // Editor is ever opened - the Set Theme button and every newly dropped
+    // control go through them - so they are built with the editor rather than on
+    // demand. The library also outlives each Profile Editor session so theme
+    // member profiles stay alive for the Guis wearing them.
+    %this.themeLibrary = new ScriptObject()
+    {
+        class = "GuiProfileEditorLibrary";
+        owner = %this;
+    };
+
+    // rootContainer is filled in below, once the simulated canvas exists: the
+    // applier compares against it to tell a Gui's root controls (which take the
+    // Panel profile) from everything nested inside them.
+    %this.themeApplier = new ScriptObject()
+    {
+        class = "GuiEditorThemeApplier";
+        library = %this.themeLibrary;
+    };
 
     %this.content = %this.createFrameSet();
 
@@ -186,6 +208,7 @@ function GuiEditor::create( %this )
         class = "SimulatedCanvas";
     };
     %this.background.add(%this.rootGui);
+    %this.themeApplier.rootContainer = %this.rootGui;
     %this.brain.extent = %this.background.getExtent();
     %this.background.add(%this.brain);
     %this.fileName = "";
@@ -279,6 +302,11 @@ function GuiEditor::destroy( %this )
 	// at exit with no obvious cause. Close the dialog first.
 	%this.closeProfileEditor();
 
+	if(isObject(%this.themeApplier))
+	{
+		%this.themeApplier.delete();
+	}
+
 	if(isObject(%this.themeLibrary))
 	{
 		%this.themeLibrary.delete();
@@ -287,6 +315,13 @@ function GuiEditor::destroy( %this )
 
 function GuiEditor::open(%this, %content)
 {
+    // First time in: pick up the project's theme. Not done at create time -
+    // the editor registers before a project's AppCore has loaded its themes.
+    if(%this.themeName $= "")
+    {
+        %this.adoptTheme("");
+    }
+
     EditorCore.menuBar.setMenuActive("File", true);
     //EditorCore.menuBar.setMenuActive("Edit", true); //These features still need development
     EditorCore.menuBar.setMenuActive("Layout", true);
@@ -314,6 +349,11 @@ function GuiEditor::NewGui(%this)
     %this.module = "";
     %this.brain.clearSelection();
     %this.explorerWindow.tree.refresh();
+
+    // A new Gui joins the theme this session is working in, so the first control
+    // dropped into it is already themed.
+    %theme = %this.defaultTheme();
+    %this.themeName = isObject(%theme) ? %theme.getName() : "";
 }
 
 function GuiEditor::OpenGui(%this)
@@ -372,6 +412,10 @@ function GuiEditor::DisplayGuiContent(%this, %content, %includesSimulatedCanvas)
     %this.rootGui.deleteObjects();
     %this.brain.clearSelection();
 
+    // Read off the root before it is unpacked - in the simulated-canvas case the
+    // object carrying the field is deleted a few lines down.
+    %recordedTheme = %content.guiTheme;
+
     if(%includesSimulatedCanvas)
     {
         %count = %content.getCount();
@@ -387,12 +431,14 @@ function GuiEditor::DisplayGuiContent(%this, %content, %includesSimulatedCanvas)
         %this.explorerWindow.tree.refresh();
         %this.brain.onSelect(%this.rootGui.getObject(0));
     }
-    else 
+    else
     {
         %this.rootGui.add(%content);
         %this.explorerWindow.tree.refresh();
         %this.brain.onSelect(%content);
     }
+
+    %this.adoptTheme(%recordedTheme);
 }
 
 function GuiEditor::SaveGui(%this)
@@ -428,18 +474,14 @@ function GuiEditor::SaveGuiAs(%this)
 	Canvas.pushDialog(%dialog);
 }
 
+function GuiEditor::getThemeLibrary(%this)
+{
+	%this.themeLibrary.scanThemes();
+	return %this.themeLibrary;
+}
+
 function GuiEditor::openProfileEditor(%this)
 {
-	// The theme library outlives the dialog so theme member profiles stay
-	// alive for the guis (and profile dropdowns) that reference them.
-	if(!isObject(%this.themeLibrary))
-	{
-		%this.themeLibrary = new ScriptObject()
-		{
-			class = "GuiProfileEditorLibrary";
-		};
-	}
-
 	%canvasSize = Canvas.getExtent();
 	%width = getWord(%canvasSize, 0) - 80;
 	%height = getWord(%canvasSize, 1) - 80;
@@ -457,6 +499,137 @@ function GuiEditor::openProfileEditor(%this)
 	%this.profileEditorDialog = %dialog;
 
 	Canvas.pushDialog(%dialog);
+}
+
+//THEMES-----------------------------------------------------------------------
+//
+// A Gui belongs to a theme. Setting one re-profiles every control in the
+// document by category, a newly dropped control joins it on arrival, and the
+// theme's name is saved with the Gui so reopening it lands back where it was.
+// The intent is that profiles are something a developer chooses once, in the
+// Profile Editor, and rarely thinks about again.
+//-----------------------------------------------------------------------------
+
+function GuiEditor::openThemeDialog(%this)
+{
+	%width = 420;
+	%height = 200;
+	%dialog = new GuiControl()
+	{
+		class = "GuiEditorThemeDialog";
+		superclass = "EditorDialog";
+		dialogSize = (%width + 8) SPC (%height + 8);
+		dialogCanClose = true;
+		dialogText = "Set Gui Theme";
+	};
+	%dialog.init(%width, %height);
+
+	Canvas.pushDialog(%dialog);
+}
+
+// Put %theme on the whole document. The simulated canvas is skipped: it is the
+// editor's stage, not part of the Gui being authored.
+function GuiEditor::setTheme(%this, %theme, %overrideStandalone)
+{
+	if(!isObject(%theme))
+	{
+		return;
+	}
+
+	%this.themeName = %theme.getName();
+	%this.lastThemeName = %this.themeName;
+
+	%changed = %this.themeApplier.applyToChildren(%this.rootGui, %theme, %overrideStandalone);
+	%this.explorerWindow.tree.refresh();
+
+	echo("Gui Editor: " @ %this.themeName @ " applied to " @ %changed @ " profile slot(s).");
+}
+
+// The theme a new Gui starts on: the last one used this session, falling back to
+// whatever the project has. There is no preferences file to remember it across
+// runs, and none is needed - an existing Gui carries its own theme.
+function GuiEditor::defaultTheme(%this)
+{
+	%themes = %this.getThemeLibrary().getThemes();
+
+	if(%this.lastThemeName !$= "")
+	{
+		for(%i = 0; %i < getWordCount(%themes); %i++)
+		{
+			%theme = getWord(%themes, %i);
+			if(%theme.getName() $= %this.lastThemeName)
+			{
+				return %theme;
+			}
+		}
+	}
+
+	return (getWordCount(%themes) > 0) ? getWord(%themes, 0) : 0;
+}
+
+function GuiEditor::themeByName(%this, %name)
+{
+	if(%name $= "")
+	{
+		return 0;
+	}
+
+	%themes = %this.getThemeLibrary().getThemes();
+	for(%i = 0; %i < getWordCount(%themes); %i++)
+	{
+		%theme = getWord(%themes, %i);
+		if(%theme.getName() $= %name)
+		{
+			return %theme;
+		}
+	}
+
+	return 0;
+}
+
+// Work out which theme a freshly opened Gui is on. The name recorded when it was
+// saved wins; a Gui written before that field existed, or authored by hand, is
+// judged by the profiles its controls wear; failing both, it joins the theme the
+// session is already working in.
+function GuiEditor::adoptTheme(%this, %recordedName)
+{
+	%theme = %this.themeByName(%recordedName);
+
+	if(!isObject(%theme))
+	{
+		%theme = %this.themeApplier.inferTheme(%this.rootGui);
+	}
+
+	if(!isObject(%theme))
+	{
+		%theme = %this.defaultTheme();
+	}
+
+	%this.themeName = isObject(%theme) ? %theme.getName() : "";
+	if(%this.themeName !$= "")
+	{
+		%this.lastThemeName = %this.themeName;
+	}
+}
+
+// Called by the theme library before it frees a theme or profile the document
+// might be wearing. A control's profile field is a raw pointer, so it has to be
+// moved off the doomed profile before the delete rather than after.
+function GuiEditor::detachTheme(%this, %theme, %profile)
+{
+	%this.themeApplier.detach(%this.rootGui, %theme, %profile);
+}
+
+// The other half: after a revert has re-read the theme files, the document's
+// theme is a new object with the same name, so put it back on.
+function GuiEditor::reattachTheme(%this)
+{
+	%theme = %this.themeByName(%this.themeName);
+	if(isObject(%theme))
+	{
+		%this.themeApplier.applyToChildren(%this.rootGui, %theme, false);
+		%this.explorerWindow.tree.refresh();
+	}
 }
 
 // Tear the Profile Editor dialog down synchronously (not via the usual deferred
@@ -479,6 +652,16 @@ function GuiEditor::closeProfileEditor(%this)
 
 function GuiEditor::SaveCore(%this, %filePath, %formatIndex, %folder, %module)
 {
+    // Record the theme on whichever object is about to be written, so reopening
+    // the Gui does not have to guess. It means nothing to the game.
+    //
+    // canSaveDynamicFields has to be turned on for it to survive the trip: every
+    // GuiControl clears that flag in its constructor (guiControl.cc), so dynamic
+    // fields on controls are dropped by both writers by default.
+    %root = (%this.rootGui.getCount() == 1) ? %this.rootGui.getObject(0) : %this.rootGui;
+    %root.canSaveDynamicFields = true;
+    %root.guiTheme = %this.themeName;
+
     if(%formatIndex == 0)
     {
         %fo = new FileObject();

@@ -125,7 +125,11 @@ bool initializeLibraries()
 
     // Create the stock colors.
     StockColor::create();
-    
+
+    // Create GuiDefaultProfile. Every control falls back to it by name, so the
+    // engine owns it rather than trusting a script module to define one.
+    GuiControlProfile::createDefaultProfile();
+
     // Every target — desktop, iOS, Emscripten AND Android — boots the SAME
     // desktop-class editor (main.cs), which is sized for the 3MB frame-allocator
     // budget. The historical 256/512KB mobile limit (a 2013, ~256MB-RAM-era iPhone

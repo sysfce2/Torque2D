@@ -527,14 +527,15 @@ TEST( GuiProfileThemeTests, EmptyProfileIsTransparentAndUsesTheEmptyBorder )
 
     GuiControlProfile* empty = theme->getProfile( StringTable->insert( "Empty" ) );
     ASSERT_TRUE( empty != NULL );
-    // Empty shares Default's transparent fill but must wear the Empty border so
-    // it never draws an edge (Default keeps Rimmed).
+    // Empty keeps the base recipe's transparent fill but must wear the Empty
+    // border so it never draws an edge (the base recipe leaves Rimmed on, which
+    // Panel below still inherits).
     ASSERT_TRUE( empty->mFillColor == ColorI( 0, 0, 0, 0 ) );
     ASSERT_EQ( empty->mBorderDefault, theme->getBorder( StringTable->insert( "Empty" ) ) );
 
-    GuiControlProfile* deflt = theme->getProfile( StringTable->insert( "Default" ) );
-    ASSERT_TRUE( deflt != NULL );
-    ASSERT_EQ( deflt->mBorderDefault, theme->getBorder( StringTable->insert( "Rimmed" ) ) );
+    // There is no Default category: a control with nothing better to wear takes
+    // Empty, and the engine's own GuiDefaultProfile is the floor beneath that.
+    ASSERT_TRUE( theme->getProfile( StringTable->insert( "Default" ) ) == NULL );
 
     theme->deleteObject();
 
@@ -736,10 +737,12 @@ TEST( GuiProfileThemeTests, RenameThemeRenamesThemeAndDefaultMembers )
     // Defaults follow the <ThemeName><Suffix> pattern; old names are freed.
     ASSERT_EQ( (SimObject*)theme->getProfile( StringTable->insert( "Button" ) ),
                Sim::findObject( "UnitTestThemeBButtonProfile" ) );
-    ASSERT_EQ( (SimObject*)theme->getBorder( StringTable->insert( "Default" ) ),
-               Sim::findObject( "UnitTestThemeBDefaultBorder" ) );
+    // "Default" is not a border category either, so this asked nothing of the
+    // rename; Rimmed is the border every base-recipe profile actually wears.
+    ASSERT_EQ( (SimObject*)theme->getBorder( StringTable->insert( "Rimmed" ) ),
+               Sim::findObject( "UnitTestThemeBRimmedBorder" ) );
     ASSERT_TRUE( Sim::findObject( "UnitTestThemeAButtonProfile" ) == NULL );
-    ASSERT_TRUE( Sim::findObject( "UnitTestThemeADefaultBorder" ) == NULL );
+    ASSERT_TRUE( Sim::findObject( "UnitTestThemeARimmedBorder" ) == NULL );
 
     theme->deleteObject();
 
@@ -1127,22 +1130,23 @@ TEST( GuiProfileThemeTests, FreshlyStampedProfileResolvesFallbackSidesToDefaultB
     GuiProfileTheme* theme = new GuiProfileTheme();
     theme->registerObject( "UnitTestTheme" );
 
-    // Default: borderDefault is Rimmed and every side is empty, so all four sides
-    // must resolve to the Rimmed border with no field writes at all. (Empty is no
-    // longer usable here since its recipe now wears the Empty border on purpose.)
-    GuiControlProfile* deflt = theme->getProfile( StringTable->insert( "Default" ) );
-    ASSERT_TRUE( deflt != NULL );
+    // Label adds nothing to the base recipe but an alignment, so borderDefault is
+    // Rimmed and every side is empty: all four sides must resolve to the Rimmed
+    // border with no field writes at all. (Empty is no longer usable here since
+    // its recipe wears the Empty border on purpose.)
+    GuiControlProfile* label = theme->getProfile( StringTable->insert( "Label" ) );
+    ASSERT_TRUE( label != NULL );
     GuiBorderProfile* rimmed = theme->getBorder( StringTable->insert( "Rimmed" ) );
-    ASSERT_EQ( deflt->mBorderDefault, rimmed );
-    ASSERT_EQ( deflt->getLeftBorder(), rimmed )
+    ASSERT_EQ( label->mBorderDefault, rimmed );
+    ASSERT_EQ( label->getLeftBorder(), rimmed )
         << "A fallback side must be resolved by the stamp, not left NULL.";
-    ASSERT_EQ( deflt->getRightBorder(), rimmed );
-    ASSERT_EQ( deflt->getTopBorder(), rimmed );
-    ASSERT_EQ( deflt->getBottomBorder(), rimmed );
+    ASSERT_EQ( label->getRightBorder(), rimmed );
+    ASSERT_EQ( label->getTopBorder(), rimmed );
+    ASSERT_EQ( label->getBottomBorder(), rimmed );
 
     // ScrollThumb mixes fallback and named sides, and its recipe changes the
-    // default border (stampDefaultProfile sets Rimmed, then the ScrollThumb
-    // recipe sets its bevel): the fallback sides must track the *final* default.
+    // default border (the base recipe sets Rimmed, then the ScrollThumb recipe
+    // sets its bevel): the fallback sides must track the *final* default.
     GuiControlProfile* thumb = theme->getProfile( StringTable->insert( "ScrollThumb" ) );
     GuiBorderProfile* bevel = theme->getBorder( StringTable->insert( "BevelLight" ) );
     GuiBorderProfile* bevelDark = theme->getBorder( StringTable->insert( "BevelDark" ) );

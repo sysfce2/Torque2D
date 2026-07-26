@@ -121,52 +121,20 @@ function EditorCore::createGuiProfiles(%this)
 	%this.SetProfileColors();
 	%this.SetProfileFont();
 
-	//Changing the default gui profile and border profile might cause engine instability! Consider making a new child profile instead.
-	%this.SafeCreateNamedObject("GuiDefaultBorderProfile", new GuiBorderProfile()
-	{
-		// Default margin
-		margin = 0;
-		marginHL = 0;
-		marginSL = 0;
-		marginNA = 0;
-		//Default Border
-		border = 0;
-		borderHL = 0;
-		borderSL = 0;
-		borderNA = 0;
-		//Default border color
-		borderColor   = %this.color1;
-	    borderColorHL = %this.AdjustColorValue(%this.color1, 10);
-	    borderColorSL = %this.AdjustColorValue(%this.color1, 10);
-	    borderColorNA = %this.SetColorAlpha(%this.color1, 100);
-		//Default Padding
-		padding = 0;
-		paddingHL = 0;
-		paddingSL = 0;
-		paddingNA = 0;
-		//Default underfill
-		underfill = true;
-	});
+	// GuiDefaultProfile and GuiDefaultBorderProfile are not created here - the
+	// engine makes them at start-up (GuiControlProfile::createDefaultProfile), so
+	// the name every control falls back to can never be missing. What is left is
+	// tuning them for the editor, and that still matters: a new profile copies its
+	// unset fields from these two, and 28 of BaseTheme's profiles name no font of
+	// their own, so this is where the editor's face and border colors come from.
+	GuiDefaultBorderProfile.borderColor   = %this.color1;
+	GuiDefaultBorderProfile.borderColorHL = %this.AdjustColorValue(%this.color1, 10);
+	GuiDefaultBorderProfile.borderColorSL = %this.AdjustColorValue(%this.color1, 10);
+	GuiDefaultBorderProfile.borderColorNA = %this.SetColorAlpha(%this.color1, 100);
 
-	//See the warning above! You should avoid changing this.
-	%this.SafeCreateNamedObject("GuiDefaultProfile", new GuiControlProfile()
-	{
-	    // fill color
-	    fillColor = "0 0 0 0";
-
-	    // font
-	    fontType = %this.platformFontType;
-		fontDirectory = %this.platformFontDirectory;
-	    fontSize = %this.platformFontSize;
-	    fontColor = "255 255 255 255";
-		align = center;
-		vAlign = middle;
-
-		cursorColor = "0 0 0 255";
-
-		borderDefault = GuiDefaultBorderProfile;
-		category = "default";
-	});
+	GuiDefaultProfile.fontType = %this.platformFontType;
+	GuiDefaultProfile.fontDirectory = %this.platformFontDirectory;
+	GuiDefaultProfile.fontSize = %this.platformFontSize;
 
 	%this.SafeCreateNamedObject("GuiBrightBorderProfile", new GuiBorderProfile()
 	{

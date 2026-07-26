@@ -472,6 +472,72 @@ GuiControlProfile::GuiControlProfile(void) :
    }
 }
 
+// GuiDefaultProfile is not an ordinary profile. GuiControl::onWake falls back to
+// it by name, around twenty control constructors setField() it onto themselves
+// before script ever sees them, and the constructor above seeds every new profile
+// from it. Yet until now it was a script object: three modules each created one
+// (EditorCore, AppCore, Sandbox), the last loaded winning, and a project that
+// deleted it - or never defined it - left the GUI with a NULL profile, which is an
+// assert in a debug build and a null dereference in a release one.
+//
+// So the engine creates it, once, at start-up. Script may still tune it: both
+// EditorCore and Sandbox assign onto the object they find rather than creating
+// their own, which is how the editor keeps seeding its font face through the
+// constructor copy above. Nothing has to create it, and nothing can lose it.
+//
+// The values here are a deliberately plain floor - transparent, white text, a face
+// every platform can substitute for - because a control that lands on this profile
+// has fallen through every other lookup. A project's real look comes from its
+// GuiProfileTheme.
+void GuiControlProfile::createDefaultProfile()
+{
+   GuiBorderProfile* border = dynamic_cast<GuiBorderProfile*>(Sim::findObject("GuiDefaultBorderProfile"));
+   if (border == NULL)
+   {
+      border = new GuiBorderProfile();
+      border->mUnderfill = true;
+      if (!border->registerObject("GuiDefaultBorderProfile"))
+      {
+         delete border;
+         return;
+      }
+   }
+
+   if (Sim::findObject("GuiDefaultProfile") != NULL)
+      return;
+
+   GuiControlProfile* profile = new GuiControlProfile();
+
+   // ColorI's default constructor leaves its channels uninitialized, and the
+   // constructor above only sets the base font color, so spell out the whole
+   // array here: this is the profile every later one copies from.
+   profile->mFontColors[BaseColor].set(255, 255, 255, 255);
+   profile->mFontColors[ColorHL].set(255, 255, 255, 255);
+   profile->mFontColors[ColorNA].set(255, 255, 255, 128);
+   profile->mFontColors[ColorSL].set(255, 255, 255, 255);
+   profile->mFontColors[ColorLink].set(100, 160, 255, 255);
+   profile->mFontColors[ColorLinkHL].set(140, 190, 255, 255);
+   profile->mFontColors[ColorTextSL].set(0, 0, 0, 255);
+   profile->mFontColors[ColorUser0].set(255, 255, 255, 255);
+   profile->mFontColors[ColorUser1].set(255, 255, 255, 255);
+   profile->mFontColors[ColorUser2].set(255, 255, 255, 255);
+
+   // Arial rather than nothing: an empty face name yields a NULL font and text
+   // that silently fails to draw, which is a miserable thing to debug. GFont's
+   // fallback chain maps it onto Helvetica where Arial is absent.
+   profile->mFontType = StringTable->insert("Arial");
+   profile->mFontSize = 12;
+   profile->mFontCharset = TGE_ANSI_CHARSET;
+
+   profile->mAlignment = AlignmentType::CenterAlign;
+   profile->mVAlignment = VertAlignmentType::MiddleVAlign;
+   profile->mCursorColor.set(0, 0, 0, 255);
+   profile->mBorderDefault = border;
+
+   if (!profile->registerObject("GuiDefaultProfile"))
+      delete profile;
+}
+
 GuiControlProfile::~GuiControlProfile()
 {
 	// Still worn on the way out. Every control holding this profile now has a

@@ -715,15 +715,23 @@ function GuiProfileEditorDialog::borderObjectFor(%this, %container, %category)
 }
 
 // Create a single-use custom border owned by the container (the caller seeds it).
+// Named outside editor mode, like everything else the library names, so the name
+// a profile stores for its border actually resolves (see beginNaming).
 function GuiProfileEditorDialog::createCustomBorder(%this, %container, %name)
 {
 	if(isObject(%container) && %container.getClassName() $= "GuiProfileTheme")
 	{
-		return %container.createBorder(%name);
+		%this.library.beginNaming();
+		%border = %container.createBorder(%name);
+		%this.library.endNaming();
+		return %border;
 	}
 	// Standalone bundle: a plain custom border added to the group, kept ahead
 	// of the profile so the default's object reference resolves on reload.
+	%this.library.beginNaming();
 	%border = new GuiBorderProfile(%name) { isCustom = true; };
+	%this.library.endNaming();
+
 	if(isObject(%container) && %container.isMemberOfClass("SimGroup"))
 	{
 		%container.add(%border);

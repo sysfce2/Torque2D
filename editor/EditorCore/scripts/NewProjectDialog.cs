@@ -137,6 +137,14 @@ function NewProjectDialog::onCreate(%this)
 		ModuleDatabase.CopyModule("BlankGame", 1, "BlankGame", pathConcat(%path, "BlankGame"), false);
 		ModuleDatabase.clearDatabase();
 
+		// The stock theme and its baked font caches. Not a module: a theme belongs
+		// to the project and has to survive AppCore being updated, which replaces
+		// that module's whole directory. pathCopy recurses, so this brings the
+		// fonts folder with it. (AppCore generates a theme if it ever finds none,
+		// so a project without this still works - it just starts from a theme with
+		// no baked fonts.)
+		pathCopy(pathConcat(getMainDotCsDir(), "library", "themes"), pathConcat(%path, "themes"), false);
+
 		%file = TamlRead(pathConcat(%path, "AppCore", "1", "module.taml"));
 		%file.Project = %title;
 		%file.ProjectDescription = %description;
