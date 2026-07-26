@@ -92,8 +92,7 @@
                 Active="true"
                 Text="Sample..."
                 align="left"
-                MaxLength="1024"
-                editCursor="editCursor" />
+                MaxLength="1024" />
             <GuiDropDownCtrl
                 canSaveDynamicFields="false"
                 Profile="GuiDropDownProfile"

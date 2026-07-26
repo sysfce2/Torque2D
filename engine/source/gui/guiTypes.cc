@@ -100,11 +100,20 @@ ConsoleSetType(TypeGuiCursor)
 	if (argc == 1)
 		Sim::findObject(argv[0], profile);
 
-	AssertWarn(profile != NULL, avar("GuiCursor: requested gui cursor (%s) does not exist.", argv[0]));
 	if (!profile)
+	{
 		profile = dynamic_cast<GuiCursor*>(Sim::findObject("DefaultCursor"));
 
-	AssertFatal(profile != NULL, avar("GuiCursor: unable to find specified cursor (%s) and DefaultCursor does not exist!", argv[0]));
+		// A cursor is cosmetic, and every read site copes with not having one --
+		// GuiTextEditCtrl::getCursor re-resolves lazily and otherwise just leaves
+		// the caller's cursor alone. This used to be an AssertFatal, which put up
+		// a modal dialog and wedged the whole editor whenever a .gui.taml named a
+		// cursor that isn't a registered object (themes build their GuiCursors
+		// anonymously, so the name in a saved file resolves to nothing). Warn and
+		// leave the field unset instead -- same call this file already makes for a
+		// missing font below.
+		AssertWarn(profile != NULL, avar("GuiCursor: requested gui cursor (%s) does not exist and there is no DefaultCursor - leaving it unset.", argv[0]));
+	}
 
 	GuiCursor **obj = (GuiCursor **)dptr;
 	if ((*obj) == profile)
