@@ -457,8 +457,11 @@ if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
     #   * `rt` is a no-op on modern glibc but harmless.
     #   * OpenGL/FreeType are resolved via find_package (more robust than the old
     #     hard-coded /usr/include/freetype2 paths). Install dev packages, e.g. on
-    #     Debian/Ubuntu: libsdl1.2-dev libx11-dev libxft-dev libfreetype6-dev
-    #     libopenal-dev libgl1-mesa-dev (and nasm for the 32-bit build).
+    #     Debian/Ubuntu: libsdl1.2-dev libx11-dev libxft-dev libfontconfig1-dev
+    #     libfreetype6-dev libopenal-dev libgl1-mesa-dev (and nasm for the 32-bit
+    #     build).
+    #   * fontconfig is linked explicitly, not left to Xft: x86UNIXFont.cc calls
+    #     Fc* directly for PlatformFont::enumeratePlatformFonts.
     find_package(Threads REQUIRED)
     find_package(OpenGL REQUIRED)
     find_package(Freetype REQUIRED)
@@ -479,7 +482,7 @@ if(UNIX AND NOT APPLE AND NOT ANDROID AND NOT EMSCRIPTEN)
         OpenGL::GL
         Freetype::Freetype
         m dl rt
-        X11 Xft
+        X11 Xft fontconfig
         ${SDL12_LIBRARY}
         openal)
 

@@ -28,6 +28,9 @@ function GuiProfileEditorLibrary::onAdd(%this)
 
 	%this.dirtySet = new SimSet();
 	%this.doomedFileCount = 0;
+
+	// Filled on first use and invalidated by a bake; see getFontFaceList.
+	%this.fontFaceList = "";
 }
 
 function GuiProfileEditorLibrary::onRemove(%this)
@@ -71,6 +74,54 @@ function GuiProfileEditorLibrary::getThemesPath(%this)
 	return pathConcat(%projectPath, "themes");
 }
 
+// The one folder a project keeps its font caches in. Predetermined rather than
+// chosen: a cache is keyed by face and size alone, so a second location can only
+// hold a duplicate of what the first one already has, and asking the developer
+// where to put it is a question with no useful answer.
+//
+// Every theme and standalone profile the editor creates is pointed here, which
+// is also what the game reads at runtime -- a member profile carries the path
+// stamped from its theme, and $GUI::fontCacheDirectory (set by AppCore) names
+// the same folder for anything that carries none.
+//
+// Not $GUI::fontCacheDirectory itself: while the editor is loaded, EditorCore
+// overrides that with its OWN font folder, so reading it here would send a
+// game's caches into editor/EditorCore/gui/fonts.
+function GuiProfileEditorLibrary::getFontsPath(%this)
+{
+	return pathConcat(%this.getThemesPath(), "fonts");
+}
+
+// The same path a theme file stores: relative to the game root, so a project
+// stays portable.
+function GuiProfileEditorLibrary::getRelativeFontsPath(%this)
+{
+	return makeRelativePath(%this.getFontsPath(), getMainDotCsDir());
+}
+
+// Point a loaded or new root at the project's font folder. A theme restamps its
+// members on assignment, so its profiles follow along (an overridden field is
+// left alone, as with any other stamp).
+function GuiProfileEditorLibrary::applyFontsPath(%this, %root)
+{
+	%dir = %this.getRelativeFontsPath();
+
+	if(%root.getClassName() $= "GuiProfileTheme")
+	{
+		if(%root.fontDirectory !$= %dir)
+		{
+			%root.fontDirectory = %dir;
+		}
+		return;
+	}
+
+	%profile = (%root.getClassName() $= "GuiControlProfile") ? %root : %this.bundleProfile(%root);
+	if(isObject(%profile) && %profile.fontDirectory !$= %dir)
+	{
+		%profile.fontDirectory = %dir;
+	}
+}
+
 // Load any theme files not already loaded. Safe to call on every dialog
 // open: files belonging to live objects are skipped.
 function GuiProfileEditorLibrary::scanThemes(%this)
@@ -105,6 +156,11 @@ function GuiProfileEditorLibrary::scanThemes(%this)
 			%this.themeGroup.add(%object);
 			%this.sourceFile[%object.getId()] = %file;
 			%this.loadedFile[%file] = true;
+			// A theme written before the font folder was fixed (or copied in from
+			// another project) names a folder that is no longer where this project
+			// keeps its caches. Repair it on load, but don't mark the theme dirty
+			// over it: the corrected path is written the next time it is saved.
+			%this.applyFontsPath(%object);
 			%this.addThemeProxies(%object);
 		}
 		else if(%class $= "ScriptGroup")
@@ -119,6 +175,7 @@ function GuiProfileEditorLibrary::scanThemes(%this)
 			%this.themeGroup.add(%object);
 			%this.sourceFile[%object.getId()] = %file;
 			%this.loadedFile[%file] = true;
+			%this.applyFontsPath(%object);
 			%this.addStandaloneProxy(%profile, %object);
 		}
 		else if(%class $= "GuiControlProfile")
@@ -128,6 +185,7 @@ function GuiProfileEditorLibrary::scanThemes(%this)
 			%this.themeGroup.add(%bundle);
 			%this.sourceFile[%bundle.getId()] = %file;
 			%this.loadedFile[%file] = true;
+			%this.applyFontsPath(%object);
 			%this.addStandaloneProxy(%object, %bundle);
 		}
 		else
@@ -414,6 +472,7 @@ function GuiProfileEditorLibrary::revertAll(%this)
 			%this.themeGroup.add(%object);
 			%this.sourceFile[%object.getId()] = %file;
 			%this.loadedFile[%file] = true;
+			%this.applyFontsPath(%object);
 			if(%object.getClassName() $= "GuiProfileTheme")
 			{
 				%this.addThemeProxies(%object);
@@ -474,14 +533,11 @@ function GuiProfileEditorLibrary::createTheme(%this, %name)
 
 	// Friendlier starting point than the C++ ctor defaults: borders on so the
 	// recipes' bevels and rims actually show (a theme looks intentional out of
-	// the box), a readable 16px base font, and a real font directory (the engine's
-	// font cache dir, where AppCore ships its fonts) so the form's font dropdowns
-	// aren't empty. Each assignment restamps, fine for a fresh theme.
+	// the box) and a readable 16px base font. Each assignment restamps, fine for
+	// a fresh theme.
 	%theme.borderSize = 1;
 	%theme.fontSize = 16;
-	// Store the font directory relative to the game root (not the absolute
-	// expanded path) so themes stay portable.
-	%theme.fontDirectory = makeRelativePath($GUI::fontCacheDirectory, getMainDotCsDir());
+	%this.applyFontsPath(%theme);
 
 	%this.sourceFile[%theme.getId()] = "";
 	%this.addThemeProxies(%theme);
@@ -589,6 +645,10 @@ function GuiProfileEditorLibrary::createStandalone(%this, %name)
 	}
 
 	%profile = new GuiControlProfile(%name);
+	// Without this the profile carries no font directory, and the first control to
+	// wear it takes $GUI::fontCacheDirectory instead -- the EDITOR's font folder
+	// while the editor is loaded.
+	%this.applyFontsPath(%profile);
 	%bundle = %this.wrapStandalone(%profile);
 	%this.themeGroup.add(%bundle);
 	%this.sourceFile[%bundle.getId()] = "";
@@ -599,10 +659,60 @@ function GuiProfileEditorLibrary::createStandalone(%this, %name)
 
 //-----------------------------------------------------------------------------
 // Font discovery and cache baking. A theme and an individual profile both name
-// a face out of a font directory, so the enumeration and baking live here on
-// the shared library rather than on either form. Neither depends on library
-// state -- they are here to be reachable from both panes via dialog.library.
+// a face, so the enumeration and baking live here on the shared library rather
+// than on either form -- they are reachable from both panes via dialog.library.
 //-----------------------------------------------------------------------------
+
+// The faces to offer: everything installed on this machine, plus anything the
+// project's font folder already holds a cache for, plus whatever the field is
+// set to now. The installed fonts are the point -- a developer styles a theme
+// with a font they have, and Save bakes a cache so it renders on a machine that
+// doesn't. The cached faces matter for the other direction: a theme that arrived
+// with its caches names a face nobody here has installed, and it must stay
+// choosable rather than vanish from the list.
+//
+// Cached on the library because a pane repopulates on every tree selection while
+// this list changes only when a bake writes new files. Enumerating a few hundred
+// families and a directory listing per click is a cost with nothing to show for
+// it. Call invalidateFontFaceList after anything that adds a cache file.
+function GuiProfileEditorLibrary::getFontFaceList(%this, %current)
+{
+	if(%this.fontFaceList $= "")
+	{
+		%this.fontFaceList = %this.sortTabList(
+			%this.mergeTabLists(getInstalledFonts(), %this.enumerateFonts(%this.getFontsPath())));
+	}
+
+	// The current value is merged per call rather than cached: it is the one part
+	// of the list that differs between the profile being edited and the next one.
+	if(%current !$= "" && !%this.tabListContains(%this.fontFaceList, %current))
+	{
+		return %this.sortTabList(%this.fontFaceList TAB %current);
+	}
+
+	return %this.fontFaceList;
+}
+
+function GuiProfileEditorLibrary::invalidateFontFaceList(%this)
+{
+	%this.fontFaceList = "";
+}
+
+// Append the second list's entries that the first one doesn't already have.
+function GuiProfileEditorLibrary::mergeTabLists(%this, %list, %additions)
+{
+	%n = getFieldCount(%additions);
+	for(%i = 0; %i < %n; %i++)
+	{
+		%value = getField(%additions, %i);
+		if(%value $= "" || %this.tabListContains(%list, %value))
+		{
+			continue;
+		}
+		%list = (%list $= "") ? %value : (%list TAB %value);
+	}
+	return %list;
+}
 
 // Returns a tab-separated, sorted, de-duplicated list of face names found in
 // the directory (both source .ttf/.otf faces and baked .uft/.fnt caches).
@@ -679,12 +789,16 @@ function GuiProfileEditorLibrary::faceFromCacheName(%this, %base)
 	return trim(%base);
 }
 
+// Case-insensitively, matching how sortTabList orders. A face is the same face
+// however it was capitalized: a cache file named "arial 12 (ansi).uft" and the
+// installed "Arial" are one entry in a font list, not two, and the lookup finds
+// the file either way.
 function GuiProfileEditorLibrary::tabListContains(%this, %list, %value)
 {
 	%n = getFieldCount(%list);
 	for(%i = 0; %i < %n; %i++)
 	{
-		if(getField(%list, %i) $= %value)
+		if(stricmp(getField(%list, %i), %value) == 0)
 		{
 			return true;
 		}
@@ -780,8 +894,7 @@ function GuiProfileEditorLibrary::bakeFont(%this, %face, %dir, %size)
 		return;
 	}
 
-	%cacheFile = %dir @ "/" @ %face SPC %size SPC "(ansi).uft";
-	if(isFile(%cacheFile))
+	if(%this.cacheFileExists(%dir, %face, %size))
 	{
 		return;
 	}
@@ -793,6 +906,22 @@ function GuiProfileEditorLibrary::bakeFont(%this, %face, %dir, %size)
 	populateFontCacheRange(%face, %size, 32, 255);
 	writeOneFontCache(%face, %size);
 	$GUI::fontCacheDirectory = %prev;
+}
+
+// Is this face and size already baked? Asked of the filesystem, not isFile:
+// isFile answers out of the resource manager, and GFont::create registers every
+// font it synthesizes under the .uft path it looked for and didn't find. So the
+// moment the editor renders a face, isFile claims its cache exists -- and the
+// bake this guards would skip every font the developer could see, which is all
+// of them.
+function GuiProfileEditorLibrary::cacheFileExists(%this, %dir, %face, %size)
+{
+	%path = makeFullPath(%dir, getMainDotCsDir());
+	if(!isDirectory(%path))
+	{
+		return false;
+	}
+	return %this.tabListContains(getFileList(%path), %face SPC %size SPC "(ansi).uft");
 }
 
 // Bake every face/size a root actually uses. Called from the dialog's Save,
@@ -822,11 +951,15 @@ function GuiProfileEditorLibrary::bakeFontsFor(%this, %root)
 				%this.bakeProfileFont(getWord(%profiles, %p));
 			}
 		}
-		return;
+	}
+	else
+	{
+		// A standalone bundle: just the profile it wraps.
+		%this.bakeProfileFont(%this.bundleProfile(%root));
 	}
 
-	// A standalone bundle: just the profile it wraps.
-	%this.bakeProfileFont(%this.bundleProfile(%root));
+	%this.bakeRequestedFonts();
+	%this.invalidateFontFaceList();
 }
 
 function GuiProfileEditorLibrary::bakeProfileFont(%this, %profile)
@@ -835,4 +968,42 @@ function GuiProfileEditorLibrary::bakeProfileFont(%this, %profile)
 	{
 		%this.bakeFont(%profile.fontType, %profile.fontDirectory, %profile.fontSize);
 	}
+}
+
+// Bake the sizes the walk above cannot see. A control's fontSizeAdjust multiplies
+// its profile's fontSize, so what actually got rendered is not what any field
+// says: a profile set to 16 worn by a control adjusting 1.2 asks GFont for 19,
+// and only a machine with the face installed would ever draw it. The engine
+// records each face/size it had to rasterize for want of a cache; this bakes the
+// ones belonging to this project's font folder and forgets the rest -- the editor
+// misses its own chrome fonts against its own folder, and those are not ours.
+function GuiProfileEditorLibrary::bakeRequestedFonts(%this)
+{
+	%dir = %this.getFontsPath();
+	%rows = getUncachedFonts();
+	%count = getRecordCount(%rows);
+
+	for(%i = 0; %i < %count; %i++)
+	{
+		%row = getRecord(%rows, %i);
+		%face = getField(%row, 0);
+		%size = getField(%row, 1);
+		%rowDir = getField(%row, 2);
+
+		if(%face $= "" || %size <= 0 || %rowDir $= "")
+		{
+			continue;
+		}
+
+		// Compared as full paths: a profile carries the folder relative to the game
+		// root, while getFontsPath is absolute.
+		if(makeFullPath(%rowDir, getMainDotCsDir()) !$= %dir)
+		{
+			continue;
+		}
+
+		%this.bakeFont(%face, %rowDir, %size);
+	}
+
+	clearUncachedFonts();
 }

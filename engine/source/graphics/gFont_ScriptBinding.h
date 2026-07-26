@@ -25,7 +25,111 @@
 	@{
 */
 
-/*! 
+/*! List the font faces installed on this machine.
+    These are the faces the platform can rasterize without any cache on disk --
+    what a tool offers the user to choose from. Sorted and de-duplicated here
+    rather than in script: Windows enumerates a family once per character set,
+    and sorting a few hundred names in TorqueScript is not free.
+    Platforms with no font enumeration (iOS, Android, the web build) return an
+    empty string, so a caller should treat the list as an offer, not the whole
+    truth -- a face can still be usable through a cached .uft it finds on disk.
+    @return A tab-separated list of face names.
+*/
+ConsoleFunctionWithDocs(getInstalledFonts, ConsoleString, 1, 1, ())
+{
+	Vector<StringTableEntry> fonts;
+	PlatformFont::enumeratePlatformFonts(fonts);
+
+	// Insertion sort, skipping any name already placed. A few hundred short
+	// strings, once per session on the caller's side.
+	Vector<StringTableEntry> sorted;
+	for (U32 i = 0; i < (U32)fonts.size(); i++)
+	{
+		if (fonts[i] == NULL || fonts[i][0] == '\0')
+			continue;
+
+		U32 at = 0;
+		bool duplicate = false;
+		for (; at < (U32)sorted.size(); at++)
+		{
+			const S32 order = dStricmp(sorted[at], fonts[i]);
+			if (order == 0)
+			{
+				duplicate = true;
+				break;
+			}
+			if (order > 0)
+				break;
+		}
+
+		if (!duplicate)
+		{
+			sorted.insert(at);
+			sorted[at] = fonts[i];
+		}
+	}
+
+	U32 length = 1;
+	for (U32 i = 0; i < (U32)sorted.size(); i++)
+		length += dStrlen(sorted[i]) + 1;
+
+	char *buffer = Con::getReturnBuffer(length);
+	buffer[0] = '\0';
+
+	for (U32 i = 0; i < (U32)sorted.size(); i++)
+	{
+		if (i != 0)
+			dStrcat(buffer, "\t");
+		dStrcat(buffer, sorted[i]);
+	}
+
+	return buffer;
+}
+
+/*! List the face/size pairs that had to be rasterized because no cache existed.
+    A tool bakes exactly these: the face is installed here, so it can be written,
+    but a machine without it would have nothing to fall back on. The list covers
+    sizes no field declares -- a control's fontSizeAdjust multiplies its profile's
+    fontSize -- which is why it is recorded as it happens rather than derived.
+    Each row also carries the font directory that was searched, so a caller can
+    keep one project's caches out of another's folder.
+    @return Newline-separated rows of "face<tab>size<tab>directory".
+*/
+ConsoleFunctionWithDocs(getUncachedFonts, ConsoleString, 1, 1, ())
+{
+	U32 length = 1;
+	for (U32 i = 0; i < (U32)smUncachedFonts.size(); i++)
+	{
+		// face + tab + size (at most 10 digits) + tab + directory + newline
+		length += dStrlen(smUncachedFonts[i].faceName) + dStrlen(smUncachedFonts[i].directory) + 13;
+	}
+
+	char *buffer = Con::getReturnBuffer(length);
+	buffer[0] = '\0';
+
+	U32 at = 0;
+	for (U32 i = 0; i < (U32)smUncachedFonts.size(); i++)
+	{
+		at += dSprintf(buffer + at, length - at, "%s%s\t%d\t%s",
+			(i == 0) ? "" : "\n",
+			smUncachedFonts[i].faceName,
+			smUncachedFonts[i].size,
+			smUncachedFonts[i].directory);
+	}
+
+	return buffer;
+}
+
+/*! Forget every recorded font cache miss.
+    Called after baking, so the next report lists only what has come up since.
+    @return No return value.
+*/
+ConsoleFunctionWithDocs(clearUncachedFonts, ConsoleVoid, 1, 1, ())
+{
+	smUncachedFonts.clear();
+}
+
+/*!
     Populate the font cache for the specified font with characters from the specified string.
     @param faceName The font's name
     @param size The size of the font.

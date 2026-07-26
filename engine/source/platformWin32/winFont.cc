@@ -97,6 +97,12 @@ BOOL CALLBACK EnumFamCallBack(LPLOGFONT logFont, LPNEWTEXTMETRIC textMetric, DWO
    if( !( fontType & TRUETYPE_FONTTYPE ) )
       return true;
 
+   // Windows lists a rotated twin of every CJK face, named with a leading '@',
+   // for vertical writing. It is the same family drawn on its side -- noise in a
+   // font list, and text picked from it would render sideways.
+   if( logFont->lfFaceName[0] == '@' )
+      return true;
+
    Vector<StringTableEntry>* fonts = (Vector< StringTableEntry>*)lParam;
 
    const U32 len = dStrlen( logFont->lfFaceName ) * 3 + 1;

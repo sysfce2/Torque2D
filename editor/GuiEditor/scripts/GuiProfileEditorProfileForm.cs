@@ -76,7 +76,7 @@ function GuiProfileEditorProfileForm::build(%this)
 	// Sections in the order the work usually goes: the text block first because
 	// it is the one a text-drawing profile reaches for after the essentials.
 	%this.buildSection("TextLayout", "Text Layout",
-		"align vAlign textOffset fontDirectory fontCharset");
+		"align vAlign textOffset fontCharset");
 	%this.buildSection("Interaction", "Interaction",
 		"tab canKeyFocus cursorColor fillColorTextSL fontColorTextSL");
 	%this.buildSection("RichText", "Rich Text Colors",
@@ -337,7 +337,6 @@ function GuiProfileEditorProfileForm::labelFor(%this, %field)
 		case "align":            return "Horizontal Align";
 		case "vAlign":           return "Vertical Align";
 		case "textOffset":       return "Text Offset";
-		case "fontDirectory":    return "Font Directory";
 		case "fontCharset":      return "Font Charset";
 		case "tab":              return "Tab Stop";
 		case "canKeyFocus":      return "Keyboard Focus";
@@ -361,7 +360,6 @@ function GuiProfileEditorProfileForm::kindFor(%this, %field)
 	{
 		case "align" or "vAlign" or "fontCharset": return "enum";
 		case "textOffset":                         return "point";
-		case "fontDirectory":                      return "file";
 		case "tab" or "canKeyFocus":               return "bool";
 		case "cursorColor" or "fillColorTextSL" or "fontColorTextSL":         return "color";
 		case "fontColorLink" or "fontColorLinkHL":                            return "color";
@@ -584,9 +582,10 @@ function GuiProfileEditorProfileForm::refresh(%this)
 
 	%this.populating = true;
 
-	// The font face list comes from whatever directory this profile names.
-	%faces = %this.dialog.library.enumerateFonts(%this.target.fontDirectory);
-	%this.row["fontType"].fillItems(%faces);
+	// Every font installed on this machine, plus any the project already has a
+	// cache for, plus this profile's own face if it is neither.
+	%this.row["fontType"].fillItems(
+		%this.dialog.library.getFontFaceList(%this.target.fontType));
 
 	%count = getWordCount(%this.rowFields);
 	for(%i = 0; %i < %count; %i++)
@@ -681,19 +680,12 @@ function GuiProfileEditorProfileForm::onProfileRowCommit(%this, %row)
 		return;
 	}
 
+	// No font cache is baked here, whatever face or size was just picked: the
+	// preview renders it straight from the platform font, and baking costs seconds
+	// -- it happens on Save instead.
 	%this.writeField(%row.fieldName, %row.getValue());
 	%row.markClean();
 	%this.afterCommit();
-
-	// A new font directory changes which faces are on offer. No font cache is
-	// baked here: the preview renders a new face or size straight from the
-	// platform font, and baking one costs seconds -- it happens on Save instead.
-	if(%row.fieldName $= "fontDirectory")
-	{
-		%this.populating = true;
-		%this.row["fontType"].fillItems(%this.dialog.library.enumerateFonts(%this.target.fontDirectory));
-		%this.populating = false;
-	}
 }
 
 function GuiProfileEditorProfileForm::onProfileStateColorCommit(%this, %row, %index)

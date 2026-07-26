@@ -32,9 +32,11 @@
 // Fields absent from the seven groups below are never shown at all, even with
 // Show All: SimObject plumbing (class, superclass, hidden, locked, parentGroup,
 // internalName, canSaveDynamicFields), theme bookkeeping (category,
-// themeOverrides), the border references the Borders pane owns, and
-// fontColors0-6, which the inspector's array expansion duplicates from the
-// seven named aliases.
+// themeOverrides), the border references the Borders pane owns, fontColors0-6,
+// which the inspector's array expansion duplicates from the seven named aliases,
+// and fontDirectory, which the editor owns: every project keeps its font caches
+// in one folder (GuiProfileEditorLibrary::getFontsPath), so there is nothing for
+// a profile to decide.
 //
 // The spec is pure data with no UI; the pane owns one and asks it what to show.
 //-----------------------------------------------------------------------------
@@ -115,7 +117,7 @@ function GuiProfileEditorFieldSpec::universalFields(%this)
 // The typeface itself: needed by anything that rasterizes glyphs.
 function GuiProfileEditorFieldSpec::fontFaceFields(%this)
 {
-	return "fontType fontSize fontDirectory fontCharset";
+	return "fontType fontSize fontCharset";
 }
 
 // Read only inside GuiControl::renderText, so only the "full" class needs them.

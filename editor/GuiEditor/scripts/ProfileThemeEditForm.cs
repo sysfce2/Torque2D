@@ -29,13 +29,10 @@ function ProfileThemeEditForm::build(%this)
 	%this.borderSizeBox.inputMode = "Number";
 	%this.borderSizeBox.AltCommand = %this.getID() @ ".commitBorderSize();";
 
-	// A font file picker: the user finds any font in the target directory and we
-	// keep that directory. Uses OpenFileDialog (the working "Find" pattern from
-	// the image asset dialog) rather than the folder dialog.
-	%item = %this.addFormItem("Font Directory", %cw SPC 30);
-	%this.fontDirBox = %this.createFileOpenItem(%item, "Font Files (*.ttf;*.otf;*.fnt;*.uft)|*.ttf;*.otf;*.fnt;*.uft", "Find a Font in the Target Directory");
-	%this.fontDirBox.AltCommand = %this.getID() @ ".commitDirectory();";
-
+	// No font directory row: the project keeps its font caches in one folder
+	// (GuiProfileEditorLibrary::getFontsPath), which every theme is pointed at on
+	// creation and on load. The three drop-downs below offer the machine's
+	// installed fonts, so choosing a font is the only question left.
 	%item = %this.addFormItem("Font - Title", %cw SPC 30);
 	%this.fontTitleDrop = %this.createDropDownItem(%item);
 	%this.fontTitleDrop.themeField = "fontTitle";
@@ -97,7 +94,6 @@ function ProfileThemeEditForm::bindTheme(%this, %theme)
 	%this.nameLabel.setText("Theme:  " @ %theme.getName());
 	%this.borderSizeBox.setText(%theme.borderSize);
 	%this.fontSizeBox.setText(%theme.fontSize);
-	%this.fontDirBox.setText(%theme.fontDirectory);
 
 	%this.rebuildFontDropdowns();
 
@@ -172,16 +168,6 @@ function ProfileThemeEditForm::commitFontSize(%this)
 	%this.applyField("fontSize", %v);
 }
 
-function ProfileThemeEditForm::commitDirectory(%this)
-{
-	if(%this.populating || !isObject(%this.theme))
-	{
-		return;
-	}
-	%this.applyField("fontDirectory", %this.fontDirBox.getText());
-	%this.rebuildFontDropdowns();
-}
-
 function ProfileThemeEditForm::onReturnPressed(%this, %ctrl)
 {
 	if(%ctrl == %this.borderSizeBox)
@@ -191,24 +177,6 @@ function ProfileThemeEditForm::onReturnPressed(%this, %ctrl)
 	else if(%ctrl == %this.fontSizeBox)
 	{
 		%this.commitFontSize();
-	}
-	else if(%ctrl == %this.fontDirBox)
-	{
-		%this.commitDirectory();
-	}
-}
-
-// The user picked a font file; keep its directory as the font directory.
-function ProfileThemeEditForm::onFileOpened(%this, %box)
-{
-	if(%box == %this.fontDirBox)
-	{
-		// Keep the directory relative to the game root, not the absolute path.
-		%dir = filePath(%box.getText());
-		%dir = makeRelativePath(makeFullPath(%dir, getMainDotCsDir()), getMainDotCsDir());
-		%box.setText(%dir);
-		%this.applyField("fontDirectory", %dir);
-		%this.rebuildFontDropdowns();
 	}
 }
 
@@ -274,8 +242,8 @@ function ProfileThemeEditForm::showColor(%this, %swatch, %value)
 
 //-----------------------------------------------------------------------------
 // Font selection. The enumeration, drop-down filling and cache baking all live
-// on the shared library (GuiProfileEditorLibrary) because the profile pane
-// names a face out of a directory exactly the way a theme does.
+// on the shared library (GuiProfileEditorLibrary) because the profile pane picks
+// a face exactly the way a theme does.
 //-----------------------------------------------------------------------------
 
 function ProfileThemeEditForm::onDropDownSelect(%this, %ctrl)
@@ -294,11 +262,14 @@ function ProfileThemeEditForm::rebuildFontDropdowns(%this)
 	{
 		return;
 	}
+	// One list for all three roles: the machine's installed fonts plus anything
+	// the project already has a cache for. Each drop-down adds its own face if it
+	// is in neither -- a theme that arrived with its caches may name a font that
+	// isn't installed here, and it must stay selected.
 	%library = %this.dialog.library;
-	%faces = %library.enumerateFonts(%this.theme.fontDirectory);
-	%library.fillFontDropdown(%this.fontTitleDrop, %faces, %this.theme.fontTitle);
-	%library.fillFontDropdown(%this.fontBodyDrop, %faces, %this.theme.fontBody);
-	%library.fillFontDropdown(%this.fontCodeDrop, %faces, %this.theme.fontCode);
+	%library.fillFontDropdown(%this.fontTitleDrop, %library.getFontFaceList(%this.theme.fontTitle), %this.theme.fontTitle);
+	%library.fillFontDropdown(%this.fontBodyDrop, %library.getFontFaceList(%this.theme.fontBody), %this.theme.fontBody);
+	%library.fillFontDropdown(%this.fontCodeDrop, %library.getFontFaceList(%this.theme.fontCode), %this.theme.fontCode);
 }
 
 // Font caches are not baked while the theme is being edited: the preview
