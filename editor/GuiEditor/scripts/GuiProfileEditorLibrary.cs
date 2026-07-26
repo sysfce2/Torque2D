@@ -45,6 +45,13 @@ function GuiProfileEditorLibrary::onRemove(%this)
 	}
 	if(isObject(%this.themeGroup))
 	{
+		// What this library read, it owns. A theme goes down with its members,
+		// but a bundle is a set and does not own the profile it names, so each
+		// root is taken down through deleteRoot rather than left to the group.
+		for(%i = %this.themeGroup.getCount() - 1; %i >= 0; %i--)
+		{
+			%this.deleteRoot(%this.themeGroup.getObject(%i));
+		}
 		%this.themeGroup.delete();
 	}
 }
@@ -242,56 +249,107 @@ function GuiProfileEditorLibrary::scanThemes(%this)
 			continue;
 		}
 
-		%class = %object.getClassName();
-		if(%class $= "GuiProfileTheme")
-		{
-			if(%object.getName() $= "")
-			{
-				warn("GuiProfileEditorLibrary::scanThemes: skipping " @ %file @ " - the theme has no name (possibly a name collision).");
-				%object.delete();
-				continue;
-			}
-			%this.themeGroup.add(%object);
-			%this.sourceFile[%object.getId()] = %file;
-			%this.loadedFile[%file] = true;
-			// A theme written before the font folder was fixed (or copied in from
-			// another project) names a folder that is no longer where this project
-			// keeps its caches. Repair it on load, but don't mark the theme dirty
-			// over it: the corrected path is written the next time it is saved.
-			%this.applyFontsPath(%object);
-			%this.addThemeProxies(%object);
-		}
-		else if(%class $= "ScriptGroup")
-		{
-			%profile = %this.bundleProfile(%object);
-			if(!isObject(%profile))
-			{
-				warn("GuiProfileEditorLibrary::scanThemes: skipping " @ %file @ " - bundle has no profile.");
-				%object.delete();
-				continue;
-			}
-			%this.themeGroup.add(%object);
-			%this.sourceFile[%object.getId()] = %file;
-			%this.loadedFile[%file] = true;
-			%this.applyFontsPath(%object);
-			%this.addStandaloneProxy(%profile, %object);
-		}
-		else if(%class $= "GuiControlProfile")
-		{
-			// Legacy bare standalone profile: wrap it in a bundle on load.
-			%bundle = %this.wrapStandalone(%object);
-			%this.themeGroup.add(%bundle);
-			%this.sourceFile[%bundle.getId()] = %file;
-			%this.loadedFile[%file] = true;
-			%this.applyFontsPath(%object);
-			%this.addStandaloneProxy(%object, %bundle);
-		}
-		else
-		{
-			warn("GuiProfileEditorLibrary::scanThemes: skipping " @ %file @ " - not a theme or profile.");
-			%object.delete();
-		}
+		%this.adoptFile(%object, %file);
 	}
+}
+
+// Take a theme or stand-alone profile just read from disk into the library:
+// hold it, remember where it came from, point it at the project's font folder
+// and build its tree proxies. Returns what the library now tracks - the bundle,
+// for a stand-alone profile - or 0 when the file held nothing usable, in which
+// case what was read has been deleted.
+//
+// Shared by the initial scan and by revert, which re-reads the same files.
+function GuiProfileEditorLibrary::adoptFile(%this, %object, %file)
+{
+	%class = %object.getClassName();
+
+	if(%class $= "GuiProfileTheme")
+	{
+		if(%object.getName() $= "")
+		{
+			warn("GuiProfileEditorLibrary::adoptFile: skipping " @ %file @ " - the theme has no name (possibly a name collision).");
+			%object.delete();
+			return 0;
+		}
+
+		%this.themeGroup.add(%object);
+		%this.rememberFile(%object, %file);
+		// A theme written before the font folder was fixed (or copied in from
+		// another project) names a folder that is no longer where this project
+		// keeps its caches. Repair it on load, but don't mark the theme dirty
+		// over it: the corrected path is written the next time it is saved.
+		%this.applyFontsPath(%object);
+		%this.addThemeProxies(%object);
+		return %object;
+	}
+
+	if(!%this.isBundle(%object) && %class !$= "GuiControlProfile")
+	{
+		warn("GuiProfileEditorLibrary::adoptFile: skipping " @ %file @ " - not a theme or profile.");
+		%object.delete();
+		return 0;
+	}
+
+	%bundle = %this.adoptStandalone(%object);
+	if(!isObject(%bundle))
+	{
+		warn("GuiProfileEditorLibrary::adoptFile: skipping " @ %file @ " - the bundle holds no profile.");
+		%object.delete();
+		return 0;
+	}
+
+	%this.themeGroup.add(%bundle);
+	%this.rememberFile(%bundle, %file);
+	%this.applyFontsPath(%bundle);
+	%this.addStandaloneProxy(%this.bundleProfile(%bundle), %bundle);
+	return %bundle;
+}
+
+function GuiProfileEditorLibrary::rememberFile(%this, %root, %file)
+{
+	%this.sourceFile[%root.getId()] = %file;
+	%this.loadedFile[%file] = true;
+}
+
+// Bring a stand-alone profile file into the bundle shape this library keeps:
+// a bare profile is wrapped, a SimSet bundle is already right, and a SimGroup
+// bundle - what versions before this wrote - is rebuilt.
+//
+// The rebuild matters: a SimGroup owns what it holds, so reading one took the
+// profile out of the Gui data group, and that group is the only place the
+// engine looks when it fills a control's Profile dropdown. Hand the children
+// back and rewrap them in a set, which serializes identically without claiming
+// them. The file itself is corrected the next time it is saved.
+function GuiProfileEditorLibrary::adoptStandalone(%this, %object)
+{
+	if(%object.getClassName() $= "GuiControlProfile")
+	{
+		return %this.wrapStandalone(%object);
+	}
+
+	if(!isObject(%this.bundleProfile(%object)))
+	{
+		return 0;
+	}
+
+	if(!%object.isMemberOfClass("SimGroup"))
+	{
+		return %object;
+	}
+
+	%bundle = %this.newBundle();
+	while(%object.getCount() > 0)
+	{
+		// Reparenting to the Gui data group is what removes the child from the
+		// old group, so the loop drains it; the set add that follows leaves it
+		// where it now belongs. Order is preserved, which the borders rely on.
+		%child = %object.getObject(0);
+		GuiDataGroup.add(%child);
+		%bundle.add(%child);
+	}
+	%object.delete();
+	return %bundle;
 }
 
 // Take over the themes already in memory: give each one a proxy and a source
@@ -467,12 +525,52 @@ function GuiProfileEditorLibrary::bundleProfile(%this, %bundle)
 	return 0;
 }
 
+// Is this a stand-alone profile's save root? SimGroup derives from SimSet, so
+// this also answers yes for the bundles older versions wrote (which
+// adoptStandalone rebuilds on load).
+function GuiProfileEditorLibrary::isBundle(%this, %object)
+{
+	return isObject(%object) && %object.isMemberOfClass("SimSet");
+}
+
+// A stand-alone profile is saved with the custom borders it wears, so the file
+// needs one object naming them all. That object is a SimSet and not a SimGroup
+// on purpose: a group takes what it holds out of whatever group it was in, and
+// a profile belongs in the Gui data group - GuiControlProfile::onAdd puts it
+// there, and it is the only place the engine looks when it fills a control's
+// Profile dropdown. A set serializes its children exactly the same way and
+// leaves their membership alone, which is how a theme's members behave too.
+//
+// The cost is that a set does not own what it holds: deleteRoot deletes the
+// contents explicitly.
+function GuiProfileEditorLibrary::newBundle(%this)
+{
+	return new SimSet() { class = "GuiProfileBundle"; };
+}
+
 // Wrap a bare profile in a fresh bundle (used for creation and legacy loads).
 function GuiProfileEditorLibrary::wrapStandalone(%this, %profile)
 {
-	%bundle = new ScriptGroup() { class = "GuiProfileBundle"; };
+	%bundle = %this.newBundle();
 	%bundle.add(%profile);
 	return %bundle;
+}
+
+// Destroy a save root and everything it stands for. A theme owns its members
+// and takes them with it; a bundle is a set, which by design does not, so its
+// profile and custom borders go explicitly.
+function GuiProfileEditorLibrary::deleteRoot(%this, %root)
+{
+	if(!isObject(%root))
+	{
+		return;
+	}
+
+	if(%this.isBundle(%root))
+	{
+		%root.deleteObjects();
+	}
+	%root.delete();
 }
 
 function GuiProfileEditorLibrary::getRootProxy(%this, %root)
@@ -599,37 +697,18 @@ function GuiProfileEditorLibrary::revertAll(%this)
 		%file = %this.sourceFile[%root.getId()];
 		%this.removeProxiesFor(%root);
 		%this.releaseRoot(%root);
-		%root.delete();
+		%this.deleteRoot(%root);
 
 		if(%file !$= "" && isFile(%file))
 		{
 			%object = TAMLRead(%file);
-			if(!isObject(%object))
+			if(isObject(%object) && isObject(%this.adoptFile(%object, %file)))
 			{
-				warn("GuiProfileEditorLibrary::revertAll: could not re-read " @ %file);
-				%this.loadedFile[%file] = "";
 				continue;
 			}
-			%this.themeGroup.add(%object);
-			%this.sourceFile[%object.getId()] = %file;
-			%this.loadedFile[%file] = true;
-			%this.applyFontsPath(%object);
-			if(%object.getClassName() $= "GuiProfileTheme")
-			{
-				%this.addThemeProxies(%object);
-			}
-			else if(%object.getClassName() $= "ScriptGroup")
-			{
-				%this.addStandaloneProxy(%this.bundleProfile(%object), %object);
-			}
-			else
-			{
-				%bundle = %this.wrapStandalone(%object);
-				%this.themeGroup.add(%bundle);
-				%this.sourceFile[%bundle.getId()] = %file;
-				%this.loadedFile[%file] = true;
-				%this.addStandaloneProxy(%object, %bundle);
-			}
+
+			warn("GuiProfileEditorLibrary::revertAll: could not re-read " @ %file);
+			%this.loadedFile[%file] = "";
 		}
 		else if(%file !$= "")
 		{
@@ -768,7 +847,7 @@ function GuiProfileEditorLibrary::deleteTheme(%this, %theme)
 	%this.dirtySet.removeIfMember(%theme);
 	%this.removeProxiesFor(%theme);
 	%this.releaseRoot(%theme);
-	%theme.delete();
+	%this.deleteRoot(%theme);
 }
 
 function GuiProfileEditorLibrary::renameThemeTo(%this, %theme, %name)
@@ -858,7 +937,7 @@ function GuiProfileEditorLibrary::removeExtraProfile(%this, %theme, %profile)
 // standalone bundle by its inner profile's name.
 function GuiProfileEditorLibrary::rootName(%this, %root)
 {
-	if(%root.getClassName() $= "ScriptGroup")
+	if(%this.isBundle(%root))
 	{
 		%profile = %this.bundleProfile(%root);
 		return isObject(%profile) ? %profile.getName() : "";
@@ -888,6 +967,75 @@ function GuiProfileEditorLibrary::createStandalone(%this, %name)
 	%this.addStandaloneProxy(%profile, %bundle);
 	%this.markDirty(%bundle);
 	return %profile;
+}
+
+// Delete a stand-alone profile, taking the custom borders it owns with it. As
+// with a theme, the file is only removed on save: cancel keeps it, and the next
+// scan reads it back.
+//
+// Nothing can list the Guis that wear the profile - a saved .gui names it and
+// nothing indexes that - so those are the user's to repair, and a control that
+// asks for a profile no longer there gets GuiDefaultProfile. The document open
+// in the editor is the one case that can be handled, and releaseRoot handles it.
+function GuiProfileEditorLibrary::deleteStandalone(%this, %bundle)
+{
+	%this.doomSourceFile(%bundle);
+
+	%this.dirtySet.removeIfMember(%bundle);
+	%this.removeProxiesFor(%bundle);
+	%this.releaseRoot(%bundle);
+	%this.deleteRoot(%bundle);
+}
+
+// Rename a stand-alone profile. The counterpart to renameThemeTo, and it costs
+// the same thing: a Gui saved earlier names the profile its controls wear, so
+// renaming one leaves those controls looking for a profile that is no longer
+// there. The controls in memory hold the object itself and are unaffected.
+function GuiProfileEditorLibrary::renameStandaloneTo(%this, %bundle, %name)
+{
+	%profile = %this.bundleProfile(%bundle);
+	if(!isObject(%profile))
+	{
+		return false;
+	}
+
+	// Confirming the name dialog without editing it is not an error.
+	if(%profile.getName() $= %name)
+	{
+		return true;
+	}
+
+	if(%name $= "" || isObject(%name))
+	{
+		warn("GuiProfileEditorLibrary::renameStandaloneTo: the name '" @ %name @ "' is empty or already taken.");
+		return false;
+	}
+
+	%this.beginNaming();
+	%profile.setName(%name);
+	%this.endNaming();
+
+	// assignName refuses a name the dictionary already holds and says so on the
+	// console rather than reporting back, so the only way to know is to look.
+	if(%profile.getName() !$= %name)
+	{
+		warn("GuiProfileEditorLibrary::renameStandaloneTo: the engine refused the name '" @ %name @ "'.");
+		return false;
+	}
+
+	// A stand-alone profile's file is named after it, so the old one no longer
+	// matches; replace it on save.
+	%this.doomSourceFile(%bundle);
+
+	%proxy = %this.standaloneProxy[%bundle.getId()];
+	if(isObject(%proxy))
+	{
+		%proxy.baseLabel = %name;
+		%proxy.isDirtyMarked = false;
+	}
+	%this.markDirty(%bundle);
+
+	return true;
 }
 
 //-----------------------------------------------------------------------------

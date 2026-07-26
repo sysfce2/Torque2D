@@ -95,9 +95,10 @@ function AppCore::loadThemes(%this)
 }
 
 /// Reads one file from the themes folder. Alongside themes it may hold stand-alone
-/// profiles, which the Profile Editor writes as a one-profile bundle (and, from
-/// older versions, as a bare profile). Loading is all these need: a profile puts
-/// itself in the Gui data group under its own name, which is how a Gui finds it.
+/// profiles, which the Profile Editor writes as a one-profile bundle - a SimSet,
+/// or a SimGroup from older versions (and, older still, a bare profile). Loading
+/// is all these need: a profile registers under its own name, which is how a Gui
+/// finds it.
 function AppCore::loadTheme(%this, %file)
 {
 	%object = TAMLRead(%file);
@@ -121,7 +122,8 @@ function AppCore::loadTheme(%this, %file)
 		return true;
 	}
 
-	if(%class $= "ScriptGroup" || %class $= "GuiControlProfile")
+	// A bundle is a SimSet; SimGroup, which the older ones are, derives from it.
+	if(%object.isMemberOfClass("SimSet") || %class $= "GuiControlProfile")
 	{
 		return false;
 	}

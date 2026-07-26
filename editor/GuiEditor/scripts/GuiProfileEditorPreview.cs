@@ -132,8 +132,33 @@ function GuiProfileEditorPreview::layoutStage(%this)
 	%this.stage.setPosition(mGetMax(%x, 0), mGetMax(%y, 0));
 }
 
+// Point one of a sample's secondary slots at a theme category it is not the
+// subject of: the backdrop a dropdown pops over, the content a scroll bar
+// scrolls. A stand-alone profile has no theme and so no siblings to borrow,
+// and the slot is left as the control was born with rather than handed the
+// profile under edit -- which would put a scroll bar's skin on its own
+// contents and drown the thing being previewed.
+//
+// Must run before the sample is added to the stage, so the control reads the
+// slot when it wakes, exactly as it would from an inline field list.
+function GuiProfileEditorPreview::setThemeSlot(%this, %ctrl, %field, %theme, %category)
+{
+	if(!isObject(%theme))
+	{
+		return;
+	}
+
+	%profile = %theme.getProfile(%category);
+	if(isObject(%profile))
+	{
+		%ctrl.setFieldValue(%field, %profile);
+	}
+}
+
 // A profile slot for a sample: the selected member when it belongs to the
-// slot's category, otherwise the theme's default for that category.
+// slot's category, otherwise the theme's default for that category. With no
+// theme -- a stand-alone profile -- every slot falls to the member, so the
+// sample shows the one profile there is in each part it draws.
 function GuiProfileEditorPreview::slotProfile(%this, %theme, %slotCategory, %selectedCategory, %member)
 {
 	if(%slotCategory $= %selectedCategory && isObject(%member))
@@ -297,15 +322,6 @@ function GuiProfileEditorPreview::showCategory(%this, %theme, %category, %member
 	%this.lastCategory = %category;
 	%this.lastMember = %member;
 
-	// Standalone profiles (no theme) get the generic sample: sibling slots
-	// that would come from theme defaults aren't available.
-	if(!isObject(%theme))
-	{
-		%this.addGenericSample(%member);
-		%this.layoutStage();
-		return;
-	}
-
 	if(%category $= "Button" || %category $= "CheckBox" || %category $= "Radio" || %category $= "TextEdit")
 	{
 		%this.addStateSamples(%category, %member);
@@ -346,12 +362,14 @@ function GuiProfileEditorPreview::showCategory(%this, %theme, %category, %member
 			ArrowProfile = %this.slotProfile(%theme, "ScrollArrow", %category, %member);
 		};
 		%this.addSample(%scroll);
-		%scroll.add(new GuiControl()
+
+		%content = new GuiControl()
 		{
 			Position = "0 0";
 			Extent = "200 400";
-			Profile = %theme.getProfile("Empty");
-		});
+		};
+		%this.setThemeSlot(%content, "Profile", %theme, "Empty");
+		%scroll.add(%content);
 	}
 	else if(%category $= "TabBook" || %category $= "Tab" || %category $= "TabPage")
 	{
@@ -396,12 +414,12 @@ function GuiProfileEditorPreview::showCategory(%this, %theme, %category, %member
 			Extent = "220 30";
 			Profile = %this.slotProfile(%theme, "DropDown", %category, %member);
 			listBoxProfile = %this.slotProfile(%theme, "DropDownItem", %category, %member);
-			backgroundProfile = %theme.getProfile("Overlay");
-			scrollProfile = %theme.getProfile("Scroll");
-			trackProfile = %theme.getProfile("ScrollTrack");
-			thumbProfile = %theme.getProfile("ScrollThumb");
-			arrowProfile = %theme.getProfile("ScrollArrow");
 		};
+		%this.setThemeSlot(%dropDown, "backgroundProfile", %theme, "Overlay");
+		%this.setThemeSlot(%dropDown, "scrollProfile", %theme, "Scroll");
+		%this.setThemeSlot(%dropDown, "trackProfile", %theme, "ScrollTrack");
+		%this.setThemeSlot(%dropDown, "thumbProfile", %theme, "ScrollThumb");
+		%this.setThemeSlot(%dropDown, "arrowProfile", %theme, "ScrollArrow");
 		%this.addSample(%dropDown);
 		%dropDown.addItem("First choice");
 		%dropDown.addItem("Second choice");
@@ -437,7 +455,6 @@ function GuiProfileEditorPreview::showCategory(%this, %theme, %category, %member
 			MenuProfile = %this.slotProfile(%theme, "Menu", %category, %member);
 			MenuItemProfile = %this.slotProfile(%theme, "MenuItem", %category, %member);
 			MenuContentProfile = %this.slotProfile(%theme, "MenuContent", %category, %member);
-			backgroundProfile = %theme.getProfile("Overlay");
 
 			new GuiMenuItemCtrl()
 			{
@@ -472,6 +489,7 @@ function GuiProfileEditorPreview::showCategory(%this, %theme, %category, %member
 				new GuiMenuItemCtrl() { Text = "Reset Zoom"; };
 			};
 		};
+		%this.setThemeSlot(%menuBar, "backgroundProfile", %theme, "Overlay");
 		%this.addSample(%menuBar);
 	}
 	else if(%category $= "Progress")
@@ -521,16 +539,17 @@ function GuiProfileEditorPreview::showCategory(%this, %theme, %category, %member
 	}
 	else if(%category $= "ColorPopup")
 	{
-		%this.addSample(new GuiColorPopupCtrl()
+		%popup = new GuiColorPopupCtrl()
 		{
 			Position = "0 0";
 			Extent = "60 30";
 			Profile = %member;
-			backgroundProfile = %theme.getProfile("Overlay");
-			popupProfile = %theme.getProfile("Panel");
-			pickerProfile = %theme.getProfile("ColorPicker");
-			selectorProfile = %theme.getProfile("ColorSelector");
-		});
+		};
+		%this.setThemeSlot(%popup, "backgroundProfile", %theme, "Overlay");
+		%this.setThemeSlot(%popup, "popupProfile", %theme, "Panel");
+		%this.setThemeSlot(%popup, "pickerProfile", %theme, "ColorPicker");
+		%this.setThemeSlot(%popup, "selectorProfile", %theme, "ColorSelector");
+		%this.addSample(%popup);
 	}
 	else if(%category $= "Slider" || %category $= "SliderThumb")
 	{

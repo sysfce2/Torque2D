@@ -36,8 +36,8 @@ function GuiProfileEditorDialog::init(%this, %width, %height)
 	%content.add(%this.toolbar);
 
 	%this.toolbar.addButton("onNewTheme", 11, "New Theme", "");
-	%this.toolbar.addButton("onRenameTheme", 49, "Rename Theme", "getThemeSelected");
-	%this.toolbar.addButton("onDeleteTheme", 23, "Delete Theme", "getThemeSelected");
+	%this.toolbar.addButton("onRename", 49, "Rename Theme or Stand Alone Profile", "getRootSelected");
+	%this.toolbar.addButton("onDelete", 23, "Delete Theme or Stand Alone Profile", "getRootSelected");
 	%this.toolbar.addButton("onNewProfile", 25, "New Profile in Category", "getCategorySelected");
 	%this.toolbar.addButton("onRemoveProfile", 23, "Remove Extra Profile", "getExtraSelected");
 	%this.toolbar.addButton("onNewStandalone", 25, "New Stand Alone Profile", "");
@@ -726,13 +726,13 @@ function GuiProfileEditorDialog::createCustomBorder(%this, %container, %name)
 		%this.library.endNaming();
 		return %border;
 	}
-	// Standalone bundle: a plain custom border added to the group, kept ahead
+	// Standalone bundle: a plain custom border added to the bundle, kept ahead
 	// of the profile so the default's object reference resolves on reload.
 	%this.library.beginNaming();
 	%border = new GuiBorderProfile(%name) { isCustom = true; };
 	%this.library.endNaming();
 
-	if(isObject(%container) && %container.isMemberOfClass("SimGroup"))
+	if(%this.library.isBundle(%container))
 	{
 		%container.add(%border);
 		if(isObject(%this.currentMember))
@@ -756,9 +756,30 @@ function GuiProfileEditorDialog::onBorderChanged(%this)
 // Toolbar enabled-state callbacks.
 //-----------------------------------------------------------------------------
 
-function GuiProfileEditorDialog::getThemeSelected(%this)
+// The two node kinds that are a save root: a theme and a stand-alone profile
+// each carry a name of their own and own a file of their own, which is exactly
+// what Rename and Delete need. Everything else in the tree belongs to one of
+// them - a theme member takes the name its theme gives it and is written into
+// the theme's file.
+function GuiProfileEditorDialog::getRootSelected(%this)
 {
-	return isObject(%this.currentProxy) && %this.currentProxy.kind $= "theme";
+	if(!isObject(%this.currentProxy))
+	{
+		return false;
+	}
+	%kind = %this.currentProxy.kind;
+	return %kind $= "theme" || %kind $= "standalone";
+}
+
+// The save root the selection stands for: a theme is its own, a stand-alone
+// profile's is the bundle its file holds.
+function GuiProfileEditorDialog::selectedRoot(%this)
+{
+	if(!%this.getRootSelected())
+	{
+		return 0;
+	}
+	return (%this.currentProxy.kind $= "theme") ? %this.currentProxy.target : %this.currentProxy.root;
 }
 
 function GuiProfileEditorDialog::getCategorySelected(%this)
@@ -799,58 +820,105 @@ function GuiProfileEditorDialog::doCreateTheme(%this, %name)
 	}
 }
 
-function GuiProfileEditorDialog::onRenameTheme(%this)
+// One button for both things that carry a name of their own: a theme, and a
+// stand-alone profile. A theme member has no name to rename - it takes the one
+// its theme gives it.
+function GuiProfileEditorDialog::onRename(%this)
 {
-	if(!%this.getThemeSelected())
+	if(!%this.getRootSelected())
 	{
 		return;
 	}
-	%this.openNameDialog("Rename Theme", "doRenameTheme", %this.currentProxy.target.getName());
+
+	%isTheme = %this.currentProxy.kind $= "theme";
+	%title = %isTheme ? "Rename Theme" : "Rename Stand Alone Profile";
+	%this.openNameDialog(%title, "doRename", %this.currentProxy.target.getName());
 }
 
-function GuiProfileEditorDialog::doRenameTheme(%this, %name)
+function GuiProfileEditorDialog::doRename(%this, %name)
 {
-	if(!%this.getThemeSelected())
+	if(!%this.getRootSelected())
 	{
 		return;
 	}
-	if(%this.library.renameThemeTo(%this.currentProxy.target, %name))
+
+	%proxy = %this.currentProxy;
+	if(%proxy.kind $= "theme")
 	{
-		%this.tree.refresh();
+		if(!%this.library.renameThemeTo(%proxy.target, %name))
+		{
+			return;
+		}
 		// The theme form is the pane showing for a theme node; refresh
 		// its Name label to the new name.
-		%this.themeForm.bindTheme(%this.currentProxy.target);
+		%this.themeForm.bindTheme(%proxy.target);
 	}
+	else
+	{
+		if(!%this.library.renameStandaloneTo(%proxy.root, %name))
+		{
+			return;
+		}
+		// Likewise the profile pane, whose header names the profile.
+		%this.profileForm.bind(%proxy.target, %proxy.kind);
+	}
+
+	%this.tree.refresh();
 }
 
-function GuiProfileEditorDialog::onDeleteTheme(%this)
+function GuiProfileEditorDialog::onDelete(%this)
 {
-	if(!%this.getThemeSelected())
+	if(!%this.getRootSelected())
 	{
 		return;
 	}
-	%message = "Delete the theme \"" @ %this.currentProxy.target.getName() @ "\" and all of its profiles? The file is removed when you save.";
-	%this.openConfirmDialog("Delete Theme", %message, "Delete", "doDeleteTheme");
+
+	%name = %this.currentProxy.target.getName();
+	if(%this.currentProxy.kind $= "theme")
+	{
+		%title = "Delete Theme";
+		%message = "Delete the theme \"" @ %name @ "\" and all of its profiles? The file is removed when you save.";
+	}
+	else
+	{
+		// Nothing can list the Guis that name this profile, so say plainly what
+		// becomes of them rather than pretending to have checked.
+		%title = "Delete Stand Alone Profile";
+		%message = "Delete the stand alone profile \"" @ %name @ "\"? The file is removed when you save, and any control still asking for it falls back to the default profile.";
+	}
+
+	%this.openConfirmDialog(%title, %message, "Delete", "doDelete");
 }
 
-function GuiProfileEditorDialog::doDeleteTheme(%this)
+function GuiProfileEditorDialog::doDelete(%this)
 {
-	if(!%this.getThemeSelected())
+	%root = %this.selectedRoot();
+	if(!isObject(%root))
 	{
 		return;
 	}
-	%theme = %this.currentProxy.target;
 
-	// Detach everything that renders or inspects members before they die.
+	%isTheme = %this.currentProxy.kind $= "theme";
+
+	// Detach everything that renders or inspects what is about to die: the
+	// preview samples wear these profiles, the member panes are bound to one,
+	// and the Borders pane's setters hold both the profile and its container.
 	%this.preview.clearSamples();
-	%this.profileForm.unbind();
-	%this.borderForm.unbind();
-	%this.themeForm.unbind();
+	%this.hideMemberPanes();
+	%this.hideBorders();
 	%this.currentProxy = "";
 	%this.currentRoot = "";
 	%this.currentMember = "";
 
-	%this.library.deleteTheme(%theme);
+	if(%isTheme)
+	{
+		%this.library.deleteTheme(%root);
+	}
+	else
+	{
+		%this.library.deleteStandalone(%root);
+	}
+
 	%this.tree.refresh();
 	%this.toolbar.refreshEnabled();
 }
@@ -953,7 +1021,13 @@ function GuiProfileEditorDialog::openNameDialog(%this, %title, %callback, %defau
 function GuiProfileEditorDialog::openConfirmDialog(%this, %title, %message, %confirmText, %callback)
 {
 	%width = 500;
-	%height = 160;
+
+	// Grow the dialog to fit the message rather than clipping it: the text wraps
+	// at roughly 54 characters to a line at this width, and the dialog needs
+	// room for the buttons under it. Two lines is the floor, so the short
+	// messages keep the shape they had.
+	%lines = mGetMax(mCeil(strlen(%message) / 54), 2);
+	%height = 100 + (%lines * 24);
 	%dialog = new GuiControl()
 	{
 		class = "GuiProfileEditorConfirmDialog";
