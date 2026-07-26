@@ -474,6 +474,26 @@ GuiControlProfile::GuiControlProfile(void) :
 
 GuiControlProfile::~GuiControlProfile()
 {
+	// Still worn on the way out. Every control holding this profile now has a
+	// dangling mProfile, and nothing touches it until that control renders or is
+	// destroyed - usually inside Sim::shutdown, which surfaces as an access
+	// violation at exit with nothing pointing back to here. Name the profile at
+	// the point the mistake is actually made.
+	//
+	// This can't be fixed up automatically: a control's "Profile" field is a raw
+	// field offset (GuiControl::initPersistFields), so assigning it writes
+	// mProfile directly, bypassing setControlProfile, and ConsoleSetType only
+	// receives the field address - never the owning control - so there is nowhere
+	// to register a deleteNotify. Destroying profiles after the controls that wear
+	// them is the only defence.
+	// Only meaningful while the engine is live. Sim::shutdown tears every object
+	// down in an arbitrary order, so profiles outliving or predeceasing their
+	// controls there is normal and would drown this warning in noise.
+	if (mRefCount != 0 && !Sim::isShuttingDown())
+	{
+		const char* profileName = getName() ? getName() : "<unnamed>";
+		Con::warnf("GuiControlProfile (%s) deleted while still worn by %d control(s) - those controls now hold a dangling profile.", profileName, mRefCount);
+	}
 }
 
 void GuiControlProfile::setTheme(GuiProfileTheme* theme, bool preserveOverrides)

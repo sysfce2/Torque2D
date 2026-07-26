@@ -71,20 +71,9 @@ exec("./editor/main.cs");
 
 function onExit()
 {
-	// Close the Gui Profile Editor first: its live preview wears theme profiles
-	// owned by the editor's theme library, which the unload below frees. Tearing
-	// the dialog down while everything is still alive avoids a dangling-profile
-	// crash at final teardown.
-	if(isObject(GuiEditor) && GuiEditor.isMethod("closeProfileEditor"))
-	{
-		GuiEditor.closeProfileEditor();
-	}
-
-    // Unload the AppCore or EditorCore modules.
-	if(isObject(EditorManager))
-	{
-	    EditorManager.unloadGroup( "EditorGroup" );
-	}
+	// The editor unloads itself in onPreExit (editor/main.cs) -- it is loaded
+	// module-by-module rather than as a group, so there was never an "EditorGroup"
+	// for this to unload.
 	if(isObject(AppCore))
 	{
     	ModuleDatabase.unloadExplicit( "AppCore" );

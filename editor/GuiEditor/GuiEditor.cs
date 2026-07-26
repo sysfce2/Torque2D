@@ -270,6 +270,15 @@ function GuiEditor::createFrameSet(%this)
 
 function GuiEditor::destroy( %this )
 {
+	// Order matters. The Profile Editor's live preview wears theme member
+	// profiles owned by the theme library, and the library deliberately outlives
+	// the dialog (see openProfileEditor). Freeing it while the dialog is still up
+	// leaves those preview controls holding freed profiles, and the dangling
+	// mProfile is not touched until the canvas itself is torn down - inside
+	// Sim::shutdown, long after this runs - so it surfaces as an access violation
+	// at exit with no obvious cause. Close the dialog first.
+	%this.closeProfileEditor();
+
 	if(isObject(%this.themeLibrary))
 	{
 		%this.themeLibrary.delete();
