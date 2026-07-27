@@ -132,13 +132,39 @@ sequence; otherwise it is picked up automatically and run last, alphabetically.
 ## Known failures
 
 Recorded in `$Expected` in `run.ps1`, so a real regression stands out instead of
-blending into the noise. Both were confirmed by stashing the working tree and
-rebuilding, and neither is the suite's own fault:
+blending into the noise. Delete the entry when the underlying bug is fixed; the
+runner then reports any recurrence as a change.
 
-- **`border`** — 9 stand-alone-bundle checks, then an `AssertFatal` at teardown
-  (`GuiBorderProfile: requested gui profile (GuiDefaultBorderProfile) does not
-  exist`), so it hangs and is killed.
-- **`profileForm`** — the `direct: fontDirectory row visible` check.
+- **`profileForm`** — the `direct: fontDirectory row visible` check. Confirmed by
+  stashing the working tree and rebuilding: it fails identically on a clean tree.
 
-Delete the entry when the underlying bug is fixed; the runner will then report
-any recurrence as a change.
+### A cautionary tale about reading a killed run
+
+`border` used to lose nine checks and then die, and it was written up — in a
+commit message and a PR — as a pre-existing teardown crash tied to the
+profile-lifetime problem. It was none of those things.
+
+It was a **stale test**. A stand-alone profile's bundle used to be a `ScriptGroup`
+and is now a `SimSet`, deliberately: a group takes the profile *out* of
+`GuiDataGroup`, which is the only place the engine looks when filling a control's
+Profile dropdown. The test still asserted `ScriptGroup` and still used
+`%profile.getGroup()` to find the bundle — which, a SimSet leaving membership
+alone, answered `GuiDataGroup`. The test then called `delete()` on that, taking
+every editor profile with it, and the next `TAMLRead` tripped a fatal assert
+looking for the `GuiDefaultBorderProfile` it had just destroyed. Nine failures and
+a fatal, all from one stale assumption, and the fatal was the *test's* doing.
+
+Three things made it look like an engine bug:
+
+- the runner reported it as "hung", because a fatal assert is a **modal box** and
+  the process just sits there. It now says "killed after Ns" and prints the last
+  log line, which names the assert.
+- the log's tail was full of `deleted while still worn` warnings, which look
+  exactly like shutdown. Shutdown was never reached — `Removing path expando` and
+  `Shutting down the OpenGL display device` are the lines to grep for.
+- stashing the working tree and rebuilding reproduced it identically, which proved
+  only that the change under test hadn't caused it — not that the engine had.
+
+If a suite fails and dies, read the log from the **last check it logged** forward,
+and confirm whether shutdown actually happened before calling anything a teardown
+problem.

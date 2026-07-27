@@ -104,6 +104,39 @@ function bStep2()
 	schedule(400, 0, "bStep3");
 }
 
+// The tree leaf for a stand-alone profile, which is what carries the bundle on
+// its .root. Keyed off the profile because the bundle is what we are looking for.
+function bStandaloneProxy(%dialog, %profile)
+{
+	%folder = %dialog.library.standaloneFolder;
+	for(%i = 0; %i < %folder.getCount(); %i++)
+	{
+		if(%folder.getObject(%i).target == %profile)
+		{
+			return %folder.getObject(%i);
+		}
+	}
+	return 0;
+}
+
+// The same bundle, found through the library rather than the tree. Saving closes
+// the Profile Editor and schedules the dialog's deletion, so anything checked
+// after an onSave has to ask the library, which outlives it.
+function bBundleFor(%profile)
+{
+	%lib = GuiEditor.themeLibrary;
+	%group = %lib.themeGroup;
+	for(%i = 0; %i < %group.getCount(); %i++)
+	{
+		%root = %group.getObject(%i);
+		if(%lib.isBundle(%root) && %root.isMember(%profile))
+		{
+			return %root;
+		}
+	}
+	return 0;
+}
+
 //--- Standalone profile: bundle wraps the profile + a custom default border. --
 function bStep3()
 {
@@ -112,12 +145,20 @@ function bStep3()
 
 	%profile = %d.library.createStandalone("BSolo");
 	bCheck("standalone profile created", isObject(%profile));
-	%bundle = %profile.getGroup();
-	bCheck("standalone wrapped in a ScriptGroup bundle", isObject(%bundle) && %bundle.getClassName() $= "ScriptGroup");
 
+	// The bundle is a SimSet, not a SimGroup, so it does NOT become the profile's
+	// group -- a group would take the profile out of GuiDataGroup, which is the
+	// only place the engine looks when it fills a control's Profile dropdown. That
+	// is why the bundle has to be found through the tree proxy rather than through
+	// %profile.getGroup(), which still answers GuiDataGroup.
 	%d.tree.refresh();
-	%proxy = %d.library.standaloneProxy[%bundle.getId()];
+	%proxy = bStandaloneProxy(%d, %profile.getId());
 	bCheck("standalone proxy found", isObject(%proxy));
+	%bundle = %proxy.root;
+	bCheck("standalone wrapped in a bundle", %d.library.isBundle(%bundle));
+	bCheck("bundle holds the profile", isObject(%bundle) && %bundle.isMember(%profile));
+	bCheck("profile stays in the gui data group", %profile.getGroup() == GuiDataGroup.getId());
+
 	%d.onTreeSelect(%proxy);
 	bCheck("standalone root is the bundle", %d.currentRoot == %bundle.getId());
 
@@ -126,7 +167,9 @@ function bStep3()
 	%setter.onSelect("Custom...");
 	%custom = BSolodefaultCustomBorder;
 	bCheck("standalone custom default created", isObject(%custom));
-	bCheck("bundle owns the custom border", isObject(%custom) && %custom.getGroup() == %bundle.getId());
+	// Named by the bundle, but living in the gui data group, for the same reason.
+	bCheck("bundle names the custom border", isObject(%custom) && %bundle.isMember(%custom));
+	bCheck("custom border is in the gui data group", isObject(%custom) && %custom.getGroup() == GuiDataGroup.getId());
 	bCheck("standalone default references custom", BSolo.borderDefault $= "BSolodefaultCustomBorder");
 
 	%box = %setter.grid.box["margin", 0];
@@ -143,16 +186,20 @@ function bStep4()
 	%file = pathConcat(getMainDotCsDir(), "borderSmokeProject", "themes", "BSolo.taml");
 	bCheck("standalone bundle file written", isFile(%file));
 	%text = bReadFile(%file);
-	bCheck("bundle file is a ScriptGroup", strstr(%text, "ScriptGroup") >= 0);
+	bCheck("bundle file is a SimSet", strstr(%text, "SimSet") >= 0);
 	bCheck("bundle file carries the profile", strstr(%text, "BSolo") >= 0);
 	bCheck("bundle file carries the custom default border", strstr(%text, "defaultCustomBorder") >= 0);
 	bCheck("bundle file carries the edited margin", strstr(%text, "margin=\"5\"") >= 0);
 
-	// Reload the bundle straight from disk.
+	// Reload the bundle straight from disk. deleteRoot, not delete: a bundle is a
+	// set and does not own what it holds, so dropping the set alone would leave
+	// the profile and its custom border behind and the reload would collide with
+	// the names they still hold.
 	%lib = GuiEditor.themeLibrary;
-	%bundle = BSolo.getGroup();
+	%bundle = bBundleFor(BSolo.getId());
+	bCheck("bundle found for teardown", %lib.isBundle(%bundle));
 	%lib.removeProxiesFor(%bundle);
-	%bundle.delete();
+	%lib.deleteRoot(%bundle);
 
 	editorMode(false);
 	%reloaded = TAMLRead(%file);

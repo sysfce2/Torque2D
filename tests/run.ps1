@@ -57,8 +57,6 @@ $Dir  = if ($Shots) { 'shots' } else { 'smoke' }
 # number here is what keeps a real regression visible, because any other number
 # is reported as a change. Drop the entry when the underlying bug is fixed.
 $Expected = @{
-    'border'      = @{ Fail = 9; Hang = $true
-                       Why = 'stand-alone bundle checks, then an AssertFatal at teardown (GuiDefaultBorderProfile); predates the tests tree, confirmed by stashing' }
     'profileForm' = @{ Fail = 1
                        Why = 'the "direct: fontDirectory row visible" check; fails identically on a clean tree' }
 }
@@ -176,7 +174,7 @@ foreach ($test in $tests) {
           else        { $fail -eq $expFail -and $hung -eq $expHang }
 
     $note = ''
-    if ($hung) { $note = if ($expHang) { 'hung (expected)' } else { 'HUNG' } }
+    if ($hung) { $note = if ($expHang) { "killed after ${Timeout}s (expected)" } else { "KILLED after ${Timeout}s" } }
     if ($fail -gt 0) {
         $what = if ($fail -eq $expFail) { "$fail known" } else { "$fail FAILED" }
         $note = if ($note) { "$what, $note" } else { $what }
@@ -189,6 +187,16 @@ foreach ($test in $tests) {
     if (-not $ok) {
         $lines | Select-String 'FAIL:' | Select-Object -First 6 | ForEach-Object {
             Write-Host "                     $($_.Line.Trim())" -ForegroundColor DarkRed
+        }
+    }
+
+    # A killed process nearly always means a fatal assert put a modal box up, and
+    # the reason is the last thing the engine managed to log. Show it, so nobody
+    # has to open console.log or watch for the dialog to find out what happened.
+    if ($hung) {
+        $last = $lines | Where-Object { $_.Trim() } | Select-Object -Last 1
+        if ($last) {
+            Write-Host "                     last log line: $($last.Trim())" -ForegroundColor DarkYellow
         }
     }
 
