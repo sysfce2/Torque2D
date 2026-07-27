@@ -366,6 +366,8 @@ function GuiProfileEditorProfileForm::kindFor(%this, %field)
 		case "fontColors7" or "fontColors8" or "fontColors9":                 return "color";
 		// A path nobody should be asked to type: the row gets a Find button.
 		case "bitmap":                                                        return "file";
+		// Nor an asset id, which you would otherwise have to remember exactly.
+		case "imageAsset":                                                    return "asset";
 	}
 	return "text";
 }

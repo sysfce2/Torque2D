@@ -1032,8 +1032,13 @@ GuiControl* GuiInspectorTypeAsset::constructEditControl(S32 width)
    if (mBrowseButton != NULL)
    {
 
+      // The inspector is an editor-only control, so it asks the editor for the
+      // picker rather than a global that has to exist for its own sake. Target
+      // and method go over as two arguments rather than as one "<id>.apply"
+      // string, so the picker can call back the way every editor dialog does
+      // and nothing has to take the string apart at the other end.
       char szBuffer[512];
-      dSprintf(szBuffer, 512, "getAsset(\"%d.apply\", \"%s\", \"%s\");", getId(), getData(), mAssetType);
+      dSprintf(szBuffer, 512, "EditorCore.openAssetPicker(%d, \"apply\", \"%s\", \"%s\");", getId(), getData(), mAssetType);
       mBrowseButton->setField("Command", szBuffer);
       mBrowseButton->setField("text", "...");
 	  mBrowseButton->setControlProfile(mGroup->mInspector->mButtonProfile);

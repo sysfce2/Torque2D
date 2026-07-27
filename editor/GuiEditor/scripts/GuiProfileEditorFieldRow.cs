@@ -24,7 +24,7 @@
 // its container -- the container decides the cell width, so build() has to run
 // after the add. It records the laid-out height in .rowHeight.
 //
-// Kinds: text, number, point, bool, color, enum, dropdown, file.
+// Kinds: text, number, point, bool, color, enum, dropdown, file, asset.
 //-----------------------------------------------------------------------------
 
 function GuiProfileEditorFieldRow::onAdd(%this)
@@ -128,18 +128,13 @@ function GuiProfileEditorFieldRow::build(%this)
 	{
 		// A path the user should not have to type: a text box plus a Find button
 		// that opens a file dialog and writes back what it picked.
-		%buttonW = 56;
-		%this.editor = %this.makeInput(%pad, %editorY, %editorW - %buttonW - 4, 22, false, "width");
-		%this.findButton = new GuiButtonCtrl()
-		{
-			HorizSizing = "left";
-			Position = (%pad + %editorW - %buttonW) SPC %editorY;
-			Extent = %buttonW SPC 22;
-			Text = "Find";
-			Command = %this.getID() @ ".onFindClicked();";
-		};
-		ThemeManager.setProfile(%this.findButton, "buttonProfile");
-		%this.add(%this.findButton);
+		%this.makeFindRow(%pad, %editorY, %editorW, ".onFindClicked();");
+	}
+	else if(%kind $= "asset")
+	{
+		// Same shape as a file, but Find opens the asset picker instead of the
+		// file dialog -- an asset id is no more typeable from memory than a path.
+		%this.makeFindRow(%pad, %editorY, %editorW, ".onFindAssetClicked();");
 	}
 	else
 	{
@@ -161,6 +156,26 @@ function GuiProfileEditorFieldRow::build(%this)
 	};
 	ThemeManager.setProfile(%this.resetButton, "iconButtonProfile");
 	%this.add(%this.resetButton);
+}
+
+// A text box with a Find button beside it, for the two fields whose value is
+// something to be chosen rather than typed. The caller supplies the method the
+// button calls; everything else about the two rows is identical, including the
+// button keeping its place at the cell's right edge as the grid widens.
+function GuiProfileEditorFieldRow::makeFindRow(%this, %pad, %editorY, %editorW, %command)
+{
+	%buttonW = 56;
+	%this.editor = %this.makeInput(%pad, %editorY, %editorW - %buttonW - 4, 22, false, "width");
+	%this.findButton = new GuiButtonCtrl()
+	{
+		HorizSizing = "left";
+		Position = (%pad + %editorW - %buttonW) SPC %editorY;
+		Extent = %buttonW SPC 22;
+		Text = "Find";
+		Command = %this.getID() @ %command;
+	};
+	ThemeManager.setProfile(%this.findButton, "buttonProfile");
+	%this.add(%this.findButton);
 }
 
 // A text box that commits on blur (AltCommand) and on Enter, matching how the
@@ -427,6 +442,23 @@ function GuiProfileEditorFieldRow::onFindClicked(%this)
 	}
 
 	%this.editor.setText(makeRelativePath(%fileName, getMainDotCsDir()));
+	%this.commit();
+}
+
+// The Find button on an "asset" row. The picker lives in EditorCore because the
+// native inspector's browse button uses it too; it hands back the chosen id
+// through onAssetPicked. Whatever the box holds now is passed along so the
+// picker opens on the current choice.
+function GuiProfileEditorFieldRow::onFindAssetClicked(%this)
+{
+	EditorCore.openAssetPicker(%this, "onAssetPicked", %this.editor.getText(), "ImageAsset");
+}
+
+// An asset id is already portable -- it names a module and an asset, not a
+// place on this machine -- so unlike a bitmap path it goes in as it came out.
+function GuiProfileEditorFieldRow::onAssetPicked(%this, %assetId)
+{
+	%this.editor.setText(%assetId);
 	%this.commit();
 }
 
