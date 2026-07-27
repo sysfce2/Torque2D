@@ -240,14 +240,10 @@ function GuiProfileEditorBorderGrid::notifyCommit(%this)
 }
 
 //-----------------------------------------------------------------------------
-// The numeric input boxes: click selects all, up/down arrows nudge by 1.
+// The numeric input boxes: up/down arrows nudge by 1. Clicking places the caret,
+// as it does in every other box in the editor - see the note in
+// GuiProfileEditorFieldRow for why nothing re-selects here.
 //-----------------------------------------------------------------------------
-
-function GuiProfileEditorBorderInput::onTouchDown(%this)
-{
-	// The engine places the cursor on click; re-select so a click selects all.
-	%this.selectAllText();
-}
 
 function GuiProfileEditorBorderInput::onUpArrow(%this)
 {

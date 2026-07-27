@@ -285,6 +285,14 @@ public:
    void setImageAsset( const char* pImageAssetID );
    inline StringTableEntry getImageAsset( void ) const { return mImageAssetID; }
 
+   /// The bitmap path as it should be written down: relative to the game root
+   /// when it points inside the game, and unchanged when it does not.
+   ///
+   /// mBitmapName itself is always absolute - TypeFilename expands whatever it
+   /// is given the moment it is set - and an absolute path in a saved profile
+   /// names a folder on one developer's machine and nowhere else.
+   StringTableEntry getRelativeBitmapName( void ) const;
+
 private:
 	HashMap<S32, GFont*> mFontMap;
 	S32 getFontSize(F32 fontAdjust);
@@ -293,6 +301,10 @@ private:
 protected:
 	static bool setImageAsset(void* obj, const char* data) { static_cast<GuiControlProfile*>(obj)->setImageAsset(data); return false; }
 	static const char* getImageAsset(void* obj, const char* data) { return static_cast<GuiControlProfile*>(obj)->getImageAsset(); }
+
+	// Set is left to TypeFilename, which expands the path; only the read-back is
+	// ours, so that what gets written stays portable.
+	static const char* getBitmapName(void* obj, const char* data) { return static_cast<GuiControlProfile*>(obj)->getRelativeBitmapName(); }
 
 	static bool setThemeOverrides(void* obj, const char* data) { static_cast<GuiControlProfile*>(obj)->mThemeMembership.parseOverrideList(data); return false; }
 	static const char* getThemeOverrides(void* obj, const char* data) { return static_cast<GuiControlProfile*>(obj)->mThemeMembership.formatOverrideList(); }

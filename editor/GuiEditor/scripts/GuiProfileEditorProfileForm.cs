@@ -364,6 +364,8 @@ function GuiProfileEditorProfileForm::kindFor(%this, %field)
 		case "cursorColor" or "fillColorTextSL" or "fontColorTextSL":         return "color";
 		case "fontColorLink" or "fontColorLinkHL":                            return "color";
 		case "fontColors7" or "fontColors8" or "fontColors9":                 return "color";
+		// A path nobody should be asked to type: the row gets a Find button.
+		case "bitmap":                                                        return "file";
 	}
 	return "text";
 }

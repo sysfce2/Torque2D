@@ -700,7 +700,8 @@ void GuiControlProfile::initPersistFields()
    addField("textOffset",    TypePoint2I,    Offset(mTextOffset, GuiControlProfile));
    addField("cursorColor",   TypeColorI,     Offset(mCursorColor, GuiControlProfile));
 
-   addField("bitmap",        TypeFilename,   Offset(mBitmapName, GuiControlProfile));
+   // Written relative to the game root; see getRelativeBitmapName.
+   addProtectedField("bitmap", TypeFilename, Offset(mBitmapName, GuiControlProfile), &defaultProtectedSetFn, &getBitmapName, "Bitmap array used to render the control");
    addProtectedField("imageAsset", TypeAssetId, Offset(mImageAssetID, GuiControlProfile), &setImageAsset, &getImageAsset, "The image asset ID used to render the control");
 
    addField("category", TypeString, Offset(mCategory, GuiControlProfile));
@@ -1003,6 +1004,28 @@ void GuiControlProfile::decRefCount()
 			mImageAsset.clear();
 		}
 	}
+}
+
+// What the bitmap path should look like in a file. TypeFilename expands
+// whatever it is handed the moment it is set, so mBitmapName is always an
+// absolute path on the machine that set it - and writing that down produces a
+// profile that renders on exactly one computer. Relative to the game root is
+// what survives the trip, and it is what TypeFilename expands back correctly on
+// the next machine to load it.
+StringTableEntry GuiControlProfile::getRelativeBitmapName( void ) const
+{
+	if (mBitmapName == NULL || mBitmapName == StringTable->EmptyString)
+		return mBitmapName;
+
+	// Only a path inside the game is made relative. An image somewhere else -
+	// another drive, a folder beside the repository - is left alone: a "../.."
+	// chain climbing out of the game folder is no more portable than the
+	// absolute path it came from, and pretending otherwise would hide that.
+	StringTableEntry gameRoot = Platform::getMainDotCsDir();
+	if (!Con::isBasePath(mBitmapName, gameRoot))
+		return mBitmapName;
+
+	return Platform::makeRelativePathName(mBitmapName, gameRoot);
 }
 
 void GuiControlProfile::setImageAsset(const char* pImageAssetID)

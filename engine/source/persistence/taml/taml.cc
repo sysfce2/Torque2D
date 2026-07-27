@@ -700,9 +700,17 @@ void Taml::compileStaticFields( TamlWriteNode* pTamlWriteNode )
             // Reassign field value.
             pFieldValue = valueCopy;
 
-            // Detect and collapse relative path information
+            // Detect and collapse relative path information.
+            //
+            // Only an absolute path is put through this. Con::collapsePath
+            // rewrites against a path expando when it can ("^AppCore/x.png")
+            // and otherwise falls back to the working directory joined to the
+            // path - which hands back an absolute path again. Run that over a
+            // value that was already relative and a portable path is turned
+            // into one naming a folder on the machine that saved the file,
+            // which is the opposite of what collapsing is for.
             char fnBuf[1024];
-            if ((S32)pField->type == TypeFilename)
+            if ((S32)pField->type == TypeFilename && Platform::isFullPath( pFieldValue ))
             {
                 Con::collapsePath( fnBuf, 1024, pFieldValue );
                 pFieldValue = fnBuf;

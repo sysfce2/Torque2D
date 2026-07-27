@@ -126,8 +126,8 @@ function GuiProfileEditorFieldRow::build(%this)
 	}
 	else if(%kind $= "file")
 	{
-		// A font directory: the user finds any font inside the target folder and
-		// we keep the folder, matching the theme form's Find pattern.
+		// A path the user should not have to type: a text box plus a Find button
+		// that opens a file dialog and writes back what it picked.
 		%buttonW = 56;
 		%this.editor = %this.makeInput(%pad, %editorY, %editorW - %buttonW - 4, 22, false, "width");
 		%this.findButton = new GuiButtonCtrl()
@@ -403,30 +403,30 @@ function GuiProfileEditorFieldRow::onResetClicked(%this)
 	}
 }
 
+// The Find button on a "file" row. Picks a file and writes its path back into
+// the box relative to the game root, which is the only form that means the same
+// thing on somebody else's machine.
 function GuiProfileEditorFieldRow::onFindClicked(%this)
 {
-	%path = pathConcat(getMainDotCsDir(), ProjectManager.getProjectFolder());
 	%dialog = new OpenFileDialog()
 	{
-		Filters = "Font Files (*.ttf;*.otf;*.fnt;*.uft)|*.ttf;*.otf;*.fnt;*.uft";
+		Filters = "Image Files (*.png;*.jpg;*.jpeg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp|All Files (*.*)|*.*";
 		ChangePath = false;
 		MultipleFiles = false;
 		DefaultFile = "";
-		defaultPath = %path;
-		title = "Find a Font in the Target Directory";
+		defaultPath = pathConcat(getMainDotCsDir(), ProjectManager.getProjectFolder());
+		title = "Choose an Image";
 	};
 	%result = %dialog.execute();
 	%fileName = %dialog.fileName;
 	%dialog.delete();
 
-	if(!%result)
+	if(!%result || %fileName $= "")
 	{
 		return;
 	}
 
-	// Keep the directory relative to the game root, not the absolute path.
-	%dir = filePath(makeRelativePath(%fileName, getMainDotCsDir()));
-	%this.editor.setText(%dir);
+	%this.editor.setText(makeRelativePath(%fileName, getMainDotCsDir()));
 	%this.commit();
 }
 
@@ -438,11 +438,12 @@ function GuiProfileEditorFieldRow::onFindClicked(%this)
 // handler.
 //-----------------------------------------------------------------------------
 
-function GuiProfileEditorRowInput::onTouchDown(%this)
-{
-	// The engine places the cursor on click; re-select so a click selects all.
-	%this.selectAllText();
-}
+// No onTouchDown override here on purpose. Re-selecting the whole value on every
+// click made the caret impossible to place: the engine had already put it where
+// the click landed, and selecting all moved the selection anchor back to the
+// start, so the next drag swept from the beginning of the field. Tabbing in
+// still selects everything - GuiTextEditCtrl::setFirstResponder does that - and
+// a click now does what a click does.
 
 function GuiProfileEditorRowInput::onUpArrow(%this)
 {
