@@ -639,14 +639,34 @@ const char *SimObject::getPrefixedDataField(StringTableEntry fieldName, const ch
     // Sanity!
     AssertFatal( fieldPrefix != NULL, "Field prefix cannot be NULL." );
 
+    // With no prefix there is nothing to format: hand the value straight back.
+    // This is also the safe path for a value that lives in the console return
+    // buffer -- for a numeric type (S32, Point2I, an unnamed ColorI, ...)
+    // getDataField returns a pointer into that scratch buffer, and a second
+    // Con::getReturnBuffer() below hands back the very same address. Formatting
+    // it "%s%s" would then dSprintf a buffer onto itself (aliased src/dst), which
+    // is undefined and comes back empty on glibc -- so the field silently drops
+    // out of the written TAML. Only a value already interned in the string table
+    // (a stock color name, a bool) survived that, which is why named colors
+    // persisted and plain numbers did not.
+    if ( fieldPrefix == StringTable->EmptyString )
+        return pFieldValue;
+
+    // There is a prefix, so we must concatenate. Copy the value out first: it may
+    // point into the console return buffer that getReturnBuffer() is about to
+    // reuse, and dSprintf'ing a buffer onto itself is undefined (see above).
+    const U32 valueLength = dStrlen(pFieldValue);
+    FrameTemp<char> valueCopy( valueLength + 1 );
+    dStrcpy( (char *)valueCopy, pFieldValue );
+
     // Calculate a buffer size including prefix.
-    const U32 valueBufferSize = dStrlen(fieldPrefix) + dStrlen(pFieldValue) + 1;
+    const U32 valueBufferSize = dStrlen(fieldPrefix) + valueLength + 1;
 
     // Fetch a buffer.
     char* pValueBuffer = Con::getReturnBuffer( valueBufferSize );
 
     // Format the value buffer.
-    dSprintf( pValueBuffer, valueBufferSize, "%s%s", fieldPrefix, pFieldValue );
+    dSprintf( pValueBuffer, valueBufferSize, "%s%s", fieldPrefix, (const char *)valueCopy );
 
     return pValueBuffer;
 }
