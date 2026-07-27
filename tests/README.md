@@ -131,12 +131,13 @@ sequence; otherwise it is picked up automatically and run last, alphabetically.
 
 ## Known failures
 
-Recorded in `$Expected` in `run.ps1`, so a real regression stands out instead of
-blending into the noise. Delete the entry when the underlying bug is fixed; the
-runner then reports any recurrence as a change.
+There are none, and that is the standard: **fix the test or delete it.**
 
-- **`profileForm`** — the `direct: fontDirectory row visible` check. Confirmed by
-  stashing the working tree and rebuilding: it fails identically on a clean tree.
+`$Expected` in `run.ps1` is still there for a failure that genuinely is not the
+suite's own fault and cannot be fixed yet — writing the count down is the only way
+the next real regression does not hide inside it. It is currently empty, and both
+entries it once held turned out to be stale tests asserting a design that had
+moved on, not engine bugs. Which is the point of the next section.
 
 ### A cautionary tale about reading a killed run
 
@@ -168,3 +169,15 @@ Three things made it look like an engine bug:
 If a suite fails and dies, read the log from the **last check it logged** forward,
 and confirm whether shutdown actually happened before calling anything a teardown
 problem.
+
+The other entry went the same way. `profileForm` asserted that a Slider's
+`fontDirectory` row was visible; there is no such row, because the editor owns
+that field and points every profile at the project's one font folder
+(`GuiProfileEditorLibrary::applyFontsPath`). `%form.row["fontDirectory"]` was not
+an object, and `isVisible()` on nothing is false. The check now asserts what the
+design actually promises — the field is not offered, and something sets it anyway,
+because a profile without one silently falls back to the editor's own font cache.
+
+Both had sat on the known-failures list described as engine problems. Neither was.
+Before adding an entry, be sure the test is asking for something the code still
+promises.

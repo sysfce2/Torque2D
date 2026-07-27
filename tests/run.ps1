@@ -52,14 +52,17 @@ $Log  = Join-Path $Root 'console.log'
 $Boot = Join-Path $Root '_boot.cs'
 $Dir  = if ($Shots) { 'shots' } else { 'smoke' }
 
-# What each suite is expected to do today. A test with an ExpectedFail count is
-# one whose failures are known and are NOT this suite's fault -- recording the
-# number here is what keeps a real regression visible, because any other number
-# is reported as a change. Drop the entry when the underlying bug is fixed.
-$Expected = @{
-    'profileForm' = @{ Fail = 1
-                       Why = 'the "direct: fontDirectory row visible" check; fails identically on a clean tree' }
-}
+# Every suite is expected to pass, and none is on this list. It stays because a
+# genuinely known failure -- one that is not the suite's own fault and cannot be
+# fixed yet -- has to be written down as a number rather than remembered, or the
+# next real regression hides inside it. Anything other than the recorded count is
+# reported as a change. An entry looks like:
+#
+#   'suiteName' = @{ Fail = 2; Hang = $false; Why = 'why it fails and who owns it' }
+#
+# Prefer fixing or deleting the test. Both of this list's original entries turned
+# out to be stale tests asserting a design that had moved on, not engine bugs.
+$Expected = @{}
 
 # Tests that must find the project folder the previous test left behind, rather
 # than starting from a clean one. Only the second half of a two-pass test.

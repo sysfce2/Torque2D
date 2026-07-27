@@ -119,7 +119,14 @@ function fStep2()
 	fCheck("direct: font face row visible", %form.row["fontType"].isVisible());
 	fCheck("direct: align row hidden", !%form.row["align"].isVisible());
 	fCheck("direct: textOffset row hidden", !%form.row["textOffset"].isVisible());
-	fCheck("direct: fontDirectory row visible", %form.row["fontDirectory"].isVisible());
+
+	// fontDirectory is not a per-profile field at all: the editor owns it and
+	// points every profile at the project's one font folder, so the pane never
+	// builds a row for it. What is worth checking is that something really does
+	// set it -- a profile left without one falls back to $GUI::fontCacheDirectory,
+	// which is the EDITOR's font folder while the editor is loaded.
+	fCheck("direct: fontDirectory is not offered as a field", !isObject(%form.row["fontDirectory"]));
+	fCheck("direct: the profile has a font directory anyway", %form.target.fontDirectory !$= "");
 
 	schedule(400, 0, "fStep3");
 }
