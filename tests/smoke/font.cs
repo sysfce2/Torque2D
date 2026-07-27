@@ -65,7 +65,12 @@ function fsStep1()
 	%installed = getInstalledFonts();
 	$fsInstalledCount = getFieldCount(%installed);
 	echo("FSMOKE installed face count =" SPC $fsInstalledCount);
-	fsCheck("getInstalledFonts returns a real list (" @ $fsInstalledCount @ ")", $fsInstalledCount > 20);
+	// A Windows box has dozens of families; a minimal Linux fontconfig install
+	// (a bare WSL/CI container) can have only ~10 -- DejaVu, Liberation, Ubuntu.
+	// The floor is here to catch enumeration collapsing to nothing or a single
+	// fallback, not to demand a rich desktop, so keep it low enough to pass on
+	// a headless box while still failing a backend that returns (almost) empty.
+	fsCheck("getInstalledFonts returns a real list (" @ $fsInstalledCount @ ")", $fsInstalledCount >= 5);
 	fsCheck("the list is sorted", stricmp(getField(%installed, 0), getField(%installed, $fsInstalledCount - 1)) < 0);
 	fsCheck("no vertical-writing @ twins", strstr(%installed, "@") < 0);
 
