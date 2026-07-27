@@ -371,10 +371,12 @@ void GuiSliderCtrl::onRender(Point2I offset, const RectI &updateRect)
         // Draw a themed groove/track from the main (Slider) profile beneath the
         // rule and tick marks; the thumb below uses the dedicated thumb profile.
         const S32 grooveThickness = 4;
-        if (mBounds.extent.x >= mBounds.extent.y)
-            renderUniversalRect(RectI(Point2I(pos.x, pos.y + (ext.y / 2) - (grooveThickness / 2)), Point2I(ext.x, grooveThickness)), mProfile, NormalState);
-        else
-            renderUniversalRect(RectI(Point2I(pos.x + (ext.x / 2) - (grooveThickness / 2), pos.y), Point2I(grooveThickness, ext.y)), mProfile, NormalState);
+        // renderUniversalRect takes RectI& by (non-const) reference, so the rect
+        // must be a named lvalue -- a temporary won't bind on clang/gcc.
+        RectI grooveRect = (mBounds.extent.x >= mBounds.extent.y)
+            ? RectI(Point2I(pos.x, pos.y + (ext.y / 2) - (grooveThickness / 2)), Point2I(ext.x, grooveThickness))
+            : RectI(Point2I(pos.x + (ext.x / 2) - (grooveThickness / 2), pos.y), Point2I(grooveThickness, ext.y));
+        renderUniversalRect(grooveRect, mProfile, NormalState);
 
         if (mBounds.extent.x >= mBounds.extent.y)
         {
