@@ -119,9 +119,11 @@ sequence; otherwise it is picked up automatically and run last, alphabetically.
 - **`%ctrl.setProfile(%p)` re-profiles a live control safely; `%ctrl.Profile = %p`
   does not** — the field write skips the reference counting that `onWake`/`onSleep`
   rely on.
-- **The font tests leave a folder called `^EditorCore` at the repo root.** Font
-  baking writes to the literal expando string instead of expanding it. Gitignored;
-  the underlying bug is still there.
+- **A folder called `^EditorCore` at the repo root is not content.** `GuiDefaultProfile`
+  carries the unexpanded `"^EditorCore/gui/fonts"` as its font directory, and
+  anything that bakes a font-cache miss recorded against it writes to a folder of
+  that literal name. No suite does — this was chased and could not be reproduced
+  across the full run — but it appeared once, so it stays gitignored.
 - **A test that finds last run's project folder fails on names already taken**,
   which cascades into checks that have nothing to do with what it tests. The
   runner deletes the throwaway folders (`*SmokeProject`, `*ShotProject`,

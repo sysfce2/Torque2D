@@ -113,8 +113,10 @@ engine/compilers/android-studio/app/.cxx/
 /profileFormShotProject/
 /profileFormSmokeProject/
 /smokeThemeProject/
-# Font baking writes to the literal string "^EditorCore" instead of expanding the
-# expando, so the font tests leave this behind. Leavings from a bug, not content.
+# GuiDefaultProfile.fontDirectory is the unexpanded string "^EditorCore/gui/fonts"
+# (guiProfiles.cs), and anything that bakes a font-cache miss recorded against it
+# writes to a folder of that literal name. Nothing in the suite does, but it has
+# happened once, and a stray caret folder is never content.
 /^EditorCore/
 
 # Vendored prebuilt Android libraries (override the global *.a / *.so ignore) #
