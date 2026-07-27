@@ -59,7 +59,10 @@ function ProfileThemeEditForm::build(%this)
 		%item = %this.addFormItem(%label, %cw SPC 76);
 		%item.vAlign = "top";
 		%item.align = "left";
-		%swatch = %this.createColorItem(%item);
+		// The form's own R/G/B/A boxes already cover exact values, so this popup
+		// takes the swatch row only -- handy for pulling one theme color level
+		// with another.
+		%swatch = %this.createColorItem(%item, "GuiProfileEditorColorPopup");
 		%swatch.themeField = %field;
 		%swatch.Command = %this.getID() @ ".onColorPopup(" @ %swatch.getID() @ ");";
 

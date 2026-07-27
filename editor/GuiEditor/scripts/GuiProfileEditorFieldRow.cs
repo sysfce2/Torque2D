@@ -207,15 +207,21 @@ function GuiProfileEditorFieldRow::makeSwatch(%this, %x, %y, %w, %h)
 {
 	%swatch = new GuiColorPopupCtrl()
 	{
+		class = "GuiProfileEditorColorPopup";
 		HorizSizing = "width";
 		Position = %x SPC %y;
 		Extent = %w SPC %h;
+		showColorValues = true;
 	};
 	ThemeManager.setProfile(%swatch, "colorPickerProfile");
 	ThemeManager.setProfile(%swatch, "emptyProfile", "backgroundProfile");
 	ThemeManager.setProfile(%swatch, "colorPopupProfile", "popupProfile");
 	ThemeManager.setProfile(%swatch, "emptyProfile", "pickerProfile");
 	ThemeManager.setProfile(%swatch, "colorPickerSelectorProfile", "selectorProfile");
+	ThemeManager.setProfile(%swatch, "textEditProfile", "valueProfile");
+	// The popup hands this on to its R/G/B/A boxes, which name their channel with
+	// a tooltip -- without it they would each fall back to a profile of their own.
+	ThemeManager.setProfile(%swatch, "tipProfile", "TooltipProfile");
 	%swatch.Command = %this.getID() @ ".commit();";
 	%this.add(%swatch);
 	return %swatch;

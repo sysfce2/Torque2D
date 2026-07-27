@@ -82,14 +82,20 @@ function GuiProfileEditorStateColorRow::build(%this)
 		// as a state row, where four stretched bars would not.
 		%swatch = new GuiColorPopupCtrl()
 		{
+			class = "GuiProfileEditorColorPopup";
 			Position = %x SPC %swatchY;
 			Extent = %swatchW SPC 22;
+			showColorValues = true;
 		};
 		ThemeManager.setProfile(%swatch, "colorPickerProfile");
 		ThemeManager.setProfile(%swatch, "emptyProfile", "backgroundProfile");
 		ThemeManager.setProfile(%swatch, "colorPopupProfile", "popupProfile");
 		ThemeManager.setProfile(%swatch, "emptyProfile", "pickerProfile");
 		ThemeManager.setProfile(%swatch, "colorPickerSelectorProfile", "selectorProfile");
+		ThemeManager.setProfile(%swatch, "textEditProfile", "valueProfile");
+		// Worn by the swatch's own greyed-state tip and handed on to the popup's
+		// R/G/B/A boxes, which name their channel the same way.
+		ThemeManager.setProfile(%swatch, "tipProfile", "TooltipProfile");
 		%swatch.Command = %this.getID() @ ".commitState(" @ %i @ ");";
 		%this.add(%swatch);
 		%this.swatch[%i] = %swatch;

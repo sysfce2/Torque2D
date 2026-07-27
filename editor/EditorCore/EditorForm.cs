@@ -175,12 +175,17 @@ function EditorForm::createDropDownItem(%this, %label)
 // hung on it as .redBox/.greenBox/.blueBox/.alphaBox. The caller wires the
 // swatch's Command and the boxes' AltCommand to its own apply logic and never
 // parses the color string itself (the swatch launders named<->numeric colors).
-function EditorForm::createColorItem(%this, %label)
+//
+// %class is optional: pass a script class to give the popup extra behavior of
+// your own (the Profile Editor uses it to fill the popup's swatch row with the
+// selected theme's colors). Leave it out for a plain popup.
+function EditorForm::createColorItem(%this, %label, %class)
 {
 	// The row's name label (from addFormItem) sits along the top; the swatch and
 	// R/G/B/A boxes sit on the row below it.
 	%swatch = new GuiColorPopupCtrl()
 	{
+		class = %class;
 		Position = "10 24";
 		Extent = "30 30";
 	};
@@ -189,6 +194,8 @@ function EditorForm::createColorItem(%this, %label)
 	ThemeManager.setProfile(%swatch, "colorPopupProfile", "popupProfile");
 	ThemeManager.setProfile(%swatch, "emptyProfile", "pickerProfile");
 	ThemeManager.setProfile(%swatch, "colorPickerSelectorProfile", "selectorProfile");
+	ThemeManager.setProfile(%swatch, "textEditProfile", "valueProfile");
+	ThemeManager.setProfile(%swatch, "tipProfile", "TooltipProfile");
 	%label.add(%swatch);
 
 	%swatch.redBox   = %this.addColorChannel(%label, 48, 24, 48, "R");

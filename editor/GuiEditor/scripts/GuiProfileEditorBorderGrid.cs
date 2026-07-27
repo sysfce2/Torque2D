@@ -76,14 +76,18 @@ function GuiProfileEditorBorderGrid::build(%this)
 			{
 				%box = new GuiColorPopupCtrl()
 				{
+					class = "GuiProfileEditorColorPopup";
 					Position = %bx SPC %by;
 					Extent = %boxW SPC 22;
+					showColorValues = true;
 				};
 				ThemeManager.setProfile(%box, "colorPickerProfile");
 				ThemeManager.setProfile(%box, "emptyProfile", "backgroundProfile");
 				ThemeManager.setProfile(%box, "colorPopupProfile", "popupProfile");
 				ThemeManager.setProfile(%box, "emptyProfile", "pickerProfile");
 				ThemeManager.setProfile(%box, "colorPickerSelectorProfile", "selectorProfile");
+				ThemeManager.setProfile(%box, "textEditProfile", "valueProfile");
+				ThemeManager.setProfile(%box, "tipProfile", "TooltipProfile");
 				%box.isColor = true;
 				%box.Command = %this.getID() @ ".commitBox(" @ %box.getID() @ ");";
 			}

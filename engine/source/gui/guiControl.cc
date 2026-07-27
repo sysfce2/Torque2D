@@ -119,6 +119,7 @@ GuiControl::GuiControl()
    mHorizSizing         = horizResizeRight;
    mVertSizing          = vertResizeBottom;
    mTooltipProfile      = NULL;
+   mLazyTooltipProfile  = NULL;
    mTooltip             = StringTable->EmptyString;
    mTipHoverTime        = DEFAULT_TOOLTIP_HOVERTIME;
    mTooltipWidth        = DEFAULT_TOOLTIP_WIDTH;
@@ -829,6 +830,25 @@ S32 GuiControl::getOuterHeight(S32 innerHeight, GuiControlState currentState, Gu
     return innerHeight + topSize + bottomSize;
 }
 
+GuiControlProfile* GuiControl::resolveDefaultTooltipProfile()
+{
+	// A themed control's tips belong to that theme, not to whichever module
+	// happened to define a profile called GuiTooltipProfile.
+	GuiProfileTheme* theme = (mProfile != NULL) ? mProfile->getTheme() : NULL;
+	if (theme != NULL)
+	{
+		GuiControlProfile* themed = theme->getProfile(StringTable->insert("Tooltip"));
+		if (themed != NULL)
+			return themed;
+	}
+
+	GuiControlProfile* global = dynamic_cast<GuiControlProfile*>(Sim::findObject("GuiTooltipProfile"));
+	if (global != NULL)
+		return global;
+
+	return dynamic_cast<GuiControlProfile*>(Sim::findObject("GuiDefaultProfile"));
+}
+
 bool GuiControl::renderTooltip(Point2I &cursorPos, const char* tipText )
 {
 #if !defined(TORQUE_OS_IOS) && !defined(TORQUE_OS_ANDROID) && !defined(TORQUE_OS_EMSCRIPTEN)
@@ -848,8 +868,41 @@ bool GuiControl::renderTooltip(Point2I &cursorPos, const char* tipText )
     if ( !root )
         return false;
 
-    if (!mTooltipProfile)
-		setField("TooltipProfile", "GuiTooltipProfile");
+    // A control that was never given a tooltip profile picks one for itself the
+    // first time it actually draws a tip, and keeps checking that the pick is
+    // still right: re-theming a control rewrites its Profile field directly, so
+    // there is no setter to hook -- resolving here, per draw, is what makes a tip
+    // follow its control from one theme to the next. Only our own pick is
+    // revisited; a profile someone set deliberately is left alone.
+    //
+    // The reference has to be taken here rather than left to onWake, which has
+    // already run by now (see the mAwake check above) with nothing to count.
+    // onSleep decrements whatever it finds, so a control that acquired a profile
+    // mid-wake without this would sleep one reference short and trip the
+    // zero-ref-count assert. TypeGuiProfile deliberately leaves the book-keeping
+    // to GuiControl.
+    if (mTooltipProfile == NULL || mTooltipProfile == mLazyTooltipProfile)
+    {
+		GuiControlProfile* wanted = resolveDefaultTooltipProfile();
+
+		if (wanted != mTooltipProfile)
+		{
+			if (mTooltipProfile != NULL)
+				mTooltipProfile->decRefCount();
+
+			mTooltipProfile = wanted;
+
+			if (mTooltipProfile != NULL)
+				mTooltipProfile->incRefCount();
+		}
+
+		mLazyTooltipProfile = mTooltipProfile;
+    }
+
+    // Nothing to draw a tip with, which is a missing profile rather than an
+    // error worth stopping for.
+    if (mTooltipProfile == NULL)
+        return false;
 
     GFont *font = mTooltipProfile->getFont();
    
@@ -1224,6 +1277,22 @@ void GuiControl::onSleep()
 
    // Set Flag
    mAwake = false;
+}
+
+void GuiControl::setControlTooltipProfile(GuiControlProfile *prof)
+{
+   if(prof == mTooltipProfile)
+      return;
+   if(mAwake && mTooltipProfile != NULL)
+      mTooltipProfile->decRefCount();
+   mTooltipProfile = prof;
+
+   // A profile handed over deliberately is not ours to revisit when the control
+   // is re-themed, so drop any claim renderTooltip had on the old one.
+   mLazyTooltipProfile = NULL;
+
+   if(mAwake && mTooltipProfile != NULL)
+      mTooltipProfile->incRefCount();
 }
 
 void GuiControl::setControlProfile(GuiControlProfile *prof)

@@ -34,6 +34,7 @@ function GuiEditor::create( %this )
     exec("./scripts/GuiEditorColorWindow.cs");
     exec("./scripts/GuiEditorToolsWindow.cs");
     exec("./scripts/GuiProfileEditorDialog.cs");
+    exec("./scripts/GuiProfileEditorColorPopup.cs");
     exec("./scripts/GuiProfileEditorBorderGrid.cs");
     exec("./scripts/GuiProfileEditorBorderSetter.cs");
     exec("./scripts/GuiProfileEditorBorderForm.cs");
