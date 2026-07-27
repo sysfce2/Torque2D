@@ -29,6 +29,17 @@ function GuiEditorBrain::onControlDropped(%this, %payload, %position)
    %y = getWord(%pos, 1);
 
    %this.addNewCtrl(%payload);
+
+   // A control arrives wearing whatever its C++ constructor named - usually
+   // GuiDefaultProfile - so put it on the Gui's theme straight away. Themed on
+   // arrival is the whole point: the drop is the last time anyone should have to
+   // think about which profile a button wants.
+   %theme = GuiEditor.themeByName(GuiEditor.themeName);
+   if(isObject(%theme))
+   {
+      GuiEditor.themeApplier.applyToBranch(%payload, %theme, false);
+   }
+
    %payload.setPositionGlobal(%x, %y);
    %this.setFirstResponder();
    %this.postEvent("AddControl", %payload);

@@ -336,9 +336,12 @@ codesign — `rm -rf Torque2D_DEBUG.app` when switching platforms.
 ## Linux round (run in WSL or on Linux) — DONE (builds & links, 32 & 64-bit)
 
 1. Install deps (Debian/Ubuntu):
-   `sudo apt install build-essential cmake nasm libsdl1.2-dev libx11-dev libxft-dev libfreetype6-dev libopenal-dev libgl1-mesa-dev`
+   `sudo apt install build-essential cmake nasm libsdl1.2-dev libx11-dev libxft-dev libfontconfig1-dev libfreetype6-dev libopenal-dev libgl1-mesa-dev`
    For 32-bit add the multilib toolchain + `:i386` libs:
-   `sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install gcc-multilib g++-multilib libsdl1.2-dev:i386 libx11-dev:i386 libxft-dev:i386 libfreetype6-dev:i386 libopenal-dev:i386 libgl1-mesa-dev:i386`
+   `sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install gcc-multilib g++-multilib libsdl1.2-dev:i386 libx11-dev:i386 libxft-dev:i386 libfontconfig1-dev:i386 libfreetype6-dev:i386 libopenal-dev:i386 libgl1-mesa-dev:i386`
+   **fontconfig is a direct dependency, not just Xft's:** `x86UNIXFont.cc` calls
+   `Fc*` itself for `PlatformFont::enumeratePlatformFonts` (the installed-font list
+   the GUI tools offer), so the Linux link list carries `fontconfig` explicitly.
    **Gotcha (per-arch `-dev`, and they do NOT coexist):** `libsdl1.2-dev:amd64`
    and `libsdl1.2-dev:i386` conflict (shared files like `sdl-config`), so only one
    can be installed at a time — installing one removes the other. A box prepped for

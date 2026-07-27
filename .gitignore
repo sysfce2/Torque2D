@@ -94,6 +94,31 @@ engine/compilers/android-studio/app/.cxx/
 #######################################
 /build/
 
+# Integration test leavings (see tests/README.md) #
+##################################################
+# The one-line boot stub tests/run.ps1 writes at the root, because the engine
+# takes its working directory from the boot script's own folder.
+/_boot.cs
+# Screenshots the tests/shots harnesses write, and the throwaway projects the
+# tests build to have something to edit. A test that adds a project folder wants
+# a line here too; ProjectManager.setProjectFolder names them.
+/shots/
+/assetPickerSmokeProject/
+/borderPaneSmokeProject/
+/borderSmokeProject/
+/colorPopupShotProject/
+/colorPopupSmokeProject/
+/fontShotProject/
+/fontSmokeProject/
+/profileFormShotProject/
+/profileFormSmokeProject/
+/smokeThemeProject/
+# GuiDefaultProfile.fontDirectory is the unexpanded string "^EditorCore/gui/fonts"
+# (guiProfiles.cs), and anything that bakes a font-cache miss recorded against it
+# writes to a folder of that literal name. Nothing in the suite does, but it has
+# happened once, and a stray caret folder is never content.
+/^EditorCore/
+
 # Vendored prebuilt Android libraries (override the global *.a / *.so ignore) #
 ##############################################################################
 !engine/lib/freetype/android/lib/**/*.a

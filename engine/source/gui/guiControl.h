@@ -133,7 +133,13 @@ public:
    static const S32 DEFAULT_TOOLTIP_WIDTH = 250;
    static const S32 DEFAULT_TOOLTIP_HOVERTIME = 1000;
 
-    GuiControlProfile	*mTooltipProfile; 
+    GuiControlProfile	*mTooltipProfile;
+
+	/// The tooltip profile renderTooltip chose for a control that was never given
+	/// one, kept so a later render can tell its own pick from a deliberate one
+	/// and re-resolve only its own. NULL until the first tooltip is drawn.
+	GuiControlProfile	*mLazyTooltipProfile;
+
     S32					mTipHoverTime;
     S32					mTooltipWidth;
 
@@ -499,6 +505,12 @@ public:
     /// @param   tipText     optional alternate tip to be rendered
     virtual bool renderTooltip(Point2I &cursorPos, const char* tipText = NULL );
 
+    /// The tooltip profile to use when none was set: the Tooltip member of the
+    /// theme this control's own profile belongs to, so a tip looks like the rest
+    /// of the theme, falling back to the global GuiTooltipProfile for a control
+    /// wearing an unthemed profile. NULL only if neither can be found.
+    GuiControlProfile* resolveDefaultTooltipProfile();
+
     /// Called when this control should render its children
     /// @param   offset   The top left of the parent control
     /// @param   contentOffset   The top left of the parent's content
@@ -769,6 +781,13 @@ public:
     /// @see GuiControlProfile
     /// @param   prof   Control profile to apply
     virtual void setControlProfile(GuiControlProfile *prof);
+
+    /// Sets the profile this control's tooltips are drawn with, keeping the
+    /// reference counts straight whether or not the control is already awake.
+    /// NULL is allowed and means "work one out for yourself" -- see
+    /// resolveDefaultTooltipProfile.
+    /// @param   prof   Tooltip profile to apply, or NULL
+    virtual void setControlTooltipProfile(GuiControlProfile *prof);
 
     /// Occurs when this control performs its "action"
     virtual void onAction();

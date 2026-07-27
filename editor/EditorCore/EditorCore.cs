@@ -47,6 +47,8 @@ function EditorCore::create( %this )
 	exec("./EditorForm.cs");
 	exec("./EditorIconButton.cs");
 	exec("./EditorButtonBar.cs");
+	exec("./EditorAssetPickerDialog.cs");
+	exec("./EditorAssetPickerItem.cs");
 
 	new ScriptObject(ThemeManager);
 
@@ -529,4 +531,81 @@ function EditorCore::alert(%this, %text)
 function EditorCore::deleteDialog(%this)
 {
 	%this.dialog.delete();
+}
+
+// Deferred delete for a specific dialog. Unlike deleteDialog's shared
+// %this.dialog slot, this takes the dialog as an argument, so stacked
+// dialogs can each schedule their own cleanup without racing. Never
+// schedule the native "delete" directly on an object - the scheduler
+// dispatches it inside the object's own script-callback guard, which
+// asserts; routing through a parent's script method like this one is safe.
+function EditorCore::deleteDialogObject(%this, %dialog)
+{
+	if(isObject(%dialog))
+	{
+		%dialog.delete();
+	}
+}
+
+// Titles the picker after what it is picking. The type names arrive from the
+// engine as one word ("ImageAsset"), which is how a class is spelled and not how
+// a title is, so the internal capital becomes a space and the article is chosen
+// to suit: an Image Asset, but a Font Asset.
+function EditorCore::assetTypeTitle(%this, %assetType)
+{
+	// strcmp, not $=. String-equal is case-insensitive in TorqueScript, so
+	// "m" $= "M" is true and a test for "is this letter a capital" written that
+	// way answers yes for every letter.
+	%spaced = "";
+	for(%i = 0; %i < strlen(%assetType); %i++)
+	{
+		%char = getSubStr(%assetType, %i, 1);
+		%isCapital = (strcmp(%char, strupr(%char)) == 0) && (strcmp(%char, strlwr(%char)) != 0);
+		if(%i > 0 && %isCapital)
+		{
+			%spaced = %spaced SPC %char;
+		}
+		else
+		{
+			%spaced = %spaced @ %char;
+		}
+	}
+
+	%first = strupr(getSubStr(%assetType, 0, 1));
+	%article = (strstr("AEIOU", %first) != -1) ? "an" : "a";
+
+	return "Choose" SPC %article SPC %spaced;
+}
+
+// The one way into the asset picker. Both callers come through here: the Gui
+// Profile Editor's Image Asset row, and the native inspector's browse button,
+// which the engine points at this method by name (see
+// GuiInspectorTypeAsset::constructEditControl). The picker hands the chosen
+// asset id to %callbackTarget.%callbackMethod, the same target-and-method pair
+// every other editor dialog returns through.
+function EditorCore::openAssetPicker(%this, %callbackTarget, %callbackMethod, %currentAsset, %assetType)
+{
+	if(%assetType $= "")
+	{
+		%this.alert("openAssetPicker needs an asset type to look for.");
+		return;
+	}
+
+	%width = 640;
+	%height = 500;
+	%dialog = new GuiControl()
+	{
+		class = "EditorAssetPickerDialog";
+		superclass = "EditorDialog";
+		dialogSize = (%width + 8) SPC (%height + 8);
+		dialogCanClose = true;
+		dialogText = %this.assetTypeTitle(%assetType);
+		assetType = %assetType;
+		currentAsset = %currentAsset;
+		callbackTarget = %callbackTarget;
+		callbackMethod = %callbackMethod;
+	};
+	%dialog.init(%width, %height);
+
+	Canvas.pushDialog(%dialog);
 }

@@ -36,6 +36,11 @@
 #include <X11/Xft/Xft.h>
 #include <X11/extensions/Xrender.h>      // For XRenderColor
 
+// Needed by enumeratePlatformFonts. Xft is built on fontconfig, so this comes
+// with the same dev package set -- but the Fc* calls below are ours, so the link
+// needs -lfontconfig explicitly (see the Linux block in CMakeLists.txt).
+#include <fontconfig/fontconfig.h>
+
 // Needed for getenv in createFont
 #include <stdlib.h>
 
@@ -80,6 +85,49 @@ XftFont *loadFont(const char *name, S32 size, Display *display)
 #endif
 
   return fontInfo;
+}
+
+//------------------------------------------------------------------------------
+// The installed font families, straight from fontconfig -- the same database Xft
+// resolves loadFont()'s names through above, so anything listed here can also be
+// opened. Families rather than individual styles, to match what Windows'
+// EnumFontFamilies and macOS' NSFontManager report.
+//
+// This lives here (rather than being left to the base class) because the tools
+// that offer the user a font list call it directly; without a definition the
+// Linux build would not link.
+//------------------------------------------------------------------------------
+void PlatformFont::enumeratePlatformFonts( Vector<StringTableEntry>& fonts )
+{
+  if (!FcInit())
+    return;
+
+  FcPattern* pattern = FcPatternCreate();
+  FcObjectSet* properties = FcObjectSetBuild(FC_FAMILY, (char*)0);
+  if (pattern == NULL || properties == NULL)
+  {
+    if (pattern != NULL)
+      FcPatternDestroy(pattern);
+    if (properties != NULL)
+      FcObjectSetDestroy(properties);
+    return;
+  }
+
+  FcFontSet* found = FcFontList(NULL, pattern, properties);
+  if (found != NULL)
+  {
+    for (int i = 0; i < found->nfont; i++)
+    {
+      FcChar8* family = NULL;
+      if (FcPatternGetString(found->fonts[i], FC_FAMILY, 0, &family) == FcResultMatch && family != NULL)
+        fonts.push_back(StringTable->insert((const char*)family));
+    }
+
+    FcFontSetDestroy(found);
+  }
+
+  FcObjectSetDestroy(properties);
+  FcPatternDestroy(pattern);
 }
 
 // XA: New class for the unix unicode font

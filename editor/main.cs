@@ -38,3 +38,27 @@ if(!isObject(AppCore))
 	EditorCore.open();
 	EditorCore.showProjectSelector();
 }
+
+//-----------------------------------------------------------------------------
+
+// The engine calls onPreExit ahead of onExit (see shutdownGame in
+// game/defaultGame.cc), while everything the editor owns is still alive.
+//
+// Unload exactly what was loaded above, in reverse. ModuleManager resolves each
+// module's dependencies and calls the DestroyFunctions in reverse order, so every
+// editor module gets to clean up after itself, and EditorCore -- which the four
+// above pull in as a shared dependency rather than loading themselves -- unloads
+// last, when its load count finally drops to zero.
+//
+// This lives beside the loads, in the editor's own boot script, so the two lists
+// stay in step and any project shipping its own main.cs inherits the teardown.
+function onPreExit()
+{
+	if(isObject(EditorManager))
+	{
+		EditorManager.unloadExplicit("GuiEditor");
+		EditorManager.unloadExplicit("AssetAdmin");
+		EditorManager.unloadExplicit("ProjectManager");
+		EditorManager.unloadExplicit("EditorConsole");
+	}
+}

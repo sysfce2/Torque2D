@@ -40,6 +40,7 @@ GuiTreeViewCtrl::GuiTreeViewCtrl()
 	mDragIndex = 0;
 	mIsDragLegal = false;
 	mIsBoundToGuiEditor = false;
+	mAllowReorder = false;
 	mFocusControl = nullptr;
 }
 
@@ -65,11 +66,135 @@ void GuiTreeViewCtrl::initPersistFields()
 {
 	Parent::initPersistFields();
 	addField("BindToGuiEditor", TypeBool, Offset(mIsBoundToGuiEditor, GuiTreeViewCtrl));
+	// Drag-to-reorder rearranges the inspected SimGroup/GuiControl hierarchy.
+	// It defaults off so trees holding non-GuiControl items (e.g. the Profile
+	// Editor's proxy tree) can never enter the reorder path; opt in explicitly.
+	addField("AllowReorder", TypeBool, Offset(mAllowReorder, GuiTreeViewCtrl));
+}
+
+S32 GuiTreeViewCtrl::getAdjacentVisibleIndex(S32 fromIndex, S32 direction)
+{
+	for (S32 i = fromIndex + direction; i >= 0 && i < mItems.size(); i += direction)
+	{
+		TreeItem* treeItem = dynamic_cast<TreeItem*>(mItems[i]);
+		if (!treeItem || treeItem->isVisible)
+			return i;
+	}
+	return -1;
+}
+
+S32 GuiTreeViewCtrl::getEdgeVisibleIndex(bool wantFirst)
+{
+	S32 found = -1;
+	for (S32 i = 0; i < mItems.size(); i++)
+	{
+		TreeItem* treeItem = dynamic_cast<TreeItem*>(mItems[i]);
+		if (!treeItem || treeItem->isVisible)
+		{
+			if (wantFirst)
+				return i;
+			found = i;
+		}
+	}
+	return found;
+}
+
+void GuiTreeViewCtrl::setSelectedIndex(S32 index)
+{
+	if (index < 0 || index >= mItems.size())
+		return;
+
+	// addSelection() only replaces the selection when the control is in
+	// single-select mode. Arrows move the selection rather than extending it,
+	// so drop what is there first on multi-select trees.
+	if (mMultipleSelections)
+		clearSelection();
+
+	// addSelection() scrolls the row into view for us.
+	addSelection(index);
+}
+
+bool GuiTreeViewCtrl::itemHasBranches(S32 index)
+{
+	if (index < 0 || index >= mItems.size())
+		return false;
+
+	TreeItem* treeItem = dynamic_cast<TreeItem*>(mItems[index]);
+	return treeItem && treeItem->branchList.size() > 0;
+}
+
+bool GuiTreeViewCtrl::setItemExpanded(S32 index, bool isOpen)
+{
+	if (index < 0 || index >= mItems.size())
+		return false;
+
+	TreeItem* treeItem = dynamic_cast<TreeItem*>(mItems[index]);
+	if (!treeItem || treeItem->branchList.size() == 0 || treeItem->isOpen == isOpen)
+		return false;
+
+	treeItem->isOpen = isOpen;
+	setBranchesVisible(treeItem, isOpen);
+	// The set of visible rows just changed; resize so the scroll range tracks
+	// the rows that actually render - same as the triangle click path.
+	updateSize();
+	setUpdate();
+	return true;
+}
+
+bool GuiTreeViewCtrl::onKeyDown(const GuiEvent& event)
+{
+	// A dead-end tree still swallows the key: bare arrows are registered as
+	// canvas accelerators (Nudge in the Gui Editor), and letting them through
+	// from a focused tree would nudge the control being edited instead.
+	if (!mVisible || !mActive || !mAwake || mItems.size() == 0)
+		return true;
+
+	S32 index = getSelectedItem();
+
+	switch (event.keyCode)
+	{
+	case KEY_UP:
+		// Nothing selected yet: start from the ends of the visible list.
+		setSelectedIndex(index == -1 ? getEdgeVisibleIndex(false)
+									 : getAdjacentVisibleIndex(index, -1));
+		return true;
+
+	case KEY_DOWN:
+		setSelectedIndex(index == -1 ? getEdgeVisibleIndex(true)
+									 : getAdjacentVisibleIndex(index, 1));
+		return true;
+
+	case KEY_LEFT:
+		// Collapse the branch, or step out to the trunk when there is nothing
+		// left to close.
+		if (index != -1 && !setItemExpanded(index, false))
+			setSelectedIndex(getItemTrunk(index));
+		return true;
+
+	case KEY_RIGHT:
+		// Open the branch, or step into it when it is already open.
+		if (index != -1 && !setItemExpanded(index, true) && itemHasBranches(index))
+			setSelectedIndex(getAdjacentVisibleIndex(index, 1));
+		return true;
+
+	case KEY_HOME:
+		setSelectedIndex(getEdgeVisibleIndex(true));
+		return true;
+
+	case KEY_END:
+		setSelectedIndex(getEdgeVisibleIndex(false));
+		return true;
+
+	default:
+		// RETURN / DELETE and everything else keep the list box behaviour; they
+		// hand script the raw mItems index, which is what the tree bindings use.
+		return Parent::onKeyDown(event);
+	};
 }
 
 void GuiTreeViewCtrl::onTouchDown(const GuiEvent& event)
 {
-	mTouchPoint == event.mousePoint;
+	mTouchPoint = event.mousePoint;
 	S32 hitIndex = getHitIndex(event);
 	if (mIsBoundToGuiEditor && smDesignTime && hitIndex == 0)
 	{
@@ -104,7 +229,11 @@ void GuiTreeViewCtrl::onTouchDragged(const GuiEvent& event)
 	if (hitItem == NULL || !hitItem->isActive)
 		return;
 
-	if (mAbs(mTouchPoint.x - event.mousePoint.x) > 2 || mAbs(mTouchPoint.y - event.mousePoint.y) > 2)
+	// Drag-to-reorder rearranges the inspected SimGroup/GuiControl hierarchy, so
+	// it is opt-in per tree (AllowReorder). Trees holding non-GuiControl items -
+	// like the Profile Editor's proxy tree - leave it off and never drag.
+	if (mAllowReorder &&
+		(mAbs(mTouchPoint.x - event.mousePoint.x) > 2 || mAbs(mTouchPoint.y - event.mousePoint.y) > 2))
 	{
 		mDragActive = true;
 	}
@@ -113,66 +242,100 @@ void GuiTreeViewCtrl::onTouchUp(const GuiEvent& event)
 {
 	if (mDragActive && mIsDragLegal)
 	{
-		TreeItem* dragItem = grabItemPtr(mDragIndex);
-		if (mReorderMethod == ReorderMethod::Below && dragItem->isOpen)
-		{
-			mReorderMethod = ReorderMethod::Insert;
-		}
-		SimGroup* target = static_cast<SimGroup*>(mReorderMethod == ReorderMethod::Insert ? dragItem->itemData : dragItem->trunk->itemData);
-		
-		if (!target)
-		{
-			Con::warnf("GuiTreeViewCtrl::onTouchUp - attempted to drag selection into an object that is not a SimGroup");
-			return;
-		}
-		vector<SimObject*> objectAboveTargetList = vector<SimObject*>();
-		if (mReorderMethod != ReorderMethod::Insert)
-		{
-			S32 index = mReorderMethod == ReorderMethod::Below ? mDragIndex : mDragIndex - 1;
-			TreeItem* checkItem = grabItemPtr(index);
-			while (checkItem->level == dragItem->level)
-			{
-				if(!checkItem->isSelected)
-				{
-					SimObject* obj = static_cast<SimObject*>(checkItem->itemData);
-					objectAboveTargetList.push_back(obj);
-				}
-				index = index - 1;
-				checkItem = grabItemPtr(index);
-			}
-		}
-		else
-		{
-			dragItem->isOpen = true;
-		}
-
-		for (S32 i = mItems.size() - 1; i >= 0; i--)
-		{
-			TreeItem* treeItem = dynamic_cast<TreeItem*>(mItems[i]);
-			if(treeItem && treeItem->isSelected)
-			{
-				SimObject* obj = static_cast<SimObject*>(treeItem->itemData);
-				if(obj)
-				{
-					target->addObject(obj);
-					target->bringObjectToFront(obj);
-				}
-			}
-		}
-		for (auto obj : objectAboveTargetList)
-		{
-			SimGroup* group = obj->getGroup();
-			group->bringObjectToFront(obj);
-		}
-		GuiControl* control = static_cast<GuiControl*>(mReorderMethod != ReorderMethod::Insert ? dragItem->trunk->itemData : dragItem->itemData);
-		if (control)
-		{
-			control->childrenReordered();
-		}
-		refreshTree();
+		reorderFromDrag();
 	}
+	// Always clear the drag and chain to the parent, even when the reorder
+	// bailed out - otherwise the tree would stay stuck in a dragging state.
 	mDragActive = false;
 	Parent::onTouchUp(event);
+}
+
+SimObject* GuiTreeViewCtrl::getItemObject(TreeItem* item)
+{
+	// itemData is a void* that inspectObject/addBranches always fill with a
+	// SimObject*; recover it here so callers can dynamic_cast to the real type.
+	return item ? static_cast<SimObject*>(item->itemData) : nullptr;
+}
+
+void GuiTreeViewCtrl::reorderFromDrag()
+{
+	TreeItem* dragItem = grabItemPtr(mDragIndex);
+	if (!dragItem)
+		return;
+
+	if (mReorderMethod == ReorderMethod::Below && dragItem->isOpen)
+	{
+		mReorderMethod = ReorderMethod::Insert;
+	}
+
+	// The container the dragged items land in: the drag item itself when
+	// inserting into it, otherwise the drag item's parent branch. For a
+	// non-Insert drop at the root there is no parent branch, so bail.
+	TreeItem* targetItem = (mReorderMethod == ReorderMethod::Insert) ? dragItem : dragItem->trunk;
+	if (!targetItem)
+		return;
+
+	// The drop target must be a real SimGroup (a GuiControl hierarchy). If the
+	// item's object isn't one - or was deleted - there is nothing to reorder.
+	SimGroup* target = dynamic_cast<SimGroup*>(getItemObject(targetItem));
+	if (!target)
+	{
+		Con::warnf("GuiTreeViewCtrl::reorderFromDrag - drop target is not a SimGroup; ignoring reorder");
+		return;
+	}
+
+	vector<SimObject*> objectAboveTargetList;
+	if (mReorderMethod != ReorderMethod::Insert)
+	{
+		S32 index = (mReorderMethod == ReorderMethod::Below) ? mDragIndex : mDragIndex - 1;
+		// Walk upward over the siblings above the drop point. grabItemPtr
+		// returns null once index runs off the top, ending the loop safely.
+		for (TreeItem* checkItem = grabItemPtr(index);
+			checkItem && checkItem->level == dragItem->level;
+			checkItem = grabItemPtr(--index))
+		{
+			if (!checkItem->isSelected)
+			{
+				SimObject* obj = getItemObject(checkItem);
+				if (obj)
+					objectAboveTargetList.push_back(obj);
+			}
+		}
+	}
+	else
+	{
+		dragItem->isOpen = true;
+	}
+
+	for (S32 i = mItems.size() - 1; i >= 0; i--)
+	{
+		TreeItem* treeItem = dynamic_cast<TreeItem*>(mItems[i]);
+		if (treeItem && treeItem->isSelected)
+		{
+			SimObject* obj = getItemObject(treeItem);
+			if (obj)
+			{
+				target->addObject(obj);
+				target->bringObjectToFront(obj);
+			}
+		}
+	}
+
+	for (auto obj : objectAboveTargetList)
+	{
+		SimGroup* group = obj->getGroup();
+		if (group)
+			group->bringObjectToFront(obj);
+	}
+
+	// target is the same object as the container above; reorder its children.
+	GuiControl* control = dynamic_cast<GuiControl*>(getItemObject(targetItem));
+	if (control)
+	{
+		control->childrenReordered();
+	}
+
+	refreshTree();
 }
 
 void GuiTreeViewCtrl::onPreRender()
@@ -184,7 +347,7 @@ void GuiTreeViewCtrl::onPreRender()
 		{
 			const GuiControl* oldFocus = mFocusControl;
 			mFocusControl = edit->getCurrentAddSet();
-			if(oldFocus != mFocusControl)
+			if(mFocusControl != nullptr && oldFocus != mFocusControl)
 			{
 				for (S32 i = 0; i < mItems.size(); i++)
 				{
@@ -241,7 +404,9 @@ void GuiTreeViewCtrl::onRender(Point2I offset, const RectI& updateRect)
 			// Render our item
 			onRenderItem(itemRect, mItems[i]);
 
-			if (mItems[i]->ID == mFocusControl->getId())
+			// The focus control is only assigned when bound to the Gui
+			// Editor; every other tree renders without one.
+			if (mFocusControl != nullptr && mItems[i]->ID == mFocusControl->getId())
 			{
 				mFocusLevel = treeItem->level;
 			}
@@ -435,6 +600,9 @@ void GuiTreeViewCtrl::handleItemClick(LBItem* hitItem, S32 hitIndex, const GuiEv
 		{
 			treeItem->isOpen = !treeItem->isOpen;
 			setBranchesVisible(treeItem, treeItem->isOpen);
+			// The set of visible rows just changed; resize so the scroll range
+			// tracks the rows that actually render.
+			updateSize();
 			return;
 		}
 	}
@@ -558,6 +726,10 @@ void GuiTreeViewCtrl::refreshTree()
 			}
 		}
 
+		// Collapsed branches are restored above; size to the visible rows
+		// before restoring the scroll offset so it clamps to the new height.
+		updateSize();
+
 		if (scroller)
 		{
 			scroller->scrollTo(pos.x, pos.y);
@@ -624,6 +796,50 @@ void GuiTreeViewCtrl::calculateHeaderExtent()
 		S32 width = mBounds.extent.x;
 
 	}
+}
+
+void GuiTreeViewCtrl::updateSize()
+{
+	// Let the list box compute mItemSize and handle width / fit-parent-width.
+	Parent::updateSize();
+
+	if (!mProfile || !mProfile->getFont(mFontSizeAdjust))
+		return;
+
+	// The list box sizes the control to every item in mItems, but the tree
+	// hides collapsed branches (they stay in mItems yet don't render). Size to
+	// the rows that actually render so the scroll range shrinks when a section
+	// closes - matching how onRender and ScrollToIndex count in visible space.
+	S32 visibleCount = 0;
+	for (auto item : mItems)
+	{
+		TreeItem* treeItem = dynamic_cast<TreeItem*>(item);
+		if (!treeItem || treeItem->isVisible)
+			visibleCount++;
+	}
+
+	resize(mBounds.point, Point2I(mBounds.extent.x, mItemSize.y * visibleCount));
+}
+
+void GuiTreeViewCtrl::ScrollToIndex(const S32 targetIndex)
+{
+	GuiScrollCtrl* parent = dynamic_cast<GuiScrollCtrl*>(getParent());
+	if (!parent)
+		return;
+
+	// targetIndex is a raw mItems index, but rows render packed by visible
+	// position. Count the visible rows before it (matching onRender's j) so we
+	// scroll to where the item actually is, not to its raw slot - which would
+	// jump past collapsed branches.
+	S32 visibleRow = 0;
+	for (S32 i = 0; i < targetIndex && i < mItems.size(); i++)
+	{
+		TreeItem* treeItem = dynamic_cast<TreeItem*>(mItems[i]);
+		if (!treeItem || treeItem->isVisible)
+			visibleRow++;
+	}
+
+	parent->scrollRectVisible(RectI(0, mItemSize.y * visibleRow, mItemSize.x, mItemSize.y));
 }
 
 void GuiTreeViewCtrl::setBranchesVisible(TreeItem* treeItem, bool isVisible)

@@ -1,0 +1,185 @@
+<GuiProfileTheme
+    Name="PlanetX"
+    fontBody="share tech mono"
+    fontTitle="share tech mono"
+    fontCode="share tech mono"
+    fontDirectory="PlanetX/themes/fonts"
+    fontSize="22"
+    colorBackground="48 0 34 255"
+    colorSurface="128 25 70 255"
+    colorForeground="255 235 244 255"
+    colorAccent="33 191 132 255"
+    colorHighlight="234 72 72 255"
+    colorWarning="166 38 70 255"
+    borderSize="2">
+    <GuiBorderProfile
+        Name="PlanetXEmptyBorder"
+        category="empty" />
+    <GuiBorderProfile
+        Name="PlanetXRimmedBorder"
+        category="Rimmed" />
+    <GuiBorderProfile
+        Name="PlanetXThickBorder"
+        category="Thick" />
+    <GuiBorderProfile
+        Name="PlanetXLightBorder"
+        category="Light" />
+    <GuiBorderProfile
+        Name="PlanetXDarkBorder"
+        category="Dark" />
+    <GuiBorderProfile
+        Name="PlanetXPaddedBorder"
+        category="Padded" />
+    <GuiBorderProfile
+        Name="PlanetXHighlightBorder"
+        category="Highlight" />
+    <GuiBorderProfile
+        Name="PlanetXPaddedRimBorder"
+        category="PaddedRim" />
+    <GuiBorderProfile
+        Name="PlanetXBevelLightBorder"
+        category="BevelLight" />
+    <GuiBorderProfile
+        Name="PlanetXBevelDarkBorder"
+        category="BevelDark" />
+    <GuiBorderProfile
+        Name="PlanetXPaddedLightBorder"
+        category="PaddedLight" />
+    <GuiBorderProfile
+        Name="PlanetXPaddedDarkBorder"
+        category="PaddedDark" />
+    <GuiBorderProfile
+        Name="PlanetXRimmedExpanderBorder"
+        category="RimmedExpander" />
+    <GuiBorderProfile
+        Name="PlanetXCondenserLightBorder"
+        category="CondenserLight" />
+    <GuiBorderProfile
+        Name="PlanetXCondenserDarkBorder"
+        category="CondenserDark" />
+    <GuiControlProfile
+        Name="PlanetXEmptyProfile"
+        category="empty" />
+    <GuiControlProfile
+        Name="PlanetXTooltipProfile"
+        category="ToolTip" />
+    <GuiControlProfile
+        Name="PlanetXPanelProfile"
+        borderDefault="PlanetXHighlightBorder"
+        category="panel"
+        themeOverrides="borderDefault" />
+    <GuiControlProfile
+        Name="PlanetXButtonProfile"
+        category="button" />
+    <GuiControlProfile
+        Name="PlanetXCheckBoxProfile"
+        category="checkbox" />
+    <GuiControlProfile
+        Name="PlanetXRadioProfile"
+        category="Radio" />
+    <GuiControlProfile
+        Name="PlanetXLabelProfile"
+        category="label" />
+    <GuiControlProfile
+        Name="PlanetXTextEditProfile"
+        category="TextEdit" />
+    <GuiControlProfile
+        Name="PlanetXScrollProfile"
+        category="Scroll" />
+    <GuiControlProfile
+        Name="PlanetXScrollTrackProfile"
+        category="ScrollTrack" />
+    <GuiControlProfile
+        Name="PlanetXScrollThumbProfile"
+        category="ScrollThumb" />
+    <GuiControlProfile
+        Name="PlanetXScrollArrowProfile"
+        category="ScrollArrow" />
+    <GuiControlProfile
+        Name="PlanetXTabBookProfile"
+        category="tabBook" />
+    <GuiControlProfile
+        Name="PlanetXTabProfile"
+        category="tab" />
+    <GuiControlProfile
+        Name="PlanetXTabPageProfile"
+        category="TabPage" />
+    <GuiControlProfile
+        Name="PlanetXListBoxProfile"
+        category="listBox" />
+    <GuiControlProfile
+        Name="PlanetXDropDownProfile"
+        category="dropDown" />
+    <GuiControlProfile
+        Name="PlanetXDropDownItemProfile"
+        category="DropDownItem" />
+    <GuiControlProfile
+        Name="PlanetXWindowProfile"
+        category="window" />
+    <GuiControlProfile
+        Name="PlanetXWindowContentProfile"
+        category="WindowContent" />
+    <GuiControlProfile
+        Name="PlanetXWindowButtonProfile"
+        category="WindowButton" />
+    <GuiControlProfile
+        Name="PlanetXWindowCloseButtonProfile"
+        category="WindowCloseButton" />
+    <GuiControlProfile
+        Name="PlanetXMenuBarProfile"
+        category="menuBar" />
+    <GuiControlProfile
+        Name="PlanetXMenuProfile"
+        category="Menu" />
+    <GuiControlProfile
+        Name="PlanetXMenuItemProfile"
+        category="MenuItem" />
+    <GuiControlProfile
+        Name="PlanetXMenuContentProfile"
+        category="MenuContent" />
+    <GuiControlProfile
+        Name="PlanetXOverlayProfile"
+        category="Overlay" />
+    <GuiControlProfile
+        Name="PlanetXProgressProfile"
+        category="Progress" />
+    <GuiControlProfile
+        Name="PlanetXTreeViewProfile"
+        category="TreeView" />
+    <GuiControlProfile
+        Name="PlanetXFrameSetProfile"
+        category="FrameSet" />
+    <GuiControlProfile
+        Name="PlanetXFrameSetDropButtonProfile"
+        category="FrameSetDropButton" />
+    <GuiControlProfile
+        Name="PlanetXColorPickerProfile"
+        category="ColorPicker" />
+    <GuiControlProfile
+        Name="PlanetXColorSelectorProfile"
+        category="ColorSelector" />
+    <GuiControlProfile
+        Name="PlanetXColorPopupProfile"
+        category="ColorPopup" />
+    <GuiControlProfile
+        Name="PlanetXDragAndDropProfile"
+        category="DragAndDrop" />
+    <GuiControlProfile
+        Name="PlanetXSliderProfile"
+        category="Slider" />
+    <GuiControlProfile
+        Name="PlanetXSliderThumbProfile"
+        category="SliderThumb" />
+    <GuiControlProfile
+        Name="PlanetXHeatProfile"
+        fillColorHL="234 72 72 255"
+        fillColorSL="255 120 110 255"
+        category="Progress"
+        themeOverrides="fillColorHL fillColorSL" />
+    <GuiControlProfile
+        Name="PlanetXCaptureProfile"
+        tab="true"
+        canKeyFocus="true"
+        category="empty"
+        themeOverrides="tab canKeyFocus" />
+</GuiProfileTheme>

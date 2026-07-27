@@ -149,7 +149,7 @@ public:
    inline bool       getMultipleSelection() { return mMultipleSelections; };
 
    // Sizing
-   void              updateSize();
+   virtual void      updateSize();
    virtual void      parentResized(const Point2I &oldParentExtent, const Point2I &newParentExtent);
    virtual bool      onWake();
    virtual void		 addObject(SimObject *obj);

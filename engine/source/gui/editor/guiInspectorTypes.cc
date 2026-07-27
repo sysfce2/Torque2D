@@ -48,9 +48,11 @@ GuiControl* GuiInspectorTypeEnum::constructEditControl(S32 width)
 
    registerEditControl( retCtrl );
 
-   // Configure it to update our value when the popup is closed
+   // Configure it to update our value when the popup is closed. Routing
+   // through apply()/setData keeps the inspector's onPreApply/onPostApply
+   // callbacks firing for enum fields like every other field type.
    char szBuffer[512];
-   dSprintf( szBuffer, 512, "%d.%s = %d.getText();",mTarget->getId(), mField->pFieldname, retCtrl->getId() );
+   dSprintf( szBuffer, 512, "%d.apply(%d.getText());",getId(), retCtrl->getId() );
    retCtrl->setField("Command", szBuffer );
    retCtrl->mBounds.set(mGroup->mInspector->mControlOffset, Point2I(width - mGroup->mInspector->mControlOffset.x, 28));
 
@@ -88,10 +90,24 @@ void GuiInspectorTypeEnum::setData( StringTableEntry data )
    if( mField == NULL || mTarget == NULL )
       return;
 
+   mTarget->inspectPreApply();
+   if (mGroup->mInspector->isMethod("onPreApply"))
+   {
+	   Con::executef(mGroup->mInspector, 3, "onPreApply", Con::getIntArg(mTarget->getId()));
+   }
+
    mTarget->setDataField( mField->pFieldname, NULL, data );
 
    // Force our edit to update
    updateValue( data );
+
+   mTarget->inspectPostApply();
+   if (mGroup->mInspector->isMethod("onPostApply"))
+   {
+	   Con::executef(mGroup->mInspector, 3, "onPostApply", Con::getIntArg(mTarget->getId()));
+   }
+
+   refreshOverrideDisplay();
 }
 
 StringTableEntry  GuiInspectorTypeEnum::getData()
@@ -1016,8 +1032,13 @@ GuiControl* GuiInspectorTypeAsset::constructEditControl(S32 width)
    if (mBrowseButton != NULL)
    {
 
+      // The inspector is an editor-only control, so it asks the editor for the
+      // picker rather than a global that has to exist for its own sake. Target
+      // and method go over as two arguments rather than as one "<id>.apply"
+      // string, so the picker can call back the way every editor dialog does
+      // and nothing has to take the string apart at the other end.
       char szBuffer[512];
-      dSprintf(szBuffer, 512, "getAsset(\"%d.apply\", \"%s\", \"%s\");", getId(), getData(), mAssetType);
+      dSprintf(szBuffer, 512, "EditorCore.openAssetPicker(%d, \"apply\", \"%s\", \"%s\");", getId(), getData(), mAssetType);
       mBrowseButton->setField("Command", szBuffer);
       mBrowseButton->setField("text", "...");
 	  mBrowseButton->setControlProfile(mGroup->mInspector->mButtonProfile);

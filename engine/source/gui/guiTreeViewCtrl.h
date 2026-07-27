@@ -45,6 +45,7 @@ protected:
 	bool mIsDragLegal;
 	ReorderMethod mReorderMethod;
 	bool mIsBoundToGuiEditor;
+	bool mAllowReorder;
 	const GuiControl* mFocusControl;
 
 public:
@@ -68,13 +69,33 @@ public:
 
 private:
 	TreeItem* grabItemPtr(S32 index);
+	// The tree always stores a SimObject* in LBItem::itemData; recover it
+	// safely (item may be null) so callers can dynamic_cast to the real type.
+	SimObject* getItemObject(TreeItem* item);
+	// Commits a completed drag-reorder. Fully guarded: bails on any missing or
+	// wrong-typed item rather than trusting itemData is a GuiControl/SimGroup.
+	void reorderFromDrag();
+
+	// Keyboard navigation has to work in visible-row space. Collapsed branches
+	// stay in mItems with isVisible false and never render, so stepping raw
+	// indices - which is what the list box base class does - walks the selection
+	// into rows the user cannot see. These count the way onRender does.
+	S32 getAdjacentVisibleIndex(S32 fromIndex, S32 direction);
+	S32 getEdgeVisibleIndex(bool wantFirst);
+	// Moves (rather than extends) the selection, so arrows behave the same on
+	// multi-select trees as on single-select ones.
+	void setSelectedIndex(S32 index);
+	// Opens/closes a branch the way handleItemClick's triangle hit does, so the
+	// keyboard and the mouse leave the tree in the same state.
+	bool setItemExpanded(S32 index, bool isOpen);
+	bool itemHasBranches(S32 index);
 
 public:
 	// GuiControl
 	//bool onWake();
 	//void onSleep();
 	//void onPreRender();
-	//bool onKeyDown(const GuiEvent& event);
+	bool onKeyDown(const GuiEvent& event);
 	void onTouchDown(const GuiEvent& event);
 	//void onMiddleMouseDown(const GuiEvent& event);
 	//void onTouchMove(const GuiEvent& event);
@@ -91,6 +112,8 @@ public:
 	//void resize(const Point2I& newPosition, const Point2I& newExtent);
 	virtual void onRenderItem(RectI& itemRect, LBItem* item);
 	virtual void onRenderDragLine(RectI& itemRect);
+	void updateSize();
+	void ScrollToIndex(const S32 targetIndex);
 
 	S32 getHitIndex(const GuiEvent& event);
 	virtual void handleItemClick(LBItem* hitItem, S32 hitIndex, const GuiEvent& event);

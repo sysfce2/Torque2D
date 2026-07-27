@@ -71,11 +71,9 @@ exec("./editor/main.cs");
 
 function onExit()
 {
-    // Unload the AppCore or EditorCore modules.
-	if(isObject(EditorManager))
-	{
-	    EditorManager.unloadGroup( "EditorGroup" );
-	}
+	// The editor unloads itself in onPreExit (editor/main.cs) -- it is loaded
+	// module-by-module rather than as a group, so there was never an "EditorGroup"
+	// for this to unload.
 	if(isObject(AppCore))
 	{
     	ModuleDatabase.unloadExplicit( "AppCore" );

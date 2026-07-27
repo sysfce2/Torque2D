@@ -37,6 +37,7 @@ function GuiEditorInspectorWindow::onAdd(%this)
 	ThemeManager.setProfile(%this.inspector, "panelProfile", "GroupPanelProfile");
 	ThemeManager.setProfile(%this.inspector, "emptyProfile", "GroupGridProfile");
 	ThemeManager.setProfile(%this.inspector, "labelProfile", "LabelProfile");
+	ThemeManager.setProfile(%this.inspector, "overrideLabelProfile", "OverrideLabelProfile");
 	ThemeManager.setProfile(%this.inspector, "textEditProfile", "textEditProfile");
 	ThemeManager.setProfile(%this.inspector, "dropDownProfile", "dropDownProfile");
 	ThemeManager.setProfile(%this.inspector, "dropDownItemProfile", "dropDownItemProfile");

@@ -42,9 +42,6 @@ function PlanetXGame::create(%this)
 	// ScreenFade posts SwapComplete when a canvas transition finishes.
 	%this.startListening(ScreenFade);
 
-	// Dedicated GUI profiles (larger text) - built before any PlanetX GUI.
-	%this.createProfiles();
-
 	// User settings (volumes, key bindings, aim mode). Created before any audio
 	// plays or any GUI reads a binding; its onAdd seeds defaults, loads saved prefs
 	// over them, and pushes the volume levels into the shared Audio module.
@@ -68,7 +65,7 @@ function PlanetXGame::create(%this)
 	// Neutral placeholder shown while a level is being torn down and rebuilt.
 	%this.blankGui = new GuiControl()
 	{
-		Profile = "GuiDefaultProfile";
+		Profile = "PlanetXEmptyProfile";
 		HorizSizing = "relative";
 		VertSizing = "relative";
 		Position = "0 0";
@@ -127,42 +124,16 @@ function PlanetXGame::playClick(%this)
 }
 
 //-----------------------------------------------------------------------------
-// GUI profiles. The stock GuiButton/Label/Text profiles are shared by the editor
-// and every toy, so we don't touch them; instead we clone each into a PlanetX-
-// owned profile at double the font size for readable in-game text. Built once and
-// kept for the session (like PlanetXHeatProfile).
+// PlanetX creates no GUI profiles of its own. Everything it wears comes from the
+// PlanetX theme (PlanetX/themes/PlanetX.taml, loaded by AppCore, edited in the
+// GUI Profile Editor) - including the two that are not just a look: the heat
+// bar's coral Progress variant and the key-capture control's focusable Empty
+// variant, both extra profiles inside the theme.
+//
+// Where a screen wants text at a different size from the theme's, the control
+// sets FontSizeAdjust (a multiplier on its profile's font size) rather than
+// cloning the profile. So retuning the theme's font size moves the whole game.
 //-----------------------------------------------------------------------------
-
-function PlanetXGame::createProfiles(%this)
-{
-	// GuiLabelProfile reliably carries the platform font size; double it. Fall back
-	// to 24 if it is somehow unavailable, so text is never sized to zero.
-	%big = 24;
-	if (isObject(GuiLabelProfile) && GuiLabelProfile.fontSize > 0)
-		%big = GuiLabelProfile.fontSize * 2;
-
-	%this.makeBigProfile("PlanetXButtonProfile", GuiButtonProfile, %big);
-	%this.makeBigProfile("PlanetXLabelProfile", GuiLabelProfile, %big);
-	%this.makeBigProfile("PlanetXTextProfile", GuiTextProfile, %big);
-
-	// Upgrade cards want smaller text than the big menu profiles: a title a touch
-	// under the labels, a body smaller still, and a compact card button.
-	%this.makeBigProfile("PlanetXCardTitleProfile", GuiLabelProfile, mRound(%big * 0.62));
-	%this.makeBigProfile("PlanetXCardBodyProfile", GuiTextProfile, mRound(%big * 0.5));
-	%this.makeBigProfile("PlanetXCardButtonProfile", GuiButtonProfile, mRound(%big * 0.5));
-}
-
-/// Clone %base into a named profile at %size font (no-op if it already exists).
-function PlanetXGame::makeBigProfile(%this, %name, %base, %size)
-{
-	if (isObject(%name))
-		return;
-
-	%profile = new GuiControlProfile();
-	%profile.assignFieldsFrom(%base);
-	%profile.fontSize = %size;
-	%profile.setName(%name);
-}
 
 //-----------------------------------------------------------------------------
 // State transitions.

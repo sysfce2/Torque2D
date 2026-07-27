@@ -179,9 +179,14 @@ void renderBorderedCircle(Point2I& center, S32 radius, GuiControlProfile* profil
 	//Draw the border
 	renderRing(center, (F32)radius, borderColor, (F32)borderSize);
 
-	if (state > 3 && radius >= 8)
+	// The "on" indicator (e.g. a selected radio's dot): a filled circle centered
+	// in the control, sized as a fraction of the radius so it stays a visible dot
+	// at any size. (A fixed radius-6 shrank to a 2px speck on a standard ~8px-radius
+	// radio, and vanished entirely below radius 8.) dglDrawCircleFill guards a
+	// non-positive radius.
+	if (state > 3)
 	{
-		dglDrawCircleFill(center, radius - 6, profile->getFillColor(GuiControlState::SelectedState));
+		dglDrawCircleFill(center, (F32)((radius * 3) / 5), profile->getFillColor(GuiControlState::SelectedState));
 	}
 }
 

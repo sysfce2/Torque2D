@@ -40,11 +40,27 @@ The in-engine **console** (and the editor tabs: Asset Manager, Project Manager, 
 
 ## Tests
 
-Unit tests use **GoogleTest** (vendored at `engine/source/testing/googleTest`). C++ tests live in `engine/source/testing/tests/` (e.g. `platformFileIoTests.cc`, `platformStringTests.cc`) and as `TEST(...)` blocks throughout the engine.
+There are two suites, and they test different things.
+
+### C++ unit tests (GoogleTest)
+
+Vendored at `engine/source/testing/googleTest`. Tests live in `engine/source/testing/tests/` (e.g. `platformFileIoTests.cc`, `platformStringTests.cc`) and as `TEST(...)` blocks throughout the engine.
 
 - Run **all** tests by launching the engine with the alternate boot script: `main.runAllUnitTests.cs`, which calls the `runAllUnitTests()` console function and quits. Point the executable at this script (or `exec` it) instead of the default `main.cs`.
 - From the in-engine console you can invoke `runAllUnitTests()` directly, or run a subset via the test-name filter argument (forwarded to GoogleTest).
 - Tests are compiled out of shipping builds (`TORQUE_SHIPPING` guards `unitTesting.h`).
+
+### TorqueScript integration tests
+
+`tests/` drives the real engine — a real canvas, the real editor, real posted mouse and keyboard input — and checks that it behaves. This is what covers the editors, which the unit tests do not reach.
+
+```
+tests\run.ps1                 every pass/fail suite (exits non-zero on a change)
+tests\run.ps1 colorPopup      one of them
+tests\run.ps1 -Shots          the screenshot harnesses instead
+```
+
+**Read `tests/README.md` before writing one.** In particular: a relative path is expanded against the calling *script*, not the working directory, so tests use the `testRoot()` / `testExec()` helpers from `tests/lib/prelude.cs` for every path they name. Known-failing suites are recorded in `run.ps1` so a real regression stands out.
 
 ## Architecture
 

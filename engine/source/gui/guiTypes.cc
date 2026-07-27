@@ -100,11 +100,20 @@ ConsoleSetType(TypeGuiCursor)
 	if (argc == 1)
 		Sim::findObject(argv[0], profile);
 
-	AssertWarn(profile != NULL, avar("GuiCursor: requested gui cursor (%s) does not exist.", argv[0]));
 	if (!profile)
+	{
 		profile = dynamic_cast<GuiCursor*>(Sim::findObject("DefaultCursor"));
 
-	AssertFatal(profile != NULL, avar("GuiCursor: unable to find specified cursor (%s) and DefaultCursor does not exist!", argv[0]));
+		// A cursor is cosmetic, and every read site copes with not having one --
+		// GuiTextEditCtrl::getCursor re-resolves lazily and otherwise just leaves
+		// the caller's cursor alone. This used to be an AssertFatal, which put up
+		// a modal dialog and wedged the whole editor whenever a .gui.taml named a
+		// cursor that isn't a registered object (themes build their GuiCursors
+		// anonymously, so the name in a saved file resolves to nothing). Warn and
+		// leave the field unset instead -- same call this file already makes for a
+		// missing font below.
+		AssertWarn(profile != NULL, avar("GuiCursor: requested gui cursor (%s) does not exist and there is no DefaultCursor - leaving it unset.", argv[0]));
+	}
 
 	GuiCursor **obj = (GuiCursor **)dptr;
 	if ((*obj) == profile)
@@ -123,6 +132,20 @@ ConsoleGetType(TypeGuiCursor)
 }
 
 //------------------------------------------------------------------------------
+// The theme-managed field names, shared by the membership glue on
+// GuiBorderProfile and GuiControlProfile.
+static StringTableEntry themeCategoryField()
+{
+	static StringTableEntry categoryField = StringTable->insert("category");
+	return categoryField;
+}
+
+static StringTableEntry themeOverridesField()
+{
+	static StringTableEntry overridesField = StringTable->insert("themeOverrides");
+	return overridesField;
+}
+
 IMPLEMENT_CONOBJECT(GuiBorderProfile);
 
 GuiBorderProfile::GuiBorderProfile()
@@ -148,6 +171,8 @@ GuiBorderProfile::GuiBorderProfile()
    }
 
 	mUnderfill = true;
+	mCategory = StringTable->EmptyString;
+	mIsCustom = false;
 }
 
 GuiBorderProfile::~GuiBorderProfile()
@@ -179,6 +204,12 @@ void GuiBorderProfile::initPersistFields()
 	addField("paddingNA", TypeS32, Offset(mPadding[3], GuiBorderProfile));
 
 	addField("underfill", TypeBool, Offset(mUnderfill, GuiBorderProfile));
+
+	addField("isCustom", TypeBool, Offset(mIsCustom, GuiBorderProfile));
+
+	addField("category", TypeString, Offset(mCategory, GuiBorderProfile));
+	// The offset is unused: both accessors are supplied and the setter returns false.
+	addProtectedField("themeOverrides", TypeString, Offset(mCategory, GuiBorderProfile), &setThemeOverrides, &getThemeOverrides, "Theme-overridden field names");
 }
 
 bool GuiBorderProfile::onAdd()
@@ -194,6 +225,65 @@ bool GuiBorderProfile::onAdd()
 void GuiBorderProfile::onRemove()
 {
 	Parent::onRemove();
+}
+
+void GuiBorderProfile::setTheme(GuiProfileTheme* theme, bool preserveOverrides)
+{
+	if (mThemeMembership.mTheme == theme)
+		return;
+
+	if (mThemeMembership.mTheme != NULL)
+		clearNotify(mThemeMembership.mTheme);
+
+	mThemeMembership.mTheme = theme;
+	if (!preserveOverrides)
+		mThemeMembership.clearAll();
+
+	if (theme != NULL)
+		deleteNotify(theme);
+}
+
+void GuiBorderProfile::onStaticModified(const char* slotName, const char* newValue)
+{
+	Parent::onStaticModified(slotName, newValue);
+
+	// On a themed border, any external field write becomes an override that
+	// stamping will preserve. Category and the override list itself are
+	// theme-managed.
+	if (mThemeMembership.mTheme != NULL)
+	{
+		StringTableEntry slot = StringTable->insert(slotName);
+		if (slot != themeCategoryField() && slot != themeOverridesField())
+			mThemeMembership.markOverride(slot);
+	}
+}
+
+bool GuiBorderProfile::writeField(StringTableEntry fieldname, const char* value)
+{
+	if (!Parent::writeField(fieldname, value))
+		return false;
+
+	// Themed borders persist only explicitly overridden fields; everything
+	// else is derived from the theme. Category and the override list always
+	// persist so a loaded theme can rebind its members.
+	if (mThemeMembership.mTheme != NULL)
+	{
+		if (fieldname != themeCategoryField() &&
+			fieldname != themeOverridesField() &&
+			findField(fieldname) != NULL &&
+			!mThemeMembership.isOverridden(fieldname))
+			return false;
+	}
+
+	return true;
+}
+
+void GuiBorderProfile::onDeleteNotify(SimObject* object)
+{
+	if (object == (SimObject*)mThemeMembership.mTheme)
+		mThemeMembership.mTheme = NULL;
+
+	Parent::onDeleteNotify(object);
 }
 
 S32 GuiBorderProfile::getMargin(const GuiControlState state)
@@ -382,8 +472,187 @@ GuiControlProfile::GuiControlProfile(void) :
    }
 }
 
+// GuiDefaultProfile is not an ordinary profile. GuiControl::onWake falls back to
+// it by name, around twenty control constructors setField() it onto themselves
+// before script ever sees them, and the constructor above seeds every new profile
+// from it. Yet until now it was a script object: three modules each created one
+// (EditorCore, AppCore, Sandbox), the last loaded winning, and a project that
+// deleted it - or never defined it - left the GUI with a NULL profile, which is an
+// assert in a debug build and a null dereference in a release one.
+//
+// So the engine creates it, once, at start-up. Script may still tune it: both
+// EditorCore and Sandbox assign onto the object they find rather than creating
+// their own, which is how the editor keeps seeding its font face through the
+// constructor copy above. Nothing has to create it, and nothing can lose it.
+//
+// The values here are a deliberately plain floor - transparent, white text, a face
+// every platform can substitute for - because a control that lands on this profile
+// has fallen through every other lookup. A project's real look comes from its
+// GuiProfileTheme.
+void GuiControlProfile::createDefaultProfile()
+{
+   GuiBorderProfile* border = dynamic_cast<GuiBorderProfile*>(Sim::findObject("GuiDefaultBorderProfile"));
+   if (border == NULL)
+   {
+      border = new GuiBorderProfile();
+      border->mUnderfill = true;
+      if (!border->registerObject("GuiDefaultBorderProfile"))
+      {
+         delete border;
+         return;
+      }
+   }
+
+   if (Sim::findObject("GuiDefaultProfile") != NULL)
+      return;
+
+   GuiControlProfile* profile = new GuiControlProfile();
+
+   // ColorI's default constructor leaves its channels uninitialized, and the
+   // constructor above only sets the base font color, so spell out the whole
+   // array here: this is the profile every later one copies from.
+   profile->mFontColors[BaseColor].set(255, 255, 255, 255);
+   profile->mFontColors[ColorHL].set(255, 255, 255, 255);
+   profile->mFontColors[ColorNA].set(255, 255, 255, 128);
+   profile->mFontColors[ColorSL].set(255, 255, 255, 255);
+   profile->mFontColors[ColorLink].set(100, 160, 255, 255);
+   profile->mFontColors[ColorLinkHL].set(140, 190, 255, 255);
+   profile->mFontColors[ColorTextSL].set(0, 0, 0, 255);
+   profile->mFontColors[ColorUser0].set(255, 255, 255, 255);
+   profile->mFontColors[ColorUser1].set(255, 255, 255, 255);
+   profile->mFontColors[ColorUser2].set(255, 255, 255, 255);
+
+   // Arial rather than nothing: an empty face name yields a NULL font and text
+   // that silently fails to draw, which is a miserable thing to debug. GFont's
+   // fallback chain maps it onto Helvetica where Arial is absent.
+   profile->mFontType = StringTable->insert("Arial");
+   profile->mFontSize = 12;
+   profile->mFontCharset = TGE_ANSI_CHARSET;
+
+   profile->mAlignment = AlignmentType::CenterAlign;
+   profile->mVAlignment = VertAlignmentType::MiddleVAlign;
+   profile->mCursorColor.set(0, 0, 0, 255);
+   profile->mBorderDefault = border;
+
+   if (!profile->registerObject("GuiDefaultProfile"))
+      delete profile;
+}
+
 GuiControlProfile::~GuiControlProfile()
 {
+	// Still worn on the way out. Every control holding this profile now has a
+	// dangling mProfile, and nothing touches it until that control renders or is
+	// destroyed - usually inside Sim::shutdown, which surfaces as an access
+	// violation at exit with nothing pointing back to here. Name the profile at
+	// the point the mistake is actually made.
+	//
+	// This can't be fixed up automatically: a control's "Profile" field is a raw
+	// field offset (GuiControl::initPersistFields), so assigning it writes
+	// mProfile directly, bypassing setControlProfile, and ConsoleSetType only
+	// receives the field address - never the owning control - so there is nowhere
+	// to register a deleteNotify. Destroying profiles after the controls that wear
+	// them is the only defence.
+	// Only meaningful while the engine is live. Sim::shutdown tears every object
+	// down in an arbitrary order, so profiles outliving or predeceasing their
+	// controls there is normal and would drown this warning in noise.
+	if (mRefCount != 0 && !Sim::isShuttingDown())
+	{
+		const char* profileName = getName() ? getName() : "<unnamed>";
+		Con::warnf("GuiControlProfile (%s) deleted while still worn by %d control(s) - those controls now hold a dangling profile.", profileName, mRefCount);
+	}
+}
+
+void GuiControlProfile::setTheme(GuiProfileTheme* theme, bool preserveOverrides)
+{
+   if (mThemeMembership.mTheme == theme)
+      return;
+
+   if (mThemeMembership.mTheme != NULL)
+      clearNotify(mThemeMembership.mTheme);
+
+   mThemeMembership.mTheme = theme;
+   if (!preserveOverrides)
+      mThemeMembership.clearAll();
+
+   if (theme != NULL)
+      deleteNotify(theme);
+}
+
+void GuiControlProfile::onStaticModified(const char* slotName, const char* newValue)
+{
+   Parent::onStaticModified(slotName, newValue);
+
+   StringTableEntry slot = StringTable->insert(slotName);
+
+   // On a themed profile, any external field write becomes an override that
+   // stamping will preserve. Category and the override list itself are
+   // theme-managed.
+   if (mThemeMembership.mTheme != NULL)
+   {
+      if (slot != themeCategoryField() && slot != themeOverridesField())
+         mThemeMembership.markOverride(slot);
+   }
+
+   // A border field was written directly (editor, script, or Taml into a live
+   // profile): the cached side pointers may now be stale, so re-resolve all
+   // four. A side with an empty name falls back to the current default border.
+   // The recipe path sets each side's name and pointer together and skips this.
+   static StringTableEntry borderDefaultField = StringTable->insert("borderDefault");
+   static StringTableEntry borderLeftField    = StringTable->insert("borderLeft");
+   static StringTableEntry borderRightField   = StringTable->insert("borderRight");
+   static StringTableEntry borderTopField     = StringTable->insert("borderTop");
+   static StringTableEntry borderBottomField  = StringTable->insert("borderBottom");
+   if (slot == borderDefaultField || slot == borderLeftField || slot == borderRightField ||
+       slot == borderTopField || slot == borderBottomField)
+   {
+      setLeftProfile(NULL);   getLeftProfile();
+      setRightProfile(NULL);  getRightProfile();
+      setTopProfile(NULL);    getTopProfile();
+      setBottomProfile(NULL); getBottomProfile();
+   }
+}
+
+bool GuiControlProfile::writeField(StringTableEntry fieldname, const char* value)
+{
+   if (!Parent::writeField(fieldname, value))
+      return false;
+
+   // Themed profiles persist only explicitly overridden fields; everything
+   // else is derived from the theme. Category and the override list always
+   // persist so a loaded theme can rebind its members.
+   if (mThemeMembership.mTheme != NULL)
+   {
+      if (fieldname != themeCategoryField() &&
+          fieldname != themeOverridesField() &&
+          findField(fieldname) != NULL &&
+          !mThemeMembership.isOverridden(fieldname))
+         return false;
+   }
+
+   return true;
+}
+
+void GuiControlProfile::onDeleteNotify(SimObject* object)
+{
+   // Null the theme back-pointer if our theme is being deleted.
+   if (object == (SimObject*)mThemeMembership.mTheme)
+      mThemeMembership.mTheme = NULL;
+
+   // Null any border profile pointer matching the deleted object. The border
+   // setters have always registered deleteNotify for these, but the
+   // notification was previously ignored, leaving dangling pointers.
+   if (object == mBorderDefault)
+      mBorderDefault = NULL;
+   if (object == mBorderLeft)
+      mBorderLeft = NULL;
+   if (object == mBorderRight)
+      mBorderRight = NULL;
+   if (object == mBorderTop)
+      mBorderTop = NULL;
+   if (object == mBorderBottom)
+      mBorderBottom = NULL;
+
+   Parent::onDeleteNotify(object);
 }
 
 
@@ -431,10 +700,13 @@ void GuiControlProfile::initPersistFields()
    addField("textOffset",    TypePoint2I,    Offset(mTextOffset, GuiControlProfile));
    addField("cursorColor",   TypeColorI,     Offset(mCursorColor, GuiControlProfile));
 
-   addField("bitmap",        TypeFilename,   Offset(mBitmapName, GuiControlProfile));
+   // Written relative to the game root; see getRelativeBitmapName.
+   addProtectedField("bitmap", TypeFilename, Offset(mBitmapName, GuiControlProfile), &defaultProtectedSetFn, &getBitmapName, "Bitmap array used to render the control");
    addProtectedField("imageAsset", TypeAssetId, Offset(mImageAssetID, GuiControlProfile), &setImageAsset, &getImageAsset, "The image asset ID used to render the control");
 
    addField("category", TypeString, Offset(mCategory, GuiControlProfile));
+   // The offset is unused: both accessors are supplied and the setter returns false.
+   addProtectedField("themeOverrides", TypeString, Offset(mCategory, GuiControlProfile), &setThemeOverrides, &getThemeOverrides, "Theme-overridden field names");
 }
 
 bool GuiControlProfile::onAdd()
@@ -459,7 +731,7 @@ GuiBorderProfile * GuiControlProfile::getLeftProfile()
       return mBorderLeft;
 
    // Attempt to find the profile specified
-   if (mLeftProfileName)
+   if (mLeftProfileName && *mLeftProfileName)
    {
       GuiBorderProfile *profile = dynamic_cast<GuiBorderProfile*> (Sim::findObject(mLeftProfileName));
 
@@ -499,7 +771,7 @@ GuiBorderProfile * GuiControlProfile::getRightProfile()
       return mBorderRight;
 
    // Attempt to find the profile specified
-   if (mRightProfileName)
+   if (mRightProfileName && *mRightProfileName)
    {
       GuiBorderProfile *profile = dynamic_cast<GuiBorderProfile*> (Sim::findObject(mRightProfileName));
 
@@ -539,7 +811,7 @@ GuiBorderProfile * GuiControlProfile::getTopProfile()
       return mBorderTop;
 
    // Attempt to find the profile specified
-   if (mTopProfileName)
+   if (mTopProfileName && *mTopProfileName)
    {
       GuiBorderProfile *profile = dynamic_cast<GuiBorderProfile*> (Sim::findObject(mTopProfileName));
 
@@ -579,7 +851,7 @@ GuiBorderProfile * GuiControlProfile::getBottomProfile()
       return mBorderBottom;
 
    // Attempt to find the profile specified
-   if (mBottomProfileName)
+   if (mBottomProfileName && *mBottomProfileName)
    {
       GuiBorderProfile *profile = dynamic_cast<GuiBorderProfile*> (Sim::findObject(mBottomProfileName));
 
@@ -732,6 +1004,28 @@ void GuiControlProfile::decRefCount()
 			mImageAsset.clear();
 		}
 	}
+}
+
+// What the bitmap path should look like in a file. TypeFilename expands
+// whatever it is handed the moment it is set, so mBitmapName is always an
+// absolute path on the machine that set it - and writing that down produces a
+// profile that renders on exactly one computer. Relative to the game root is
+// what survives the trip, and it is what TypeFilename expands back correctly on
+// the next machine to load it.
+StringTableEntry GuiControlProfile::getRelativeBitmapName( void ) const
+{
+	if (mBitmapName == NULL || mBitmapName == StringTable->EmptyString)
+		return mBitmapName;
+
+	// Only a path inside the game is made relative. An image somewhere else -
+	// another drive, a folder beside the repository - is left alone: a "../.."
+	// chain climbing out of the game folder is no more portable than the
+	// absolute path it came from, and pretending otherwise would hide that.
+	StringTableEntry gameRoot = Platform::getMainDotCsDir();
+	if (!Con::isBasePath(mBitmapName, gameRoot))
+		return mBitmapName;
+
+	return Platform::makeRelativePathName(mBitmapName, gameRoot);
 }
 
 void GuiControlProfile::setImageAsset(const char* pImageAssetID)

@@ -45,6 +45,7 @@ protected:
    bool mDepressed;
    bool mMouseOver;
    bool mHasTexture;
+   GuiControlProfile* mThumbProfile;   // styles the draggable thumb (main profile styles the groove)
 
    enum
    {
@@ -65,6 +66,7 @@ public:
 
    //Parental methods
    bool onWake();
+   void onSleep();
 
    void onTouchDown(const GuiEvent &event);
    void onTouchDragged(const GuiEvent &event);

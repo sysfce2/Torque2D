@@ -247,7 +247,7 @@ function PlanetXLevel::buildScene(%this)
 	// Root GUI control so HUD elements can overlay the scene window.
 	new GuiControl(PlanetXRoot)
 	{
-		Profile = "GuiDefaultProfile";
+		Profile = "PlanetXEmptyProfile";
 		HorizSizing = "relative";
 		VertSizing = "relative";
 		Position = "0 0";
@@ -257,7 +257,7 @@ function PlanetXLevel::buildScene(%this)
 	new SceneWindow(PlanetXWindow)
 	{
 		class = "PlanetXSceneWindow";
-		Profile = "GuiDefaultProfile";
+		Profile = "PlanetXEmptyProfile";
 		HorizSizing = "relative";
 		VertSizing = "relative";
 		Position = "0 0";

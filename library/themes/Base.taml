@@ -1,0 +1,171 @@
+<GuiProfileTheme
+    Name="Base"
+    fontBody="share tech mono"
+    fontTitle="share tech mono"
+    fontCode="share tech mono"
+    fontDirectory="library/themes/fonts"
+    fontSize="16"
+    colorBackground="43 43 43 255"
+    colorSurface="81 92 102 255"
+    colorForeground="224 224 224 255"
+    colorAccent="54 135 196 255"
+    colorHighlight="245 210 50 255"
+    colorWarning="196 54 71 255"
+    borderSize="1">
+    <GuiBorderProfile
+        Name="BaseEmptyBorder"
+        category="empty" />
+    <GuiBorderProfile
+        Name="BaseRimmedBorder"
+        category="Rimmed" />
+    <GuiBorderProfile
+        Name="BaseThickBorder"
+        category="Thick" />
+    <GuiBorderProfile
+        Name="BaseLightBorder"
+        category="Light" />
+    <GuiBorderProfile
+        Name="BaseDarkBorder"
+        category="Dark" />
+    <GuiBorderProfile
+        Name="BasePaddedBorder"
+        category="Padded" />
+    <GuiBorderProfile
+        Name="BaseHighlightBorder"
+        category="Highlight" />
+    <GuiBorderProfile
+        Name="BasePaddedRimBorder"
+        category="PaddedRim" />
+    <GuiBorderProfile
+        Name="BaseBevelLightBorder"
+        category="BevelLight" />
+    <GuiBorderProfile
+        Name="BaseBevelDarkBorder"
+        category="BevelDark" />
+    <GuiBorderProfile
+        Name="BasePaddedLightBorder"
+        category="PaddedLight" />
+    <GuiBorderProfile
+        Name="BasePaddedDarkBorder"
+        category="PaddedDark" />
+    <GuiBorderProfile
+        Name="BaseRimmedExpanderBorder"
+        category="RimmedExpander" />
+    <GuiBorderProfile
+        Name="BaseCondenserLightBorder"
+        category="CondenserLight" />
+    <GuiBorderProfile
+        Name="BaseCondenserDarkBorder"
+        category="CondenserDark" />
+    <GuiControlProfile
+        Name="BaseEmptyProfile"
+        category="empty" />
+    <GuiControlProfile
+        Name="BaseTooltipProfile"
+        category="ToolTip" />
+    <GuiControlProfile
+        Name="BasePanelProfile"
+        category="Panel" />
+    <GuiControlProfile
+        Name="BaseButtonProfile"
+        category="Button" />
+    <GuiControlProfile
+        Name="BaseCheckBoxProfile"
+        category="CheckBox" />
+    <GuiControlProfile
+        Name="BaseRadioProfile"
+        category="Radio" />
+    <GuiControlProfile
+        Name="BaseLabelProfile"
+        category="Label" />
+    <GuiControlProfile
+        Name="BaseTextEditProfile"
+        category="TextEdit" />
+    <GuiControlProfile
+        Name="BaseScrollProfile"
+        category="Scroll" />
+    <GuiControlProfile
+        Name="BaseScrollTrackProfile"
+        category="ScrollTrack" />
+    <GuiControlProfile
+        Name="BaseScrollThumbProfile"
+        category="ScrollThumb" />
+    <GuiControlProfile
+        Name="BaseScrollArrowProfile"
+        category="ScrollArrow" />
+    <GuiControlProfile
+        Name="BaseTabBookProfile"
+        category="TabBook" />
+    <GuiControlProfile
+        Name="BaseTabProfile"
+        category="tab" />
+    <GuiControlProfile
+        Name="BaseTabPageProfile"
+        category="TabPage" />
+    <GuiControlProfile
+        Name="BaseListBoxProfile"
+        category="ListBox" />
+    <GuiControlProfile
+        Name="BaseDropDownProfile"
+        category="DropDown" />
+    <GuiControlProfile
+        Name="BaseDropDownItemProfile"
+        category="DropDownItem" />
+    <GuiControlProfile
+        Name="BaseWindowProfile"
+        category="Window" />
+    <GuiControlProfile
+        Name="BaseWindowContentProfile"
+        category="WindowContent" />
+    <GuiControlProfile
+        Name="BaseWindowButtonProfile"
+        category="WindowButton" />
+    <GuiControlProfile
+        Name="BaseWindowCloseButtonProfile"
+        category="WindowCloseButton" />
+    <GuiControlProfile
+        Name="BaseMenuBarProfile"
+        category="MenuBar" />
+    <GuiControlProfile
+        Name="BaseMenuProfile"
+        category="Menu" />
+    <GuiControlProfile
+        Name="BaseMenuItemProfile"
+        category="MenuItem" />
+    <GuiControlProfile
+        Name="BaseMenuContentProfile"
+        category="MenuContent" />
+    <GuiControlProfile
+        Name="BaseOverlayProfile"
+        category="Overlay" />
+    <GuiControlProfile
+        Name="BaseProgressProfile"
+        category="Progress" />
+    <GuiControlProfile
+        Name="BaseTreeViewProfile"
+        category="TreeView" />
+    <GuiControlProfile
+        Name="BaseFrameSetProfile"
+        category="FrameSet" />
+    <GuiControlProfile
+        Name="BaseFrameSetDropButtonProfile"
+        category="FrameSetDropButton" />
+    <GuiControlProfile
+        Name="BaseColorPickerProfile"
+        category="ColorPicker" />
+    <GuiControlProfile
+        Name="BaseColorSelectorProfile"
+        category="ColorSelector" />
+    <GuiControlProfile
+        Name="BaseColorPopupProfile"
+        category="ColorPopup" />
+    <GuiControlProfile
+        Name="BaseDragAndDropProfile"
+        category="DragAndDrop" />
+    <GuiControlProfile
+        Name="BaseSliderProfile"
+        category="Slider" />
+    <GuiControlProfile
+        Name="BaseSliderThumbProfile"
+        category="SliderThumb" />
+</GuiProfileTheme>
