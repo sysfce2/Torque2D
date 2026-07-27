@@ -154,11 +154,16 @@ PlatformFont::CharInfo& iOSFont::getCharInfo(const UTF16 character) const
     CGSize characterAdvances;
     UniChar unicodeCharacter = character;
     
-    // Fetch font glyphs.
+    // Fetch font glyphs. A font legitimately need not have a glyph for every
+    // character -- control codes such as DEL (0x7F) are common misses -- and that
+    // is not fatal. The Windows backend simply returns an empty CharInfo and moves
+    // on; do the same. Left as an AssertFatal this halts a debug build in a modal
+    // message box the instant any such character is asked for (e.g. while baking a
+    // font cache over a character range), hanging the process.
     if ( !CTFontGetGlyphsForCharacters( mFontRef, &unicodeCharacter, &characterGlyph, (CFIndex)1) )
     {
-        // Sanity!
-        AssertFatal( false, "Cannot create font glyph." );
+        // No glyph: return the zeroed, undrawable CharInfo prepared above.
+        return characterInfo;
     }
     
     // Fetch glyph bounding box.

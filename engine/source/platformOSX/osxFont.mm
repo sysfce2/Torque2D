@@ -43,17 +43,22 @@ PlatformFont* createPlatformFont( const char* name, U32 size, U32 charset )
 
 void PlatformFont::enumeratePlatformFonts( Vector<StringTableEntry>& fonts )
 {
-    // Fetch available fonts.
-    NSArray* availableFonts = [[NSFontManager sharedFontManager] availableFontNamesWithTraits:0];
+    // The installed font families -- the installed faces a tool offers the user,
+    // to match what Windows' EnumFontFamilies and Linux' fontconfig report
+    // (families, not every individual style). availableFontNamesWithTraits:0 was
+    // used here once but returns an empty array on modern macOS.
+    //
+    // This is an autoreleased array -- the accessor name does not begin with
+    // alloc/new/copy, so we do not own it and must NOT release it. An explicit
+    // release over-releases it, and the process later crashes in objc_release when
+    // the autorelease pool drains.
+    NSArray* availableFonts = [[NSFontManager sharedFontManager] availableFontFamilies];
 
-    // Enumerate font names.
+    // Enumerate family names.
     for (id fontName in availableFonts)
     {
         fonts.push_back( StringTable->insert( [fontName UTF8String] ) );
     }
-
-    // Release font name.
-    [availableFonts release];
 }
 
 //------------------------------------------------------------------------------
@@ -166,11 +171,16 @@ PlatformFont::CharInfo& OSXFont::getCharInfo(const UTF16 character) const
     CGSize characterAdvances;
     UniChar unicodeCharacter = character;
 
-    // Fetch font glyphs.
+    // Fetch font glyphs. A font legitimately need not have a glyph for every
+    // character -- control codes such as DEL (0x7F) are common misses -- and that
+    // is not fatal. The Windows backend simply returns an empty CharInfo and moves
+    // on; do the same. Left as an AssertFatal this halts a debug build in a modal
+    // message box the instant any such character is asked for (e.g. while baking a
+    // font cache over a character range), hanging the process.
     if ( !CTFontGetGlyphsForCharacters( mFontRef, &unicodeCharacter, &characterGlyph, (CFIndex)1) )
     {
-        // Sanity!
-        AssertFatal( false, "Cannot create font glyph." );
+        // No glyph: return the zeroed, undrawable CharInfo prepared above.
+        return characterInfo;
     }
 
     // Fetch glyph bounding box.
