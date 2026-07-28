@@ -141,13 +141,13 @@ function GuiProfileEditorFieldRow::build(%this)
 		%this.editor = %this.makeInput(%pad, %editorY, %editorW, 22, %kind $= "number", "width");
 	}
 
-	// The per-field reset, shown only while the field is overridden. Frame 22 of
-	// EditorCore:editorIcons16 is the circular revert arrow. "left" sizing keeps
-	// the button pinned to the cell's right edge as the grid widens.
+	// The per-field reset, shown only while the field is overridden. The icon is
+	// the circular revert arrow. "left" sizing keeps the button pinned to the
+	// cell's right edge as the grid widens.
 	%this.resetButton = new GuiButtonCtrl()
 	{
 		class = "EditorIconButton";
-		Frame = 22;
+		Frame = $EditorIcon::playback_reload;
 		HorizSizing = "left";
 		Position = (%w - %resetW - %pad) SPC (%editorY - 1);
 		Tooltip = "Reset this field to the theme's value";

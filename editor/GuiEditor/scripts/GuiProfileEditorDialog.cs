@@ -35,15 +35,15 @@ function GuiProfileEditorDialog::init(%this, %width, %height)
 	ThemeManager.setProfile(%this.toolbar, "emptyProfile");
 	%content.add(%this.toolbar);
 
-	%this.toolbar.addButton("onNewTheme", 11, "New Theme", "");
-	%this.toolbar.addButton("onRename", 49, "Rename Theme or Stand Alone Profile", "getRootSelected");
-	%this.toolbar.addButton("onDelete", 23, "Delete Theme or Stand Alone Profile", "getRootSelected");
-	%this.toolbar.addButton("onNewProfile", 25, "New Profile in Category", "getCategorySelected");
-	%this.toolbar.addButton("onRemoveProfile", 23, "Remove Extra Profile", "getExtraSelected");
-	%this.toolbar.addButton("onNewStandalone", 25, "New Stand Alone Profile", "");
-	// Frame 22 is the circular revert arrow; frame 11 (a plus) was reading as
-	// another "new" button next to the three that really are.
-	%this.toolbar.addButton("onResetMember", 22, "Reset All Overrides on Member", "getMemberSelected");
+	%this.toolbar.addButton("onNewTheme", $EditorIcon::doc_plus, "New Theme", "");
+	%this.toolbar.addButton("onRename", $EditorIcon::doc_edit, "Rename Theme or Stand Alone Profile", "getRootSelected");
+	%this.toolbar.addButton("onDelete", $EditorIcon::round_delete, "Delete Theme or Stand Alone Profile", "getRootSelected");
+	%this.toolbar.addButton("onNewProfile", $EditorIcon::round_plus, "New Profile in Category", "getCategorySelected");
+	%this.toolbar.addButton("onRemoveProfile", $EditorIcon::round_delete, "Remove Extra Profile", "getExtraSelected");
+	%this.toolbar.addButton("onNewStandalone", $EditorIcon::round_plus, "New Stand Alone Profile", "");
+	// The circular revert arrow; a plain plus was reading as another "new"
+	// button next to the three that really are.
+	%this.toolbar.addButton("onResetMember", $EditorIcon::playback_reload, "Reset All Overrides on Member", "getMemberSelected");
 
 	%paneTop = 40;
 	%paneHeight = %height - 116;

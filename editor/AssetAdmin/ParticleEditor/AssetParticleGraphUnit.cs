@@ -11,12 +11,15 @@ function AssetParticleGraphUnit::onAdd(%this)
 	ThemeManager.setProfile(%this.graph, "graphProfile");
 	%this.add(%this.graph);
 
-	//Value zoom buttons
+	// Value zoom buttons. A plus and minus in a square rather than the magnifier
+	// pair these used to wear: the icon set has a magnifier but no +/- variants
+	// of it, and the squared pair stays distinct from the round plus and minus,
+	// which mean add and remove everywhere else in the editor.
 	%center = 6 + mRound(getWord(%this.graph.extent, 1) / 2);
 	%this.valueZoomInButton = new GuiButtonCtrl()
 	{
 		Class = "EditorIconButton";
-		Frame = 0;
+		Frame = $EditorIcon::sq_plus;
 		Position = "2" SPC (%center + 13);
 		Command = %this.getId() @ ".valueZoomIn();";
 		Tooltip = "Zoom In";
@@ -27,7 +30,7 @@ function AssetParticleGraphUnit::onAdd(%this)
 	%this.valueZoomOutButton = new GuiButtonCtrl()
 	{
 		Class = "EditorIconButton";
-		Frame = 1;
+		Frame = $EditorIcon::sq_minus;
 		Position = "2" SPC (%center - 13);
 		Command = %this.getId() @ ".valueZoomOut();";
 		Tooltip = "Zoom Out";
@@ -39,7 +42,7 @@ function AssetParticleGraphUnit::onAdd(%this)
 	%this.valueMoveUpButton = new GuiButtonCtrl()
 	{
 		Class = "EditorIconButton";
-		Frame = 2;
+		Frame = $EditorIcon::arrow_top;
 		Position = "2 18";
 		Command = %this.getId() @ ".valueMoveUp();";
 		Tooltip = "Move Graph Up";
@@ -50,7 +53,7 @@ function AssetParticleGraphUnit::onAdd(%this)
 	%this.valueMoveDownButton = new GuiButtonCtrl()
 	{
 		Class = "EditorIconButton";
-		Frame = 6;
+		Frame = $EditorIcon::arrow_bottom;
 		Position = "2" SPC (getWord(%this.extent, 1) - 66);
 		Command = %this.getId() @ ".valueMoveDown();";
 		Tooltip = "Move Graph Down";
@@ -73,7 +76,7 @@ function AssetParticleGraphUnit::onAdd(%this)
 	%this.timeZoomInButton = new GuiButtonCtrl()
 	{
 		Class = "EditorIconButton";
-		Frame = 0;
+		Frame = $EditorIcon::sq_plus;
 		Position = "0 0";
 		Command = %this.getId() @ ".timeZoomIn();";
 		Tooltip = "Zoom In";
@@ -84,7 +87,7 @@ function AssetParticleGraphUnit::onAdd(%this)
 	%this.timeZoomOutButton = new GuiButtonCtrl()
 	{
 		Class = "EditorIconButton";
-		Frame = 1;
+		Frame = $EditorIcon::sq_minus;
 		Position = "26 0";
 		Command = %this.getId() @ ".timeZoomOut();";
 		Tooltip = "Zoom Out";
@@ -96,7 +99,7 @@ function AssetParticleGraphUnit::onAdd(%this)
 	%this.timeMoveBackButton = new GuiButtonCtrl()
 	{
 		Class = "EditorIconButton";
-		Frame = 8;
+		Frame = $EditorIcon::arrow_left;
 		HorizSizing = "right";
 		Position = "30" SPC %bottom;
 		Command = %this.getId() @ ".timeMoveBack();";
@@ -108,7 +111,7 @@ function AssetParticleGraphUnit::onAdd(%this)
 	%this.timeMoveForwardButton = new GuiButtonCtrl()
 	{
 		Class = "EditorIconButton";
-		Frame = 4;
+		Frame = $EditorIcon::arrow_right;
 		HorizSizing = "left";
 		Position = (getWord(%this.graph.extent, 0) + 6) SPC %bottom;
 		Command = %this.getId() @ ".timeMoveForward();";

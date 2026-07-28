@@ -22,6 +22,10 @@
 
 function EditorCore::create( %this )
 {
+	// First, and before any editor builds a control: every icon in every editor
+	// is a frame index into the shared sheets, and these are the names for them.
+	exec("./EditorIcons.cs");
+
 	%this.editorKeyMap = new ActionMap();
 	if(!isObject(AppCore))
 	{
