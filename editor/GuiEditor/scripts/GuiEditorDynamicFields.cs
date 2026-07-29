@@ -189,8 +189,11 @@ function GuiEditorDynamicFields::onProfileRowCommit(%this, %row)
 		return;
 	}
 
+	// A dynamic field has no setEditFieldValue path, so the recorder writes it
+	// as its own kind of op -- but it goes through the recorder like every other
+	// write the editor makes.
 	%value = %row.getValue();
-	%this.target.setFieldValue(%row.fieldName, %value);
+	GuiEditor.undoRecorder.writeDynamicField(%this.target, %row.fieldName, %value);
 	%row.markClean();
 	%this.pane.afterCommit();
 
@@ -218,7 +221,7 @@ function GuiEditorDynamicFields::onProfileRowReset(%this, %row)
 		return;
 	}
 
-	%this.target.setFieldValue(%row.fieldName, "");
+	GuiEditor.undoRecorder.writeDynamicField(%this.target, %row.fieldName, "");
 	%this.pane.afterCommit();
 
 	// Deferred: this call arrives from the button inside the row that is about

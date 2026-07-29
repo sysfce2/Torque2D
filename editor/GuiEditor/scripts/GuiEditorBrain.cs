@@ -28,6 +28,7 @@ function GuiEditorBrain::onControlDropped(%this, %payload, %position)
    %x = getWord(%pos, 0);
    %y = getWord(%pos, 1);
 
+   // The add itself is the undo step, recorded from onAddNewCtrl below.
    %this.addNewCtrl(%payload);
 
    // A control arrives wearing whatever its C++ constructor named - a
@@ -42,10 +43,18 @@ function GuiEditorBrain::onControlDropped(%this, %payload, %position)
    // announces the selection, so everything that inspects the control has
    // already read it wearing the constructor's profiles. Rethemed tells them to
    // look again.
+   //
+   // None of it is recorded: theming a control that is arriving is part of it
+   // arriving, not a second thing the user did. Undo puts the whole control in
+   // the trash, where it keeps its profiles and its position, so redo has
+   // nothing to put back but the control itself.
    %theme = GuiEditor.themeByName(GuiEditor.themeName);
    if(isObject(%theme))
    {
+      GuiEditor.undoRecorder.suspend();
       GuiEditor.themeApplier.applyToBranch(%payload, %theme, false);
+      GuiEditor.undoRecorder.resume();
+
       %this.postEvent("Rethemed", %payload);
    }
 
@@ -148,6 +157,111 @@ function GuiEditorBrain::onObjectRemoved(%this, %ctrl)
 	%this.deleteSelection();
     %this.endRadioSilence();
     %this.toggleMenuItems();
+}
+
+//-----------------------------------------------------------------------------
+// Undo. The C++ edit control has always announced every edit it makes at the
+// moment it makes it - guiEditCtrl.cc calls all of these, and each one sits
+// beside a bare "// undo" comment marking where the recording used to happen.
+// Nothing implemented them until now.
+//
+// The pairs matter: what a drag or a nudge did is only known once it is over,
+// so the pre half remembers where everything was and the post half works out
+// what actually moved. A mouse-down that only selected records nothing.
+//-----------------------------------------------------------------------------
+
+// Mouse-down on a selection, before a drag-move or a handle-resize.
+function GuiEditorBrain::onPreEdit(%this, %selection)
+{
+    GuiEditor.undoRecorder.snapshot(%selection);
+}
+
+function GuiEditorBrain::onPostEdit(%this, %selection)
+{
+    GuiEditor.undoRecorder.commitGeometry("", "");
+}
+
+// Arrow-key and menu nudges, which the C++ gives a callback of their own
+// precisely so that a run of them can be folded into one action.
+function GuiEditorBrain::onPreSelectionNudged(%this, %selection)
+{
+    GuiEditor.undoRecorder.snapshot(%selection);
+}
+
+function GuiEditorBrain::onPostSelectionNudged(%this, %selection)
+{
+    GuiEditor.undoRecorder.commitGeometry("", "nudge");
+}
+
+// Fired before the controls are moved to the trash, which is the only moment
+// where each one still knows the parent and index it has to go back to.
+function GuiEditorBrain::onTrashSelection(%this, %selection)
+{
+    GuiEditor.undoRecorder.recordDeleteSelection(%selection);
+}
+
+// Fired after the control has been put in the add set.
+function GuiEditorBrain::onAddNewCtrl(%this, %ctrl)
+{
+    GuiEditor.undoRecorder.recordAdd(%ctrl, "");
+}
+
+// The same for a whole set of them, which is how a loaded selection arrives.
+function GuiEditorBrain::onAddNewCtrlSet(%this, %selection)
+{
+    GuiEditor.undoRecorder.begin("Add Controls", "");
+    for(%i = 0; %i < %selection.getCount(); %i++)
+    {
+        GuiEditor.undoRecorder.recordAdd(%selection.getObject(%i), "");
+    }
+    GuiEditor.undoRecorder.end();
+}
+
+// Put the selection on the controls a replay changed, and tell everyone.
+//
+// The announcement has to be made here, because addSelection makes none:
+// it is the receiving half of the bus - what this class calls, under radio
+// silence, when the tree or the pane has already announced a selection - so it
+// changes the C++ selection and says nothing. Calling it on its own leaves the
+// canvas drawing handles round a control the properties pane has never heard
+// of, and the clearSelection ahead of it has already emptied the pane.
+function GuiEditorBrain::restoreSelection(%this, %list)
+{
+    // Already the selection, with values that changed underneath it - which is
+    // the commonest undo there is: change a setting, press Ctrl+Z. Re-announcing
+    // would rebuild the whole properties pane, when all it needs is to re-read
+    // the control it is already showing.
+    if(%list $= %this.selectionList())
+    {
+        %this.postEvent("Replayed");
+        return;
+    }
+
+    %this.clearSelection();
+
+    for(%i = 0; %i < getWordCount(%list); %i++)
+    {
+        %ctrl = getWord(%list, %i);
+        %this.addSelection(%ctrl);
+
+        // What the C++ would have called had it done the selecting, so there is
+        // one definition of what announcing a selection means.
+        %this.onAddSelected(%ctrl);
+    }
+}
+
+function GuiEditorBrain::selectionList(%this)
+{
+    %set = %this.getSelected();
+    %list = "";
+
+    for(%i = 0; %i < %set.getCount(); %i++)
+    {
+        %ctrl = %set.getObject(%i);
+        %list = (%list $= "") ? %ctrl : (%list SPC %ctrl);
+    }
+
+    return %list;
 }
 
 function GuiEditorBrain::toggleMenuItems(%this)

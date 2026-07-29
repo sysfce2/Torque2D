@@ -75,6 +75,21 @@ ConsoleMethodWithDocs(GuiControl, reorderChild, ConsoleVoid, 4,4,  (child1, chil
    }
 }
 
+/*! Tell this control that the order of its children has changed, so that one
+    which lays its children out - a chain, a grid, a frame set - places them
+    again.
+
+    reorderChild and the SimSet ordering methods change the list and announce
+    nothing, so anything that rearranges children from script has to say so
+    afterwards. Adding and removing a child already notify on their own; this is
+    for the case where the same children are simply in a different order.
+    @return No return value
+*/
+ConsoleMethodWithDocs(GuiControl, childrenReordered, ConsoleVoid, 2, 2, ())
+{
+   object->childrenReordered();
+}
+
 /*! @return Returns the Id of the parent control
 */
 ConsoleMethodWithDocs( GuiControl, getParent, ConsoleInt, 2, 2, ())

@@ -947,6 +947,21 @@ function GuiEditorInspectorPane::onSizingChanged(%this, %horiz, %vert)
 		return;
 	}
 
+	// What the whole change starts from. Setting an axis to center or fill hands
+	// that axis's geometry to the engine, which lays the control out then and
+	// there -- so the enum and the move it causes are one change, and undoing
+	// the enum alone would leave the control sitting where centring put it.
+	%recorder = GuiEditor.undoRecorder;
+	%horizBefore = %this.target.getFieldValue("HorizSizing");
+	%vertBefore = %this.target.getFieldValue("VertSizing");
+	%posBefore = %this.target.getPosition();
+	%extentBefore = %this.target.getExtent();
+
+	// Recorded afterwards as the one net change, rather than as each write the
+	// body makes: leaving or entering a mode writes the geometry twice, and an
+	// undo replaying those in reverse would stop on the intermediate values.
+	%recorder.suspend();
+
 	// Order matters, and got this wrong once. The stash has to be taken while
 	// the geometry is still the user's, which is now -- writing the enum alone
 	// moves nothing. The restore has to wait until AFTER the enum is written,
@@ -965,6 +980,20 @@ function GuiEditorInspectorPane::onSizingChanged(%this, %horiz, %vert)
 
 	%this.restoreIfNeeded("h", %horiz);
 	%this.restoreIfNeeded("v", %vert);
+
+	%recorder.resume();
+
+	// Geometry first and the enums last, because the ops replay in reverse for
+	// an undo and the enums have to be off center or fill before the position
+	// and extent are written back -- the same rule the body above follows.
+	%recorder.begin("Change Sizing", "");
+	%recorder.recordField(%this.target, "Position", %posBefore, %this.target.getPosition(), false);
+	%recorder.recordField(%this.target, "Extent", %extentBefore, %this.target.getExtent(), false);
+	%recorder.recordField(%this.target, "HorizSizing", %horizBefore,
+		%this.target.getFieldValue("HorizSizing"), false);
+	%recorder.recordField(%this.target, "VertSizing", %vertBefore,
+		%this.target.getFieldValue("VertSizing"), false);
+	%recorder.end();
 
 	%this.refreshGeometry();
 	%this.afterCommit();
@@ -1061,10 +1090,15 @@ function GuiEditorInspectorPane::readField(%this, %field)
 
 function GuiEditorInspectorPane::writeField(%this, %field, %value)
 {
-	// setEditFieldValue rather than a plain assignment: it brackets the write
-	// with inspectPreApply / inspectPostApply, which is what lets a control
-	// react to being re-profiled or resized from here.
-	%this.target.setEditFieldValue(%field, %value);
+	// Through the recorder, which does the setEditFieldValue itself. Every write
+	// the pane makes is an edit the user can take back, and routing them all
+	// through one place is what makes that true without each caller remembering
+	// to say so.
+	//
+	// (setEditFieldValue rather than a plain assignment brackets the write with
+	// inspectPreApply / inspectPostApply, which is what lets a control react to
+	// being re-profiled or resized from here.)
+	GuiEditor.undoRecorder.writeField(%this.target, %field, %value);
 }
 
 function GuiEditorInspectorPane::refreshToggles(%this)
@@ -1235,7 +1269,9 @@ function GuiEditorInspectorPane::setCategory(%this, %category)
 		// By id, not by name: a profile made this session carries a name the Sim
 		// never registered, because the editor runs with assignName stashing
 		// names rather than adding them.
+		GuiEditor.undoRecorder.begin("Change Category", "");
 		%this.writeField("Profile", %profile.getId());
+		GuiEditor.undoRecorder.end();
 	}
 
 	// Everything downstream of the profile moves with it -- which profiles the
@@ -1517,8 +1553,11 @@ function GuiEditorInspectorPane::commitFontColor(%this, %row)
 		return;
 	}
 
+	// Two fields, one edit.
+	GuiEditor.undoRecorder.begin("Change Font Color", "");
 	%this.writeField("fontColor", %row.getValue());
 	%this.writeField("overrideFontColor", true);
+	GuiEditor.undoRecorder.end();
 
 	%row.markClean();
 	%row.setOverridden(true);

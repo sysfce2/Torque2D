@@ -127,6 +127,46 @@ void GuiTabBookCtrl::onChildRemoved( GuiControl* child )
 
 }
 
+// The tab strip is drawn from mPages, which is filled in the order pages are
+// added and is otherwise independent of the child list. Anything that
+// rearranges the children - a drag in the Gui Editor's tree, or an undo putting
+// a deleted page back where it came from - therefore leaves a page sitting in
+// the middle of the children and at the end of the tab strip. The children are
+// the truth, so rebuild the order from them.
+void GuiTabBookCtrl::childrenReordered()
+{
+	Vector<TabHeaderInfo> ordered;
+
+	for (iterator i = begin(); i != end(); i++)
+	{
+		GuiTabPageCtrl* page = dynamic_cast<GuiTabPageCtrl*>(*i);
+		if (!page)
+			continue;
+
+		for (S32 p = 0; p < mPages.size(); p++)
+		{
+			if (mPages[p].Page == page)
+			{
+				ordered.push_back(mPages[p]);
+				break;
+			}
+		}
+	}
+
+	// Anything the children did not account for is a page the book believes in
+	// and the child list does not; dropping it here would leak it out of the
+	// strip, so only take the rebuild when the two agree on the count.
+	if (ordered.size() != mPages.size())
+		return;
+
+	mPages.clear();
+	for (S32 p = 0; p < ordered.size(); p++)
+		mPages.push_back(ordered[p]);
+
+	calculatePageTabs();
+	Parent::childrenReordered();
+}
+
 void GuiTabBookCtrl::onChildAdded( GuiControl *child )
 {
    GuiTabPageCtrl *page = dynamic_cast<GuiTabPageCtrl*>(child);

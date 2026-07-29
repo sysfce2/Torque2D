@@ -134,6 +134,7 @@ private:
    /// @{
    void onChildRemoved( GuiControl* child );
    void onChildAdded( GuiControl *child );
+   void childrenReordered();
    /// @}
 
    /// @name Rendering methods
