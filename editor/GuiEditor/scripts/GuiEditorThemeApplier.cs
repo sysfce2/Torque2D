@@ -154,6 +154,13 @@ function GuiEditorThemeApplier::applyToBranch(%this, %ctrl, %theme, %overrideSta
 	%changed = %this.walk(%ctrl, %theme, %overrideStandalone);
 	%this.endApply();
 
+	// Consume the palette's request. It exists to answer one question -- which
+	// of the four faces a bare GuiControl was dropped as -- and that question is
+	// asked once, on arrival. What the control ends up WEARING is the lasting
+	// record of what it was told to be, so leaving the field set would let a drop
+	// silently overrule a later change made in the properties pane.
+	%ctrl.paletteCategory = "";
+
 	return %changed;
 }
 
@@ -414,6 +421,15 @@ function GuiEditorThemeApplier::categoryForControl(%this, %ctrl, %isRoot)
 {
 	if(%ctrl.getClassName() $= "GuiControl")
 	{
+		// The palette can say outright which of the four it dropped, and when it
+		// does there is nothing to guess. Two of the four are unreachable by the
+		// guess below at all: a Panel that is not the root, and Overlay ever.
+		// Cleared by applyToBranch once the walk is done.
+		if(%ctrl.paletteCategory !$= "")
+		{
+			return %ctrl.paletteCategory;
+		}
+
 		if(%isRoot)
 		{
 			return "Panel";

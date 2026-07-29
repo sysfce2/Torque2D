@@ -25,7 +25,8 @@ function GuiEditor::create( %this )
 	exec("./scripts/GuiEditorBrain.cs");
 	exec("./scripts/GuiEditorControlIcons.cs");
 	exec("./scripts/GuiEditorControlListWindow.cs");
-	exec("./scripts/GuiEditorControlListBox.cs");
+	exec("./scripts/GuiEditorControlGroup.cs");
+	exec("./scripts/GuiEditorControlTile.cs");
 	exec("./scripts/GuiEditorInspectorWindow.cs");
 	exec("./scripts/GuiEditorExplorerWindow.cs");
     exec("./scripts/GuiEditorExplorerTree.cs");
@@ -287,7 +288,12 @@ function GuiEditor::createFrameSet(%this)
     %leftID = getWord(%idList, 0);
     %rightID = getWord(%idList, 1);
     %content.anchorFrame(%rightID);
-    %content.setFrameSize(%rightID, 300);
+
+    // 340, not 300: this column holds the control palette, whose grid view fits
+    // as many 100-pixel tiles per row as the width allows. At 300, once the
+    // scroll bar is taken out, that is two -- and the leftover is shared between
+    // them, so the tiles sit in gappy columns. 340 makes it three.
+    %content.setFrameSize(%rightID, 340);
     
     %ids = %content.createHorizontalSplit(%leftID);
     %inspectorFrameID = getWord(%ids, 0);
