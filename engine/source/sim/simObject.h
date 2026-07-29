@@ -272,13 +272,24 @@ private:
     {
        static_cast<SimObject*>(object)->setLocked(dAtob(data)); return false;
     }
+	/// Neither flag is ever written.
+	///
+	/// Both are editor scaffolding: Hidden is read only from inside an edit
+	/// root (guiControl.cc renderChildControls guards it with isEditMode, so a
+	/// running game never consults it at all) and Locked only stops the Gui
+	/// Editor from selecting something. Saving them put a working state into
+	/// the document -- hide a control to reach what was behind it, save, and
+	/// the next person to open the file gets an invisible control whose only
+	/// clue is a dashed outline.
+	///
+	/// They still read back and set normally; they simply do not persist.
 	static bool _writeHidden(void* object, const char* data)
 	{
-		return static_cast<SimObject*>(object)->isHidden();
+		return false;
 	}
 	static bool _writeLocked(void* object, const char* data)
 	{
-		return static_cast<SimObject*>(object)->isLocked();
+		return false;
 	}
 
 public:
