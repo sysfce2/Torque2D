@@ -1,0 +1,1199 @@
+
+//-----------------------------------------------------------------------------
+// The Gui Editor's properties pane, in place of the generic C++ GuiInspector.
+//
+// The inspector reflected every registered field into flat alphabetical groups,
+// which meant it offered a GuiChainCtrl nine text fields it never draws and a
+// GuiTabPageCtrl four geometry fields its book overwrites on every layout pass.
+// This asks GuiEditorControlSpec what the selected class actually reads and
+// shows that, with the fields that matter most in a header that is always open.
+//
+// Layout is a vertical chain of blocks, the same arrangement
+// GuiProfileEditorProfileForm uses and for the same reason: each block lays its
+// fields out in a GuiGridCtrl, so widening the Properties frame reflows the
+// cells into more columns instead of leaving dead space.
+//
+// Two kinds of block, and the difference matters:
+//
+//   shared    Every control has these fields, so the rows are built once and
+//             filtered with setVisible. Nothing is ever freed, so a selection
+//             change can never delete a control the engine is mid-dispatch on.
+//   class     The class's own sections and the header's value block. These
+//             fields do not exist on other classes, so there is no shared row
+//             to hide and they are rebuilt when the selected class changes.
+//
+// Rebuilding is safe here in a way it was not in the Profile Editor's preview,
+// because nothing inside this pane can change the target's class: rebuilds only
+// ever arrive from a selection change, which originates on the canvas or in the
+// explorer tree, never on a widget this pane owns. The one exception -- a
+// sprite's source mode, which a commit CAN change -- is deferred to schedule(0)
+// rather than run inside the commit.
+//
+// The pane owns every write to the control; its rows only marshal values. The
+// creator sets paneWidth and window inline, then calls build() once after
+// adding the pane to its scroller.
+//-----------------------------------------------------------------------------
+
+function GuiEditorInspectorPane::onAdd(%this)
+{
+	ThemeManager.setProfile(%this, "emptyProfile");
+
+	%this.spec = new ScriptObject()
+	{
+		class = "GuiEditorControlSpec";
+	};
+}
+
+function GuiEditorInspectorPane::onRemove(%this)
+{
+	%this.unbind();
+
+	if(isObject(%this.spec))
+	{
+		%this.spec.delete();
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Construction.
+//-----------------------------------------------------------------------------
+
+function GuiEditorInspectorPane::build(%this)
+{
+	%w = %this.paneWidth;
+
+	// The narrowest a cell column may get. The grids run in Variable mode, so
+	// they fit as many columns as the pane can hold at this width and share the
+	// remainder evenly -- which is what makes dragging the frame wider add
+	// columns rather than whitespace.
+	%this.rowWidth = 220;
+	%this.rowFields = "";
+	%this.panelList = "";
+	%this.classPanels = "";
+	%this.boundClass = "";
+
+	%this.header = new GuiChainCtrl()
+	{
+		class = "GuiEditorHeaderBlock";
+		HorizSizing = "width";
+		Position = "0 0";
+		Extent = %w SPC 40;
+		IsVertical = true;
+		ChildSpacing = 2;
+		blockWidth = %w;
+		pane = %this;
+		spec = %this.spec;
+	};
+	%this.add(%this.header);
+	%this.header.build();
+
+	// The class's own sections live in a chain of their own so that rebuilding
+	// them cannot change where they sit: added straight to the outer chain they
+	// would land after the shared sections every time they were replaced.
+	%this.classChain = new GuiChainCtrl()
+	{
+		HorizSizing = "width";
+		Position = "0 0";
+		Extent = %w SPC 4;
+		IsVertical = true;
+		ChildSpacing = 6;
+	};
+	ThemeManager.setProfile(%this.classChain, "emptyProfile");
+	%this.add(%this.classChain);
+
+	// Variants get a chain of their own because they are rebuilt more often
+	// than the class sections: whether a slot is worth showing depends on what
+	// the theme holds right now, which the Profile Editor can change while the
+	// same control stays selected.
+	%this.variantsChain = new GuiChainCtrl()
+	{
+		HorizSizing = "width";
+		Position = "0 0";
+		Extent = %w SPC 4;
+		IsVertical = true;
+		ChildSpacing = 6;
+	};
+	ThemeManager.setProfile(%this.variantsChain, "emptyProfile");
+	%this.add(%this.variantsChain);
+
+	// The shared sections, in the order the work usually goes.
+	%this.buildSection("Text", "Text", %this.spec.textFields());
+
+	// isContainer and useInput are both in the header's icon row now that there
+	// is art for them, so neither has a row here.
+	%this.buildSection("Layout", "Layout", "MinExtent");
+	%this.buildSection("Command", "Command", "Command AltCommand Variable Accelerator");
+	%this.buildSection("Animation", "Animation", %this.spec.easingFields());
+	%this.buildSection("Tooltip", "Tooltip", %this.spec.tooltipFields());
+	%this.buildSection("Localization", "Localization", "langTableMod textID");
+	%this.buildSection("Scripting", "Scripting", "class superclass internalName");
+
+	// Dynamic fields last, and in a section of their own rather than through
+	// buildSection: what it holds is not a fixed field list, so it owns its own
+	// rows and its own commits.
+	%this.dynamicPanel = %this.makeSectionPanel("Dynamic Fields");
+	%this.add(%this.dynamicPanel);
+
+	%this.dynamicFields = new GuiChainCtrl()
+	{
+		class = "GuiEditorDynamicFields";
+		HorizSizing = "width";
+		Position = "0 24";
+		Extent = %w SPC 4;
+		IsVertical = true;
+		ChildSpacing = 4;
+		blockWidth = %w;
+		pane = %this;
+	};
+	%this.dynamicPanel.add(%this.dynamicFields);
+	%this.dynamicFields.build();
+
+	%this.forceLayout();
+}
+
+// A GuiPanelCtrl learns its collapsed height only from parentResized -- its
+// constructor defaults to 64x64 whatever Extent it was given, and a chain
+// positions its children without ever resizing them. Nudging the width by a
+// pixel and back forces exactly one parentResized through every child and
+// leaves the widths where they started.
+function GuiEditorInspectorPane::forceLayout(%this)
+{
+	%w = %this.paneWidth;
+	%h = getWord(%this.getExtent(), 1);
+	%this.resize(0, 0, %w + 1, %h);
+	%this.resize(0, 0, %w, %h);
+}
+
+// The grid configuration every block here uses, matching what the native
+// inspector gave its group grids. A hidden cell is skipped rather than left as
+// a hole, so filtering closes the gap (GuiGridCtrl::resize).
+function GuiEditorInspectorPane::makeCellGrid(%this, %y)
+{
+	%grid = new GuiGridCtrl()
+	{
+		HorizSizing = "width";
+		Position = "0" SPC %y;
+		Extent = %this.paneWidth SPC 4;
+		CellModeX = "variable";
+		CellModeY = "variable";
+		CellSizeX = %this.rowWidth;
+		CellSizeY = 48;
+		CellSpacingX = 4;
+		CellSpacingY = 4;
+		MaxColCount = 0;
+		MaxRowCount = 0;
+		OrderMode = "lrtb";
+		IsExtentDynamic = true;
+	};
+	ThemeManager.setProfile(%grid, "emptyProfile");
+	return %grid;
+}
+
+// A collapsible section. Its cells sit in an inner grid rather than directly on
+// the panel: GuiExpandCtrl::toggleHiddenChildren force-writes mVisible on every
+// direct child whenever it expands, collapses or resizes, which would undo the
+// filter. Grandchildren are left alone and the grid skips the hidden ones.
+function GuiEditorInspectorPane::makeSectionPanel(%this, %title)
+{
+	%headerH = 24;
+
+	%panel = new GuiPanelCtrl()
+	{
+		HorizSizing = "width";
+		Text = %title;
+		Position = "0 0";
+		Extent = %this.paneWidth SPC %headerH;
+		MinExtent = "80" SPC %headerH;
+	};
+	ThemeManager.setProfile(%panel, "panelProfile");
+	return %panel;
+}
+
+function GuiEditorInspectorPane::buildSection(%this, %key, %title, %fields)
+{
+	%panel = %this.makeSectionPanel(%title);
+	%this.add(%panel);
+
+	%grid = %this.makeCellGrid(24);
+	%panel.add(%grid);
+
+	%this.panel[%key] = %panel;
+	%this.panelFields[%key] = %fields;
+	%this.panelList = (%this.panelList $= "") ? %key : (%this.panelList SPC %key);
+
+	%count = getWordCount(%fields);
+	for(%i = 0; %i < %count; %i++)
+	{
+		%field = getWord(%fields, %i);
+		%this.addFieldRow(%grid, %field, %this.spec.labelFor(%field),
+			%this.sharedKindFor(%field), %this.sharedEnumItemsFor(%field));
+	}
+}
+
+function GuiEditorInspectorPane::addFieldRow(%this, %container, %field, %label, %kind, %enumItems)
+{
+	%row = new GuiControl()
+	{
+		class = "GuiProfileEditorFieldRow";
+		Position = "0 0";
+		fieldName = %field;
+		labelText = %label;
+		kind = %kind;
+		enumItems = %enumItems;
+		owner = %this;
+	};
+	%container.add(%row);
+	%row.build();
+
+	// This pane has no reset-to-default, so the row's reset button -- which
+	// means "back to the theme's stamped value" and has no analogue here --
+	// never appears.
+	%row.resetButton.setVisible(false);
+
+	%this.row[%field] = %row;
+	%this.rowFields = (%this.rowFields $= "") ? %field : (%this.rowFields SPC %field);
+	return %row;
+}
+
+// Forget rows that are about to be deleted, so a later refresh does not reach
+// through a dangling handle.
+function GuiEditorInspectorPane::clearRows(%this, %fields)
+{
+	%count = getWordCount(%fields);
+	for(%i = 0; %i < %count; %i++)
+	{
+		%field = getWord(%fields, %i);
+		%this.row[%field] = "";
+		%this.rowFields = trim(strreplace(" " @ %this.rowFields @ " ", " " @ %field @ " ", " "));
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Field presentation. The shared rows are built before any control is selected,
+// so their kinds come from a small table; a class row can ask the control
+// itself, which is always more accurate.
+//-----------------------------------------------------------------------------
+
+function GuiEditorInspectorPane::sharedKindFor(%this, %field)
+{
+	switch$(%field)
+	{
+		case "MinExtent": return "point";
+		case "isContainer" or "textWrap" or "textExtend" or "overrideFontColor" or "useInput": return "bool";
+		case "tooltipWidth" or "hovertime": return "number";
+		case "fontSizeAdjust": return "number";
+		case "fontColor": return "color";
+		case "align" or "vAlign": return "enum";
+		case "easeFillColorHL" or "easeFillColorSL": return "enum";
+		case "easeTimeFillColorHL" or "easeTimeFillColorSL": return "number";
+	}
+	return "text";
+}
+
+function GuiEditorInspectorPane::sharedEnumItemsFor(%this, %field)
+{
+	switch$(%field)
+	{
+		// "default" is offered now that the engine's tables expose it -- it is
+		// the value a control starts on, meaning "inherit the profile's".
+		case "align": return "default" TAB "left" TAB "center" TAB "right";
+		case "vAlign": return "default" TAB "top" TAB "middle" TAB "bottom";
+		case "easeFillColorHL" or "easeFillColorSL": return %this.easingItems();
+	}
+	return "";
+}
+
+// The easing names the engine offers, taken from gEasingTable in guiControl.cc.
+function GuiEditorInspectorPane::easingItems(%this)
+{
+	return "Linear" TAB "EaseIn" TAB "EaseOut" TAB "EaseInOut";
+}
+
+// A class row can read its own type off the control, which is exact.
+function GuiEditorInspectorPane::kindFor(%this, %ctrl, %field)
+{
+	%kind = %this.spec.kindForType(%ctrl.getFieldType(%field));
+
+	// A profile slot is a short list of the theme's members for its category,
+	// not a free-text name.
+	if(%kind $= "profile")
+	{
+		return "dropdown";
+	}
+	return %kind;
+}
+
+// An enum's legal values are not exposed to script, so the ones that reach a
+// class row are listed here. Anything missing falls back to a text box, which
+// still edits the field correctly -- it just does not offer the choices.
+function GuiEditorInspectorPane::enumItemsFor(%this, %ctrl, %field)
+{
+	switch$(%field)
+	{
+		// The anchor names, not the originals: these say which edge stays put
+		// rather than which one moves. The old set still loads but is never
+		// offered (guiControl.cc).
+		case "HorizSizing": return "anchorLeft" TAB "anchorRight" TAB "width" TAB "center" TAB "scale" TAB "fill";
+		case "VertSizing": return "anchorTop" TAB "anchorBottom" TAB "height" TAB "center" TAB "scale" TAB "fill";
+		case "hScrollBar" or "vScrollBar": return "alwaysOn" TAB "alwaysOff" TAB "dynamic";
+		case "CellModeX" or "CellModeY": return "absolute" TAB "variable";
+		case "OrderMode": return "lrtb" TAB "tblr";
+		case "TabPosition": return "Top" TAB "Bottom";
+		case "DisplayMode": return "Dropper" TAB "Pallet" TAB "BlendRange" TAB "HueRange" TAB "AlphaRange";
+		case "valueMode": return "RGB" TAB "HSB" TAB "Hex";
+		case "inputMode": return "AllText" TAB "Number" TAB "Decimal" TAB "AlphaNumeric";
+	}
+	return "";
+}
+
+//-----------------------------------------------------------------------------
+// Binding.
+//-----------------------------------------------------------------------------
+
+function GuiEditorInspectorPane::bind(%this, %ctrl)
+{
+	if(!isObject(%ctrl))
+	{
+		%this.unbind();
+		return;
+	}
+
+	// The sizing stash belongs to whichever control it was taken from. Moving
+	// the selection abandons it rather than carrying a stale position onto
+	// something else -- it exists only so that clicking through the modes on
+	// one control can be undone.
+	if(%ctrl != %this.target)
+	{
+		%this.clearStash("h");
+		%this.clearStash("v");
+	}
+
+	%this.target = %ctrl;
+	%class = %ctrl.getClassName();
+
+	if(%class !$= %this.boundClass)
+	{
+		%this.buildClassSections(%class);
+		%this.boundClass = %class;
+	}
+
+	// Always, not only on a class change: the header's value block depends on
+	// the control as well as its class (a sprite shows the source it is using).
+	%this.header.bindClass(%ctrl, %class);
+	%this.buildVariantsSection();
+	%this.dynamicFields.bind(%ctrl);
+
+	%this.applyFilter();
+	%this.refresh();
+	%this.forceLayout();
+	%this.setVisible(true);
+}
+
+// Nothing selected. The blocks keep their rows -- rebuilding them is what this
+// pane goes out of its way to avoid -- and the whole pane simply stops drawing,
+// so no stale values are left on show.
+function GuiEditorInspectorPane::unbind(%this)
+{
+	%this.target = "";
+	%this.clearStash("h");
+	%this.clearStash("v");
+	%this.setVisible(false);
+}
+
+// Rebuild the sections that belong to this class alone. The shared sections and
+// everything in the header shell are left standing.
+function GuiEditorInspectorPane::buildClassSections(%this, %class)
+{
+	%count = getWordCount(%this.classPanels);
+	for(%i = 0; %i < %count; %i++)
+	{
+		%key = getWord(%this.classPanels, %i);
+		%this.clearRows(%this.panelFields[%key]);
+		%this.panel[%key] = "";
+		%this.panelFields[%key] = "";
+	}
+	%this.classChain.deleteObjects();
+	%this.classPanels = "";
+
+	%keys = %this.spec.sectionKeys(%class);
+	%keyCount = getWordCount(%keys);
+	for(%i = 0; %i < %keyCount; %i++)
+	{
+		%key = getWord(%keys, %i);
+		%this.buildClassSection(%class, %key);
+	}
+
+	// A class the table has never heard of gets everything it registers that is
+	// not already on show, so an uncovered control degrades to roughly what the
+	// native inspector did rather than to nothing.
+	if(!%this.spec.isKnownClass(%class))
+	{
+		%this.buildOtherSection(%class);
+	}
+}
+
+function GuiEditorInspectorPane::buildClassSection(%this, %class, %key)
+{
+	%fields = %this.spec.sectionFields(%class, %key);
+	%panel = %this.makeSectionPanel(%this.spec.sectionTitle(%class, %key));
+	%this.classChain.add(%panel);
+
+	%grid = %this.makeCellGrid(24);
+	%panel.add(%grid);
+
+	%this.panel[%key] = %panel;
+	%this.panelFields[%key] = %fields;
+	%this.classPanels = (%this.classPanels $= "") ? %key : (%this.classPanels SPC %key);
+
+	%count = getWordCount(%fields);
+	for(%i = 0; %i < %count; %i++)
+	{
+		%field = getWord(%fields, %i);
+		%this.addFieldRow(%grid, %field, %this.spec.labelFor(%field),
+			%this.kindFor(%this.target, %field),
+			%this.enumItemsFor(%this.target, %field));
+	}
+}
+
+// Everything the control registers that nothing above has claimed. Uses the
+// control's own field list, so it needs no knowledge of the class at all.
+function GuiEditorInspectorPane::buildOtherSection(%this, %class)
+{
+	%claimed = %this.rowFields SPC %this.spec.geometryFields() SPC
+		%this.spec.deadFields() SPC %this.spec.runtimeToggles() SPC
+		%this.spec.editorToggles() SPC "name Profile";
+
+	%fields = "";
+	%count = %this.target.getFieldCount();
+	for(%i = 0; %i < %count; %i++)
+	{
+		%field = %this.target.getField(%i);
+		if(%this.spec.listHas(%claimed, %field))
+		{
+			continue;
+		}
+		if(%this.spec.kindForType(%this.target.getFieldType(%field)) $= "hidden")
+		{
+			continue;
+		}
+		%fields = (%fields $= "") ? %field : (%fields SPC %field);
+	}
+
+	if(%fields $= "")
+	{
+		return;
+	}
+
+	%panel = %this.makeSectionPanel("Other");
+	%this.classChain.add(%panel);
+	%grid = %this.makeCellGrid(24);
+	%panel.add(%grid);
+
+	%this.panel["Other"] = %panel;
+	%this.panelFields["Other"] = %fields;
+	%this.classPanels = (%this.classPanels $= "") ? "Other" : (%this.classPanels SPC "Other");
+
+	%fieldCount = getWordCount(%fields);
+	for(%i = 0; %i < %fieldCount; %i++)
+	{
+		%field = getWord(%fields, %i);
+		%this.addFieldRow(%grid, %field, %this.spec.labelFor(%field),
+			%this.kindFor(%this.target, %field),
+			%this.enumItemsFor(%this.target, %field));
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Variants: the control's secondary profile slots, shown only where there is
+// something to choose between.
+//
+// Every slot other than Profile itself -- contentProfile, thumbProfile,
+// closeButtonProfile and the rest -- is assigned by GuiEditorThemeApplier from
+// the Gui's theme, and in the ordinary case there is exactly one profile in the
+// theme for that slot's category. Showing a dropdown with one entry in it is
+// noise, so the row only exists once a second candidate does.
+//
+// The count and the contents are deliberately different sets. An uncategorised
+// standalone -- "Any" in the Profile Editor -- is offered in a row that already
+// exists but never causes one to appear, because otherwise a single "Any"
+// profile would sprout a Variants row on every slot of every control, which is
+// exactly the complexity this pane exists to remove.
+//-----------------------------------------------------------------------------
+
+function GuiEditorInspectorPane::buildVariantsSection(%this)
+{
+	if(isObject(%this.panel["Variants"]))
+	{
+		%this.clearRows(%this.panelFields["Variants"]);
+		%this.panel["Variants"] = "";
+		%this.panelFields["Variants"] = "";
+		%this.panelList = trim(strreplace(" " @ %this.panelList @ " ", " Variants ", " "));
+	}
+	%this.variantsChain.deleteObjects();
+
+	%fields = %this.variantSlots(%this.target);
+	if(%fields $= "")
+	{
+		return;
+	}
+
+	%panel = %this.makeSectionPanel("Variants");
+	%this.variantsChain.add(%panel);
+	%grid = %this.makeCellGrid(24);
+	%panel.add(%grid);
+
+	%this.panel["Variants"] = %panel;
+	%this.panelFields["Variants"] = %fields;
+	%this.panelList = %this.panelList SPC "Variants";
+
+	%count = getWordCount(%fields);
+	for(%i = 0; %i < %count; %i++)
+	{
+		%field = getWord(%fields, %i);
+		%this.addFieldRow(%grid, %field, %this.spec.labelFor(%field), "dropdown", "");
+	}
+}
+
+// The slots worth showing: every TypeGuiProfile field except the control's own
+// Profile, which the header already carries, and only where the narrow
+// candidate set has more than one member.
+function GuiEditorInspectorPane::variantSlots(%this, %ctrl)
+{
+	if(!isObject(%ctrl) || %this.spec.hasFlag(%ctrl.getClassName(), "bare"))
+	{
+		return "";
+	}
+
+	%fields = "";
+	%count = %ctrl.getFieldCount();
+	for(%i = 0; %i < %count; %i++)
+	{
+		%field = %ctrl.getField(%i);
+		if(%ctrl.getFieldType(%field) !$= "GuiProfile" || %field $= "Profile")
+		{
+			continue;
+		}
+		if(getWordCount(%this.profileAnchors(%ctrl, %field)) <= 1)
+		{
+			continue;
+		}
+		%fields = (%fields $= "") ? %field : (%fields SPC %field);
+	}
+	return %fields;
+}
+
+// Why does this control show the Variants rows it shows? Type
+//
+//     GuiEditor.inspectorWindow.pane.dumpSlots();
+//
+// into the console with something selected. For each profile slot it prints the
+// category, what the slot holds, and every candidate with the theme that owns
+// it -- which is the only way to tell a theme member from a standalone that
+// happens to share a name, and the fastest way to find out why a row appeared.
+function GuiEditorInspectorPane::dumpSlots(%this)
+{
+	if(!isObject(%this.target))
+	{
+		echo("dumpSlots: nothing selected.");
+		return;
+	}
+
+	%applier = GuiEditor.themeApplier;
+	%library = GuiEditor.themeLibrary;
+	%themes = %library.getThemes();
+
+	echo("dumpSlots: " @ %this.target.getClassName() @ " '" @ %this.target.getName() @
+		"', active theme '" @ GuiEditor.themeName @ "', " @ getWordCount(%themes) @ " theme(s) loaded.");
+
+	for(%i = 0; %i < getWordCount(%themes); %i++)
+	{
+		%t = getWord(%themes, %i);
+		echo("  theme " @ %t.getName() @ " (" @ %t @ ") members=" @ %t.getProfileCount());
+	}
+	for(%i = 0; %i < %library.standaloneFolder.getCount(); %i++)
+	{
+		%p = %library.standaloneFolder.getObject(%i).target;
+		if(isObject(%p))
+		{
+			echo("  standalone " @ %p.getName() @ " (" @ %p @ ") category='" @ %p.category @ "'");
+		}
+	}
+
+	// themeOf needs the applier's theme list, which it only holds between these.
+	%applier.beginApply();
+	%count = %this.target.getFieldCount();
+	for(%i = 0; %i < %count; %i++)
+	{
+		%field = %this.target.getField(%i);
+		if(%this.target.getFieldType(%field) !$= "GuiProfile")
+		{
+			continue;
+		}
+
+		%cat = %this.categoryForSlot(%this.target, %field);
+		%cur = %applier.fieldProfile(%this.target, %field);
+		%anchors = %this.profileAnchors(%this.target, %field);
+
+		echo("  slot " @ %field @ " category='" @ %cat @ "' current=" @
+			(isObject(%cur) ? %cur.getName() @ "(" @ %cur @ ")" : "none") @
+			" anchors=" @ getWordCount(%anchors) @
+			(getWordCount(%anchors) > 1 ? "  <-- ROW SHOWN" : ""));
+
+		for(%a = 0; %a < getWordCount(%anchors); %a++)
+		{
+			%p = getWord(%anchors, %a);
+			%owner = %applier.themeOf(%p);
+			echo("      " @ %p.getName() @ " (" @ %p @ ") from " @
+				(isObject(%owner) ? "theme " @ %owner.getName() : "standalone/unowned"));
+		}
+	}
+	%applier.endApply();
+}
+
+//-----------------------------------------------------------------------------
+// Filtering. Nothing here creates or deletes a control -- it only decides what
+// is visible and what is inert.
+//-----------------------------------------------------------------------------
+
+function GuiEditorInspectorPane::applyFilter(%this)
+{
+	%spec = %this.spec;
+	%class = %this.boundClass;
+
+	%count = getWordCount(%this.rowFields);
+	for(%i = 0; %i < %count; %i++)
+	{
+		%field = getWord(%this.rowFields, %i);
+		%row = %this.row[%field];
+		if(isObject(%row))
+		{
+			%row.setVisible(%spec.isFieldVisible(%class, %field));
+		}
+	}
+
+	// isContainer is the engine's answer rather than the table's: a control
+	// that cannot draw children has the field forced false, so the switch would
+	// be wired to nothing.
+	// isContainer moved to the header's icon row, which decides its own
+	// visibility from the same rule -- see GuiEditorHeaderBlock::bindClass.
+
+	// The header carries the text block for the roles that have a caption worth
+	// naming; the shared Text section is for the rest, so the two never both
+	// show it.
+	%inHeader = %spec.textBelongsInHeader(%class);
+	%textCount = getWordCount(%spec.textFields());
+	for(%i = 0; %i < %textCount; %i++)
+	{
+		%field = getWord(%spec.textFields(), %i);
+		%row = %this.row[%field];
+		if(isObject(%row) && %inHeader)
+		{
+			%row.setVisible(false);
+		}
+	}
+
+	// A section with nothing left to show gets out of the way entirely.
+	%panels = getWordCount(%this.panelList);
+	for(%i = 0; %i < %panels; %i++)
+	{
+		%key = getWord(%this.panelList, %i);
+		%this.panel[%key].setVisible(%this.anyRowVisible(%this.panelFields[%key]));
+	}
+
+	// The Add row is always worth showing, so the section stays open whenever a
+	// control is bound at all -- unlike the others, an empty one is still the
+	// only way to put a field on the control.
+	%this.dynamicPanel.setVisible(isObject(%this.target));
+
+	%this.header.applyGeometryMode(%spec.geometryModeOf(%this.target));
+}
+
+// A field was added or removed, so the section's height changed under the
+// chain. Nothing above it moved, but the panel has to be told to re-measure.
+function GuiEditorInspectorPane::onDynamicFieldsChanged(%this)
+{
+	%this.dynamicFields.resize(0, 24, %this.paneWidth, getWord(%this.dynamicFields.getExtent(), 1));
+	%this.forceLayout();
+}
+
+function GuiEditorInspectorPane::anyRowVisible(%this, %fields)
+{
+	%count = getWordCount(%fields);
+	for(%i = 0; %i < %count; %i++)
+	{
+		%row = %this.row[getWord(%fields, %i)];
+		if(isObject(%row) && %row.isVisible())
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+//-----------------------------------------------------------------------------
+// Loading values. The populating guard keeps every setText / setColorI /
+// setStateOn from echoing straight back through the commits.
+//-----------------------------------------------------------------------------
+
+function GuiEditorInspectorPane::refresh(%this)
+{
+	if(!isObject(%this.target))
+	{
+		return;
+	}
+
+	%this.populating = true;
+
+	// Candidates before values: a drop-down row keeps a selection that is not
+	// in its list by inserting it, so filling the list afterwards would drop
+	// what the control actually wears.
+	%this.refreshProfileChoices();
+
+	%count = getWordCount(%this.rowFields);
+	for(%i = 0; %i < %count; %i++)
+	{
+		%field = getWord(%this.rowFields, %i);
+		%row = %this.row[%field];
+
+		// Profile slots were just loaded by name above. Reading one back off
+		// the control here would undo that: the field answers with whatever
+		// name it holds, and a profile created this session has one the Sim
+		// never registered.
+		if(!isObject(%row) || %this.isProfileSlot(%field))
+		{
+			continue;
+		}
+		%row.setValue(%this.readField(%field));
+	}
+
+	// The alignment rows are segmented controls rather than field rows, so they
+	// are not in rowFields and load here.
+	%this.header.alignRow.setValue(%this.target.getFieldValue("align"));
+	%this.header.vAlignRow.setValue(%this.target.getFieldValue("vAlign"));
+
+	%this.refreshToggles();
+	%this.header.anchorPicker.readEnums(
+		%this.target.getFieldValue("HorizSizing"),
+		%this.target.getFieldValue("VertSizing"));
+
+	%this.populating = false;
+}
+
+// The anchor picker moved. Both enums go in: one click can change either, and
+// clearing a Fill hands the axis back to its pins, which the other field has to
+// hear about too.
+//
+// Then the control is laid out immediately. Center and fill are positions the
+// control should always be in rather than reactions to a size change, so
+// leaving them until the next parent resize means picking one appears to do
+// nothing -- the control sat still until you nudged it.
+//
+// Because those two overwrite geometry the user typed, the position and extent
+// they are about to destroy are kept first, per axis, and handed back when the
+// axis returns to a mode that does not own them. That makes clicking through
+// Fill, Scale and back a lossless way to look at the options. The stash is
+// deliberately shallow: it lives until the selection changes and is then gone,
+// so it never has to be reconciled with anything else that moves the control.
+function GuiEditorInspectorPane::onSizingChanged(%this, %horiz, %vert)
+{
+	if(%this.populating || !isObject(%this.target))
+	{
+		return;
+	}
+
+	// Order matters, and got this wrong once. The stash has to be taken while
+	// the geometry is still the user's, which is now -- writing the enum alone
+	// moves nothing. The restore has to wait until AFTER the enum is written,
+	// because a control still set to center or fill overrides any position or
+	// extent written to it: the write appeared to land and read straight back
+	// out as the centred value.
+	%this.stashIfNeeded("h", %horiz);
+	%this.stashIfNeeded("v", %vert);
+
+	%this.writeField("HorizSizing", %horiz);
+	%this.writeField("VertSizing", %vert);
+
+	// A no-op for every mode that needs a size delta, which is what we want:
+	// they have nothing to react to. Center and fill apply now.
+	%this.target.applySizing();
+
+	%this.restoreIfNeeded("h", %horiz);
+	%this.restoreIfNeeded("v", %vert);
+
+	%this.refreshGeometry();
+	%this.afterCommit();
+}
+
+// The two modes that overwrite what the user set. Center takes the position;
+// fill takes the position and the extent.
+function GuiEditorInspectorPane::sizingOwnsGeometry(%this, %mode)
+{
+	return %mode $= "center" || %mode $= "fill";
+}
+
+// Entering one of those: keep what it is about to overwrite, unless something
+// is already kept -- the first value is the one worth returning to.
+function GuiEditorInspectorPane::stashIfNeeded(%this, %axis, %mode)
+{
+	if(!%this.sizingOwnsGeometry(%mode) || %this.stashed[%axis] !$= "")
+	{
+		return;
+	}
+
+	%this.stashed[%axis] = true;
+	%this.stashPos[%axis] = %this.target.getPosition();
+	%this.stashExtent[%axis] = %this.target.getExtent();
+}
+
+// Leaving one: give back what it took, on this axis only -- the other may still
+// be filled, and restoring both would undo it.
+function GuiEditorInspectorPane::restoreIfNeeded(%this, %axis, %mode)
+{
+	if(%this.sizingOwnsGeometry(%mode) || %this.stashed[%axis] $= "")
+	{
+		return;
+	}
+
+	%pos = %this.target.getPosition();
+	%extent = %this.target.getExtent();
+	if(%axis $= "h")
+	{
+		%pos = getWord(%this.stashPos[%axis], 0) SPC getWord(%pos, 1);
+		%extent = getWord(%this.stashExtent[%axis], 0) SPC getWord(%extent, 1);
+	}
+	else
+	{
+		%pos = getWord(%pos, 0) SPC getWord(%this.stashPos[%axis], 1);
+		%extent = getWord(%extent, 0) SPC getWord(%this.stashExtent[%axis], 1);
+	}
+
+	// Through the fields, not setPosition/setExtent. "scale" does not recompute
+	// its proportion every layout -- relPosBatteryH caches it in
+	// mStoredRelativePosH and keeps using it until resetStoredRelPos runs, and
+	// the only things that call that are the Position and Extent field setters
+	// (guiControl.h setPositionFn / setExtentFn). Restoring with the console
+	// methods left the proportion captured while the control was filled, so the
+	// next layout stretched it straight back out again.
+	%this.writeField("Position", %pos);
+	%this.writeField("Extent", %extent);
+	%this.clearStash(%axis);
+}
+
+function GuiEditorInspectorPane::clearStash(%this, %axis)
+{
+	%this.stashed[%axis] = "";
+	%this.stashPos[%axis] = "";
+	%this.stashExtent[%axis] = "";
+}
+
+// Position and extent move without the pane being rebuilt -- dragging a control
+// on the canvas ends in an Edit event -- so this is the cheap path that reloads
+// values and touches nothing else.
+function GuiEditorInspectorPane::refreshGeometry(%this)
+{
+	if(!isObject(%this.target))
+	{
+		return;
+	}
+
+	%this.populating = true;
+	%this.header.positionRow.setValue(%this.target.getPosition());
+	%this.header.extentRow.setValue(%this.target.getExtent());
+	%this.populating = false;
+}
+
+function GuiEditorInspectorPane::readField(%this, %field)
+{
+	// getFieldValue answers "" for a name in editor mode, where assignName
+	// stashes the name rather than registering it, so ask the object instead.
+	if(%field $= "name")
+	{
+		return %this.target.getName();
+	}
+	return %this.target.getFieldValue(%field);
+}
+
+function GuiEditorInspectorPane::writeField(%this, %field, %value)
+{
+	// setEditFieldValue rather than a plain assignment: it brackets the write
+	// with inspectPreApply / inspectPostApply, which is what lets a control
+	// react to being re-profiled or resized from here.
+	%this.target.setEditFieldValue(%field, %value);
+}
+
+function GuiEditorInspectorPane::refreshToggles(%this)
+{
+	%header = %this.header;
+
+	%header.hiddenButton.setValue(%this.target.hidden);
+	%header.lockedButton.setValue(%this.target.locked);
+
+	%header.visibleButton.setValue(%this.target.Visible);
+	%header.activeButton.setValue(%this.target.Active);
+	%header.inputButton.setValue(%this.target.useInput);
+	%header.containerButton.setValue(%this.target.isContainer);
+}
+
+// A segmented row in the header picked a value. Same contract as the toggles:
+// the widget holds the choice, the pane does the writing.
+function GuiEditorInspectorPane::onHeaderChoiceChanged(%this, %field, %value)
+{
+	if(%this.populating || !isObject(%this.target))
+	{
+		return;
+	}
+
+	%this.writeField(%field, %value);
+	%this.afterCommit();
+}
+
+// A toggle reports the click and lets the pane decide what the value becomes,
+// so that every write to the control still goes through one place.
+function GuiEditorInspectorPane::onToggleChanged(%this, %field)
+{
+	if(%this.populating || !isObject(%this.target))
+	{
+		return;
+	}
+
+	// Every widget in the row holds its own state and has already flipped it, so
+	// the value is read back rather than derived -- the control and the widget
+	// can never disagree about what was just asked for.
+	%header = %this.header;
+	switch$(%field)
+	{
+		case "hidden":
+			%this.writeField("hidden", %header.hiddenButton.getValue());
+		case "locked":
+			%this.writeField("locked", %header.lockedButton.getValue());
+		case "Visible":
+			%this.writeField("Visible", %header.visibleButton.getValue());
+		case "Active":
+			%this.writeField("Active", %header.activeButton.getValue());
+		case "useInput":
+			%this.writeField("useInput", %header.inputButton.getValue());
+		case "isContainer":
+			%this.writeField("isContainer", %header.containerButton.getValue());
+	}
+
+	%this.refreshToggles();
+	%this.afterCommit();
+}
+
+//-----------------------------------------------------------------------------
+// Profile slots. A slot is a choice among the theme's members for its category,
+// never a list of every profile in the sim -- which is what the native
+// inspector offered, applied by name, silently failing for anything made this
+// session (editor mode does not register names).
+//-----------------------------------------------------------------------------
+
+// The narrow set, which decides whether a slot is worth showing at all: this
+// theme's members of the slot's category, any standalone profile stamped for
+// that category, and whatever the slot currently holds. An uncategorised
+// standalone is deliberately absent -- one of those would otherwise make a
+// Variants row appear on every slot of every control.
+//
+// The current value counts so that a slot wearing something the theme does not
+// offer is visible and changeable rather than silently stuck. In the ordinary
+// case it is already one of the theme's members and dedupes away.
+function GuiEditorInspectorPane::profileAnchors(%this, %ctrl, %field)
+{
+	%category = %this.categoryForSlot(%ctrl, %field);
+	if(%category $= "")
+	{
+		return "";
+	}
+
+	%library = GuiEditor.themeLibrary;
+	%theme = GuiEditor.themeByName(GuiEditor.themeName);
+
+	%list = isObject(%theme) ? %theme.getProfiles(%category) : "";
+	%list = %this.addUnique(%list, %library.getStandaloneProfiles(%category));
+
+	%current = GuiEditor.themeApplier.fieldProfile(%ctrl, %field);
+	if(isObject(%current))
+	{
+		%list = %this.addUnique(%list, %current);
+	}
+
+	return %list;
+}
+
+// The wider set, which is what the drop-down actually offers once it exists.
+// "Any" means usable as any control's main profile, not usable in any slot.
+function GuiEditorInspectorPane::profileOptions(%this, %ctrl, %field)
+{
+	%list = %this.profileAnchors(%ctrl, %field);
+	return %this.addUnique(%list, GuiEditor.themeLibrary.getStandaloneProfiles(""));
+}
+
+function GuiEditorInspectorPane::categoryForSlot(%this, %ctrl, %field)
+{
+	%applier = GuiEditor.themeApplier;
+	%isRoot = (%ctrl.getParent() == %applier.rootContainer);
+	%main = %applier.categoryForControl(%ctrl, %isRoot);
+	return %applier.categoryForField(%field, %main);
+}
+
+function GuiEditorInspectorPane::addUnique(%this, %list, %additions)
+{
+	%count = getWordCount(%additions);
+	for(%i = 0; %i < %count; %i++)
+	{
+		%item = getWord(%additions, %i);
+		if(%item $= "" || %this.spec.listHas(%list, %item))
+		{
+			continue;
+		}
+		%list = (%list $= "") ? %item : (%list SPC %item);
+	}
+	return %list;
+}
+
+// Fill every profile drop-down -- the header's Profile and any Variants row --
+// with its candidates and select what the control wears.
+function GuiEditorInspectorPane::refreshProfileChoices(%this)
+{
+	if(!isObject(%this.target))
+	{
+		return;
+	}
+
+	if(%this.header.profileRow.isVisible())
+	{
+		%this.fillProfileRow(%this.header.profileRow, "Profile");
+	}
+
+	%slots = %this.panelFields["Variants"];
+	%count = getWordCount(%slots);
+	for(%i = 0; %i < %count; %i++)
+	{
+		%field = getWord(%slots, %i);
+		%row = %this.row[%field];
+		if(isObject(%row))
+		{
+			%this.fillProfileRow(%row, %field);
+		}
+	}
+}
+
+// One slot's candidates, listed by name. The name is only a label: a commit
+// looks the choice back up and writes the id, because a profile made during
+// this editor session has a name the Sim cannot resolve.
+function GuiEditorInspectorPane::fillProfileRow(%this, %row, %field)
+{
+	%ids = %this.profileOptions(%this.target, %field);
+	%items = "";
+	%count = getWordCount(%ids);
+	for(%i = 0; %i < %count; %i++)
+	{
+		%profile = getWord(%ids, %i);
+		%name = %profile.getName();
+		if(%name $= "")
+		{
+			continue;
+		}
+		%items = (%items $= "") ? %name : (%items TAB %name);
+		%this.profileByName[%name] = %profile;
+	}
+
+	// Forget what the row was showing before refilling it. fillItems deliberately
+	// preserves the current selection and re-inserts it when the new list does
+	// not contain it -- right for the Profile Editor's font list, where a face
+	// outside the directory must not be silently dropped, but wrong here: the
+	// candidates are recomputed from scratch every bind, so a name that is no
+	// longer one of them is a ghost of the last fill. It is how a profile from
+	// the previous theme survived a Set Theme.
+	%row.currentItem = "";
+	%row.fillItems(%items);
+
+	%current = GuiEditor.themeApplier.fieldProfile(%this.target, %field);
+	%row.setValue(isObject(%current) ? %current.getName() : "");
+}
+
+//-----------------------------------------------------------------------------
+// Commits. Every write to the control goes through here.
+//-----------------------------------------------------------------------------
+
+function GuiEditorInspectorPane::onProfileRowCommit(%this, %row)
+{
+	if(%this.populating || !isObject(%this.target))
+	{
+		return;
+	}
+
+	// A text box commits on blur, so most commits arrive from a field the user
+	// only tabbed through. Writing one anyway would put an edit in the undo
+	// record -- and mark the Gui dirty -- for something that never happened.
+	if(!%row.hasChanged())
+	{
+		return;
+	}
+
+	%field = %row.fieldName;
+
+	// A profile slot is chosen by name in the list but written by id: a profile
+	// created this session carries a name the Sim cannot resolve, because the
+	// editor runs with assignName stashing names rather than registering them.
+	// GuiEditorThemeApplier::applyToControl writes ids for exactly this reason.
+	if(%this.isProfileSlot(%field))
+	{
+		%profile = %this.profileByName[%row.getValue()];
+		if(isObject(%profile))
+		{
+			%this.writeField(%field, %profile.getId());
+		}
+	}
+	else
+	{
+		%this.writeField(%field, %row.getValue());
+	}
+
+	%row.markClean();
+
+	// Changing a sprite's source swaps which fields the header shows, which
+	// means deleting the row this commit arrived from. Deferred to the next
+	// tick so the engine is not mid-dispatch on a control being freed.
+	if(%this.boundClass $= "GuiSpriteCtrl" && %this.isSpriteSourceField(%field))
+	{
+		%this.schedule(0, "rebindDeferred");
+	}
+
+	%this.afterCommit();
+}
+
+function GuiEditorInspectorPane::isProfileSlot(%this, %field)
+{
+	return isObject(%this.target) &&
+		%this.target.getFieldType(%field) $= "GuiProfile";
+}
+
+function GuiEditorInspectorPane::isSpriteSourceField(%this, %field)
+{
+	return %this.spec.listHas("Image Animation Bitmap", %field);
+}
+
+function GuiEditorInspectorPane::rebindDeferred(%this)
+{
+	if(isObject(%this.target))
+	{
+		%this.bind(%this.target);
+	}
+}
+
+// The row widget's reset means "back to the theme's stamped value", which has
+// no analogue for a control, so the button is hidden and this can never fire.
+// It exists because the row's owner contract names it.
+function GuiEditorInspectorPane::onProfileRowReset(%this, %row)
+{
+}
+
+// Everything a write has to tell the rest of the editor. The canvas has to
+// redraw and the explorer tree may be showing the name that just changed.
+function GuiEditorInspectorPane::afterCommit(%this)
+{
+	if(isObject(%this.window))
+	{
+		%this.window.onPaneCommit(%this.target);
+	}
+}

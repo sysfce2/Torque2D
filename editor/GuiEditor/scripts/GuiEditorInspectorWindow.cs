@@ -2,10 +2,12 @@
 
 function GuiEditorInspectorWindow::onAdd(%this)
 {
+    // Fill rather than width/height -- the window's only child wants its whole
+    // content rect. See GuiEditorControlListWindow for why.
     %this.scroller = new GuiScrollCtrl()
 	{
-		HorizSizing="width";
-		VertSizing="height";
+		HorizSizing="fill";
+		VertSizing="fill";
 		Position="0 0";
 		Extent="352 354";
 		hScrollBar="alwaysOff";
@@ -20,45 +22,25 @@ function GuiEditorInspectorWindow::onAdd(%this)
 	ThemeManager.setProfile(%this.scroller, "scrollArrowProfile", "ArrowProfile");
 	%this.add(%this.scroller);
 
-    %this.inspector = new GuiInspector()
+    // The custom pane that replaced the native GuiInspector. The inspector is
+    // still a live C++ class -- the Asset Admin uses one -- but it has no place
+    // here: it reflected every registered field, which for a Gui control means
+    // offering fields the class provably never reads.
+    %this.pane = new GuiChainCtrl()
 	{
-		Class = "GuiEditorInspector";
-		HorizSizing="width";
-		VertSizing="height";
-		Position="0 0";
-		Extent="338 354";
-		FieldCellSize="288 40";
-		ControlOffset="10 18";
-		ConstantThumbHeight=false;
-		ScrollBarThickness=12;
-		ShowArrowButtons=true;
+		class = "GuiEditorInspectorPane";
+		HorizSizing = "width";
+		Position = "0 0";
+		Extent = "338 354";
+		IsVertical = true;
+		ChildSpacing = 6;
+		paneWidth = 338;
+		window = %this;
 	};
-	ThemeManager.setProfile(%this.inspector, "emptyProfile");
-	ThemeManager.setProfile(%this.inspector, "panelProfile", "GroupPanelProfile");
-	ThemeManager.setProfile(%this.inspector, "emptyProfile", "GroupGridProfile");
-	ThemeManager.setProfile(%this.inspector, "labelProfile", "LabelProfile");
-	ThemeManager.setProfile(%this.inspector, "overrideLabelProfile", "OverrideLabelProfile");
-	ThemeManager.setProfile(%this.inspector, "textEditProfile", "textEditProfile");
-	ThemeManager.setProfile(%this.inspector, "dropDownProfile", "dropDownProfile");
-	ThemeManager.setProfile(%this.inspector, "dropDownItemProfile", "dropDownItemProfile");
-	ThemeManager.setProfile(%this.inspector, "emptyProfile", "backgroundProfile");
-	ThemeManager.setProfile(%this.inspector, "scrollingPanelProfile", "ScrollProfile");
-	ThemeManager.setProfile(%this.inspector, "scrollingPanelThumbProfile", "ThumbProfile");
-	ThemeManager.setProfile(%this.inspector, "scrollingPanelTrackProfile", "TrackProfile");
-	ThemeManager.setProfile(%this.inspector, "scrollingPanelArrowProfile", "ArrowProfile");
-	ThemeManager.setProfile(%this.inspector, "checkboxProfile", "checkboxProfile");
-	ThemeManager.setProfile(%this.inspector, "buttonProfile", "buttonProfile");
-	ThemeManager.setProfile(%this.inspector, "tipProfile", "tooltipProfile");
-	ThemeManager.setProfile(%this.inspector, "colorPickerProfile", "colorPopupProfile");
-	ThemeManager.setProfile(%this.inspector, "colorPopupProfile", "colorPopupPanelProfile");
-	ThemeManager.setProfile(%this.inspector, "emptyProfile", "colorPopupPickerProfile");
-	ThemeManager.setProfile(%this.inspector, "colorPickerSelectorProfile", "colorPopupSelectorProfile");
-	%this.scroller.add(%this.inspector);
+	%this.scroller.add(%this.pane);
+	%this.pane.build();
 
     %this.inspectList = new SimSet();
-
-	//%this.inspector.addHiddenField("isContainer");
-	%this.inspector.addHiddenField("BindToGuiEditor");
 }
 
 function GuiEditorInspectorWindow::onRemove(%this)
@@ -70,9 +52,47 @@ function GuiEditorInspectorWindow::onRemove(%this)
     }
 }
 
+// Edit arrives after every drag and every resize on the canvas, not only on a
+// fresh selection (guiEditCtrl.cc calls it from the mouse-up that ends both).
+// Rebinding on each of those would rebuild the class sections while the user is
+// still dragging, so an Edit for the control already bound reloads geometry and
+// nothing else.
 function GuiEditorInspectorWindow::onEdit(%this, %object)
 {
-    %this.inspector.inspect(%object);
+    if(isObject(%object) && %object == %this.pane.target)
+    {
+        %this.pane.refreshGeometry();
+        return;
+    }
+    %this.pane.bind(%object);
+}
+
+// Something re-profiled the control under the pane: a fresh drop being themed
+// on arrival, or Set Theme sweeping the whole document. The pane caches what it
+// found -- which slots were worth a Variants row, and what each drop-down
+// offers -- so a re-profile behind its back leaves it describing the control
+// the way it used to be.
+//
+// This is what a dropped control needs, because it is announced (and inspected)
+// wearing its constructor's profiles and only themed afterwards.
+function GuiEditorInspectorWindow::onRethemed(%this, %object)
+{
+    if(isObject(%this.pane.target))
+    {
+        %this.pane.bind(%this.pane.target);
+    }
+}
+
+// Reparenting changes which geometry fields the control is allowed to edit --
+// a chain, grid, frame set or tab book writes its children's bounds itself --
+// so the pane has to re-evaluate against the new parent. The brain has always
+// posted this event; nothing listened to it until now.
+function GuiEditorInspectorWindow::onParentChange(%this, %parent)
+{
+    if(isObject(%this.pane.target))
+    {
+        %this.pane.bind(%this.pane.target);
+    }
 }
 
 function GuiEditorInspectorWindow::onClearInspect(%this, %object)
@@ -83,7 +103,7 @@ function GuiEditorInspectorWindow::onClearInspect(%this, %object)
         %count = %this.inspectList.getCount();
         if(%count > 0)
         {
-            %this.inspector.inspect(%this.inspectList.getObject(%count - 1));
+            %this.pane.bind(%this.inspectList.getObject(%count - 1));
         }
     }
 }
@@ -91,13 +111,20 @@ function GuiEditorInspectorWindow::onClearInspect(%this, %object)
 function GuiEditorInspectorWindow::onClearInspectAll(%this)
 {
 	%this.inspectList.clear();
-    %this.inspector.clear();
+    %this.pane.unbind();
 }
 
 function GuiEditorInspectorWindow::onAlsoInspect(%this, %object)
 {
     %this.inspectList.add(%object);
-    %this.inspector.inspect(%object);
+    %this.pane.bind(%object);
+}
+
+// A write landed on the selected control. The canvas has to redraw, and the
+// explorer tree may be showing a name that just changed.
+function GuiEditorInspectorWindow::onPaneCommit(%this, %object)
+{
+    %this.postEvent("PostApply", %object);
 }
 
 function GuiEditorInspectorWindow::onObjectRemoved(%this)

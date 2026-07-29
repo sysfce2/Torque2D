@@ -30,14 +30,23 @@ function GuiEditorBrain::onControlDropped(%this, %payload, %position)
 
    %this.addNewCtrl(%payload);
 
-   // A control arrives wearing whatever its C++ constructor named - usually
-   // GuiDefaultProfile - so put it on the Gui's theme straight away. Themed on
-   // arrival is the whole point: the drop is the last time anyone should have to
-   // think about which profile a button wants.
+   // A control arrives wearing whatever its C++ constructor named - a
+   // GuiWindowCtrl names five, from GuiWindowProfile down - so put it on the
+   // Gui's theme straight away. Themed on arrival is the whole point: the drop
+   // is the last time anyone should have to think about which profile a button
+   // wants.
+   //
+   // This has to run after addNewCtrl, because the control's parent decides
+   // which category it takes (a control sitting directly on the root is the
+   // Gui's backdrop and gets Panel, not Label). But addNewCtrl is also what
+   // announces the selection, so everything that inspects the control has
+   // already read it wearing the constructor's profiles. Rethemed tells them to
+   // look again.
    %theme = GuiEditor.themeByName(GuiEditor.themeName);
    if(isObject(%theme))
    {
       GuiEditor.themeApplier.applyToBranch(%payload, %theme, false);
+      %this.postEvent("Rethemed", %payload);
    }
 
    %payload.setPositionGlobal(%x, %y);

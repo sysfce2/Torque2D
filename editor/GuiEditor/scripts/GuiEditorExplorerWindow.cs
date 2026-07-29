@@ -3,8 +3,10 @@ function GuiEditorExplorerWindow::onAdd(%this)
 {
     %this.scroller = new GuiScrollCtrl()
 	{
-		HorizSizing="width";
-		VertSizing="height";
+		// Fill rather than width/height -- the window's only child wants its
+		// whole content rect. See GuiEditorControlListWindow for why.
+		HorizSizing="fill";
+		VertSizing="fill";
 		Position="0 0";
 		Extent="392 355";
 		hScrollBar="alwaysOff";
@@ -31,7 +33,10 @@ function GuiEditorExplorerWindow::onAdd(%this)
 	};
 	ThemeManager.setProfile(%this.tree, "treeViewProfile");
 	%this.scroller.add(%this.tree);
-	%this.tree.startListening(GuiEditor.inspectorWindow.inspector);
+	// The window itself, not a control inside it: the properties pane posts
+	// PostApply through its window so the tree can pick up a name that just
+	// changed. (It used to listen to the native GuiInspector, which is gone.)
+	%this.tree.startListening(GuiEditor.inspectorWindow);
 }
 
 function GuiEditorExplorerWindow::inspect(%this, %object)

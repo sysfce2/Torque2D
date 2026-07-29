@@ -221,6 +221,30 @@ function GuiProfileEditorLibrary::isStandaloneProfile(%this, %profile)
 	return false;
 }
 
+// The standalone profiles stamped for one category, as a space-separated list
+// of ids. Asked by the Gui Editor's properties pane, which offers a control's
+// profile slot the members of the slot's category and nothing else.
+//
+// %category is matched exactly, and "" is a real answer rather than a wildcard:
+// a standalone starts with no category (the profile form shows that as "Any")
+// and the pane treats those differently from a stamped one -- offering them
+// wherever a slot is already on show, but never letting one be the reason a
+// slot appears.
+function GuiProfileEditorLibrary::getStandaloneProfiles(%this, %category)
+{
+	%list = "";
+	for(%i = 0; %i < %this.standaloneFolder.getCount(); %i++)
+	{
+		%profile = %this.standaloneFolder.getObject(%i).target;
+		if(!isObject(%profile) || %profile.category !$= %category)
+		{
+			continue;
+		}
+		%list = (%list $= "") ? %profile.getId() : (%list SPC %profile.getId());
+	}
+	return %list;
+}
+
 // Load any theme files not already loaded. Safe to call on every dialog
 // open: files belonging to live objects are skipped.
 function GuiProfileEditorLibrary::scanThemes(%this)

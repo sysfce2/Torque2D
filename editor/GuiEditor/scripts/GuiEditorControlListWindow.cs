@@ -2,10 +2,16 @@
 
 function GuiEditorControlListWindow::onAdd(%this)
 {
+    // "fill", not "width"/"height": this is the window's only child, so it wants
+    // the whole content rect. Those two only preserve whatever gap the authored
+    // extent started with, and the authored extent was measured against a 20-pixel
+    // title bar -- the default is 28 now, so every one of these windows was
+    // clipping its last eight pixels. Fill measures against the parent's inner
+    // rect, which already has the title taken out of it, so it cannot drift again.
     %this.scroller = new GuiScrollCtrl()
 	{
-		HorizSizing="width";
-		VertSizing="height";
+		HorizSizing="fill";
+		VertSizing="fill";
 		Position="0 0";
 		Extent="242 355";
 		hScrollBar="alwaysOff";
@@ -43,6 +49,14 @@ function GuiEditorControlListWindow::onRemove(%this)
     }
 }
 
+// The palette is what a person can drag into a Gui, which is not the same as
+// every class deriving from GuiControl. Two kinds are filtered out: the ones
+// that are editor or engine plumbing (the console, the edit control, the
+// inspector types), and the ones that are real controls but are never placed by
+// hand -- GuiDragAndDropCtrl is created at runtime to carry a drag payload, and
+// GuiMenuItemCtrl only means anything as a child of a menu bar (it does not
+// even register GuiControl's fields, calling SimObject::initPersistFields
+// directly, so it has no profile, position or extent to give it).
 function GuiEditorControlListWindow::populate(%this)
 {
     %controls = enumerateConsoleClasses("GuiControl");
@@ -51,10 +65,11 @@ function GuiEditorControlListWindow::populate(%this)
 	{
 		%field = getField(%controls, %i);
 
-        if(%field !$= "GuiCanvas" && (%field $= "SceneWindow" || getSubStr(%field, 0, 3) $= "Gui") && 
-            getSubStr(%field, 0, 10) !$= "GuiConsole" && getSubStr(%field, 0, 7) !$= "GuiEdit" && 
+        if(%field !$= "GuiCanvas" && (%field $= "SceneWindow" || getSubStr(%field, 0, 3) $= "Gui") &&
+            getSubStr(%field, 0, 10) !$= "GuiConsole" && getSubStr(%field, 0, 7) !$= "GuiEdit" &&
             getSubStr(%field, 0, 12) !$= "GuiInspector" && %field !$= "GuiMessageVectorCtrl" &&
-            %field !$= "GuiParticleGraphInspector" && %field !$= "GuiGraphCtrl" && %field !$= "GuiSceneObjectCtrl")
+            %field !$= "GuiParticleGraphInspector" && %field !$= "GuiGraphCtrl" && %field !$= "GuiSceneObjectCtrl" &&
+            %field !$= "GuiDragAndDropCtrl" && %field !$= "GuiMenuItemCtrl")
         {
 		    %this.listBox.addItem(%field);
         }

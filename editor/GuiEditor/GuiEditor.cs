@@ -26,7 +26,6 @@ function GuiEditor::create( %this )
 	exec("./scripts/GuiEditorControlListWindow.cs");
 	exec("./scripts/GuiEditorControlListBox.cs");
 	exec("./scripts/GuiEditorInspectorWindow.cs");
-    exec("./scripts/GuiEditorInspector.cs");
 	exec("./scripts/GuiEditorExplorerWindow.cs");
     exec("./scripts/GuiEditorExplorerTree.cs");
     exec("./scripts/GuiEditorSaveGuiDialog.cs");
@@ -50,6 +49,15 @@ function GuiEditor::create( %this )
     exec("./scripts/GuiProfileEditorConfirmDialog.cs");
     exec("./scripts/GuiEditorThemeApplier.cs");
     exec("./scripts/GuiEditorThemeDialog.cs");
+
+    // The properties pane that replaced the native GuiInspector.
+    exec("./scripts/GuiEditorControlSpec.cs");
+    exec("./scripts/GuiEditorToggleIcon.cs");
+    exec("./scripts/GuiEditorChoiceRow.cs");
+    exec("./scripts/GuiEditorAnchorPicker.cs");
+    exec("./scripts/GuiEditorHeaderBlock.cs");
+    exec("./scripts/GuiEditorDynamicFields.cs");
+    exec("./scripts/GuiEditorInspectorPane.cs");
 
 	%this.guiPage = EditorCore.RegisterEditor("Gui Editor", %this);
 
@@ -542,6 +550,11 @@ function GuiEditor::setTheme(%this, %theme, %overrideStandalone)
 
 	%changed = %this.themeApplier.applyToChildren(%this.rootGui, %theme, %overrideStandalone);
 	%this.explorerWindow.tree.refresh();
+
+	// The properties pane caches which profiles it offers, so it has to be told
+	// as well -- otherwise it goes on showing the profile the selected control
+	// wore before the sweep, from a theme that is no longer the Gui's.
+	%this.inspectorWindow.onRethemed(%this.inspectorWindow.pane.target);
 
 	echo("Gui Editor: " @ %this.themeName @ " applied to " @ %changed @ " profile slot(s).");
 }
