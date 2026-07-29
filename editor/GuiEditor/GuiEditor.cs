@@ -23,6 +23,7 @@
 function GuiEditor::create( %this )
 {
 	exec("./scripts/GuiEditorBrain.cs");
+	exec("./scripts/GuiEditorControlIcons.cs");
 	exec("./scripts/GuiEditorControlListWindow.cs");
 	exec("./scripts/GuiEditorControlListBox.cs");
 	exec("./scripts/GuiEditorInspectorWindow.cs");
@@ -61,6 +62,14 @@ function GuiEditor::create( %this )
     exec("./scripts/GuiEditorInspectorPane.cs");
 
 	%this.guiPage = EditorCore.RegisterEditor("Gui Editor", %this);
+
+    // What the control palette can offer and what each entry looks like. Built
+    // before the palette window, which reads it as it populates. Generated from
+    // the icon sheets, so the table and the art cannot disagree.
+    %this.controlIcons = new ScriptObject()
+    {
+        class = "GuiEditorControlIcons";
+    };
 
     // The theme library and the applier are both wanted before the Profile
     // Editor is ever opened - the Set Theme button and every newly dropped
@@ -320,6 +329,11 @@ function GuiEditor::destroy( %this )
 	if(isObject(%this.themeLibrary))
 	{
 		%this.themeLibrary.delete();
+	}
+
+	if(isObject(%this.controlIcons))
+	{
+		%this.controlIcons.delete();
 	}
 }
 
