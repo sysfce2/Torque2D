@@ -239,12 +239,30 @@ function palDropChecks()
 
 	%tile = palFindTile("GuiButtonCtrl");
 	palCheck("found the button tile", isObject(%tile));
+
+	%depth = GuiEditor.undoRecorder.undoCount();
 	%tile.onClick();
 
 	palCheck("clicking a tile added a control (" @ %root.getCount() @ ")",
 		%root.getCount() == %before + 1);
 	%added = %root.getObject(%root.getCount() - 1);
 	palCheck("it built the class the tile names", %added.getClassName() $= "GuiButtonCtrl");
+
+	// The reason a click is routed through onControlDropped rather than adding
+	// the control itself: that path reaches GuiEditCtrl::addNewControl, which
+	// fires onAddNewCtrl, which is where the recorder hooks in. If a click ever
+	// grows its own way into the document, this is the check that notices.
+	palCheck("clicking a tile is one undo step (" @
+		(GuiEditor.undoRecorder.undoCount() - %depth) @ ")",
+		GuiEditor.undoRecorder.undoCount() == %depth + 1);
+
+	GuiEditor.Undo();
+	palCheck("undoing a click takes the control back out (" @ %root.getCount() @ ")",
+		%root.getCount() == %before);
+	GuiEditor.Redo();
+	palCheck("and redo puts it back", %root.getCount() == %before + 1);
+	%added = %root.getObject(%root.getCount() - 1);
+	palCheck("redo restores the same class", %added.getClassName() $= "GuiButtonCtrl");
 
 	// A drag ends with a mouse-up over the tile, which fires onClick as well --
 	// a button keeps mDepressed through a drag. One gesture, one control.
