@@ -240,6 +240,11 @@ function GuiEditorThemeApplier::applyToControl(%this, %ctrl, %theme, %overrideSt
 			continue;
 		}
 
+		// Through the Gui Editor's undo recorder, which does the write. Set Theme
+		// fills a slot on every control in the document and that is one Ctrl+Z, so
+		// GuiEditor::setTheme opens a transaction around the whole sweep; the
+		// recorder is what collects the writes into it.
+		//
 		// setEditFieldValue, not a plain assignment: a profile field is a raw
 		// field offset, so writing it does not touch reference counts. The
 		// inspect-apply pair sleeps the control first and wakes it after, which
@@ -253,7 +258,7 @@ function GuiEditorThemeApplier::applyToControl(%this, %ctrl, %theme, %overrideSt
 		// added to a theme, a new stand-alone - therefore cannot be found by name
 		// until it has been saved and reloaded. An id always resolves, and the
 		// field still writes its name when the Gui is saved.
-		%ctrl.setEditFieldValue(%field, %target.getId());
+		GuiEditor.undoRecorder.writeField(%ctrl, %field, %target.getId());
 		%changed++;
 	}
 

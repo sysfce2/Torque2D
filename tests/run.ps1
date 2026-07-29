@@ -73,7 +73,7 @@ $KeepProject = @('bitmapPathRead')
 $Order = @(
     'profileEditor', 'profileForm', 'border', 'borderPane', 'standalone',
     'headerPane', 'colorPopup', 'themeApply', 'font', 'assetPicker',
-    'tooltipProfile', 'textClick', 'bitmapPathWrite', 'bitmapPathRead',
+    'tooltipProfile', 'textClick', 'undo', 'bitmapPathWrite', 'bitmapPathRead',
     'toybox', 'planetX'
 )
 

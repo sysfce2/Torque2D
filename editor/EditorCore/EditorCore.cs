@@ -202,46 +202,46 @@ function EditorCore::initGui(%this)
 			new GuiMenuItemCtrl() { Text = "-"; };
 			new GuiMenuItemCtrl() {
 				Text = "Align Top";
-				Command = "GuiEditor.brain.Justify(3);";
+				Command = "GuiEditor.Justify(3);";
 				Accelerator = "Ctrl T";
 			};
 			new GuiMenuItemCtrl() {
 				Text = "Align Bottom";
-				Command = "GuiEditor.brain.Justify(4);";
+				Command = "GuiEditor.Justify(4);";
 				Accelerator = "Ctrl B";
 			};
 			new GuiMenuItemCtrl() {
 				Text = "Align Left";
-				Command = "GuiEditor.brain.Justify(0);";
+				Command = "GuiEditor.Justify(0);";
 				Accelerator = "Ctrl L";
 			};
 			new GuiMenuItemCtrl() {
 				Text = "Align Right";
-				Command = "GuiEditor.brain.Justify(2);";
+				Command = "GuiEditor.Justify(2);";
 				Accelerator = "Ctrl R";
 			};
 			new GuiMenuItemCtrl() { Text = "-"; };
 			new GuiMenuItemCtrl() {
 				Text = "Center Horizontally";
-				Command = "GuiEditor.brain.Justify(1);";
+				Command = "GuiEditor.Justify(1);";
 			};
 			new GuiMenuItemCtrl() {
 				Text = "Space Vertically";
-				Command = "GuiEditor.brain.Justify(5);";
+				Command = "GuiEditor.Justify(5);";
 			};
 			new GuiMenuItemCtrl() {
 				Text = "Space Horizontally";
-				Command = "GuiEditor.brain.Justify(6);";
+				Command = "GuiEditor.Justify(6);";
 			};
 			new GuiMenuItemCtrl() { Text = "-"; };
 			new GuiMenuItemCtrl() {
 				Text = "Bring to Front";
-				Command = "GuiEditor.brain.BringToFront();";
+				Command = "GuiEditor.BringToFront();";
 				Accelerator = "Ctrl-Shift Up";
 			};
 			new GuiMenuItemCtrl() {
 				Text = "Push to Back";
-				Command = "GuiEditor.brain.PushToBack();";
+				Command = "GuiEditor.PushToBack();";
 				Accelerator = "Ctrl-Shift Down";
 			};
 			new GuiMenuItemCtrl() { Text = "-"; };

@@ -83,6 +83,19 @@ function GuiEditorInspectorWindow::onRethemed(%this, %object)
     }
 }
 
+// An undo or a redo rewrote the control the pane is already showing. Every row
+// is stale, not just the geometry ones -- a replayed step can put back a
+// caption, a toggle or a profile -- so this re-reads them all. bind() would do
+// that too, but by rebuilding the pane from scratch, and the control has not
+// changed: only its values have.
+function GuiEditorInspectorWindow::onReplayed(%this)
+{
+    if(isObject(%this.pane.target))
+    {
+        %this.pane.refresh();
+    }
+}
+
 // Reparenting changes which geometry fields the control is allowed to edit --
 // a chain, grid, frame set or tab book writes its children's bounds itself --
 // so the pane has to re-evaluate against the new parent. The brain has always

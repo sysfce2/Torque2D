@@ -30,6 +30,17 @@
 #include "io/fileStream.h"
 #include "gui/containers/guiScrollCtrl.h"
 
+// Undo lives in script (editor/GuiEditor/scripts/GuiEditorUndoRecorder.cs), on
+// the UndoManager this class owns. What is here is the announcements it needs:
+// every edit made below is bracketed by a callback, and the paired ones -
+// onPreEdit/onPostEdit for a drag or a handle-resize, onPreSelectionNudged and
+// its post for a run of arrow keys - are pairs because what a gesture did is
+// only known once it ends. onTrashSelection deliberately fires before the
+// controls reach the trash, while each one still knows where it came from.
+//
+// The three edits with no callback - justifySelection, bringToFront and
+// pushToBack - are reached only from the Layout menu, and the Gui Editor's
+// script wraps those commands to record either side of the call.
 IMPLEMENT_CONOBJECT(GuiEditCtrl);
 
 GuiEditCtrl::GuiEditCtrl() : mCurrentAddSet(NULL), mEditorRoot(NULL), mGridSnap(10, 10), mDragBeginPoint(-1, -1)
@@ -360,7 +371,6 @@ void GuiEditCtrl::addNewControl(GuiControl* ctrl)
 	mSelectedControls.push_back(ctrl);
 	Con::executef(this, 2, "onAddSelected", Con::getIntArg(ctrl->getId()));
 	//}
-	// undo
 	Con::executef(this, 2, "onAddNewCtrl", Con::getIntArg(ctrl->getId()));
 }
 
@@ -775,7 +785,6 @@ void GuiEditCtrl::onTouchDown(const GuiEvent& event)
 		if ((mSizingMode = (GuiEditCtrl::sizingModes)getSizingHitKnobs(mLastMousePos, box)) != 0)
 		{
 			mMouseDownMode = SizingSelection;
-			// undo
 			Con::executef(this, 2, "onPreEdit", Con::getIntArg(getSelectedSet().getId()));
 			return;
 		}
@@ -836,7 +845,6 @@ void GuiEditCtrl::onTouchDown(const GuiEvent& event)
 
 			// Set Mouse Mode
 			mMouseDownMode = MovingSelection;
-			// undo
 			Con::executef(this, 2, "onPreEdit", Con::getIntArg(getSelectedSet().getId()));
 		}
 	}
@@ -968,7 +976,6 @@ void GuiEditCtrl::onTouchUp(const GuiEvent& event)
 
 	// deliver post edit event if we've been editing
 	// note: paxorr: this may need to be moved earlier, if the selection has changed.
-	// undo
 	if (mMouseDownMode == SizingSelection || mMouseDownMode == MovingSelection)
 		Con::executef(this, 2, "onPostEdit", Con::getIntArg(getSelectedSet().getId()));
 
@@ -1224,7 +1231,6 @@ void GuiEditCtrl::moveAndSnapSelection(const Point2I& delta)
 {
 	// move / nudge gets a special callback so that multiple small moves can be
 	// coalesced into one large undo action.
-	// undo
 	Con::executef(this, 2, "onPreSelectionNudged", Con::getIntArg(getSelectedSet().getId()));
 
 	Vector<GuiControl*>::iterator i;
@@ -1236,7 +1242,6 @@ void GuiEditCtrl::moveAndSnapSelection(const Point2I& delta)
 		(*i)->resize(newPos, (*i)->mBounds.extent);
 	}
 
-	// undo
 	Con::executef(this, 2, "onPostSelectionNudged", Con::getIntArg(getSelectedSet().getId()));
 
 	// allow script to update the inspector
@@ -1247,8 +1252,7 @@ void GuiEditCtrl::moveAndSnapSelection(const Point2I& delta)
 void GuiEditCtrl::moveSelection(const Point2I& delta)
 {
 	// move / nudge gets a special callback so that multiple small moves can be
-   // coalesced into one large undo action.
-   // undo
+	// coalesced into one large undo action.
 	Con::executef(this, 2, "onPreSelectionNudged", Con::getIntArg(getSelectedSet().getId()));
 
 	Vector<GuiControl*>::iterator i;
@@ -1261,7 +1265,6 @@ void GuiEditCtrl::moveSelection(const Point2I& delta)
 		(*i)->resize((*i)->mBounds.point + delta, (*i)->mBounds.extent);
 	}
 
-	// undo
 	Con::executef(this, 2, "onPostSelectionNudged", Con::getIntArg(getSelectedSet().getId()));
 
 	// allow script to update the inspector
@@ -1369,7 +1372,8 @@ void GuiEditCtrl::justifySelection(Justification j)
 
 void GuiEditCtrl::deleteSelection(void)
 {
-	// undo
+	// Before the move below, while each control still knows the parent and the
+	// index it would have to go back to.
 	Con::executef(this, 2, "onTrashSelection", Con::getIntArg(getSelectedSet().getId()));
 
 	Vector<GuiControl*>::iterator i;
@@ -1404,7 +1408,6 @@ void GuiEditCtrl::loadSelection(const char* filename)
 				Con::executef(this, 2, "onAddSelected", Con::getIntArg(ctrl->getId()));
 			}
 		}
-		// Undo 
 		Con::executef(this, 2, "onAddNewCtrlSet", Con::getIntArg(getSelectedSet().getId()));
 	}
 	set->deleteObject();
@@ -1456,9 +1459,10 @@ void GuiEditCtrl::selectAll()
 	}
 }
 
+// No callback: the Layout menu is the only way in, and the Gui Editor's script
+// records around its own command (GuiEditor::BringToFront).
 void GuiEditCtrl::bringToFront()
 {
-	// undo
 	if (mSelectedControls.size() != 1)
 		return;
 
@@ -1466,9 +1470,9 @@ void GuiEditCtrl::bringToFront()
 	mCurrentAddSet->pushObjectToBack(ctrl);
 }
 
+// As above: recorded by GuiEditor::PushToBack.
 void GuiEditCtrl::pushToBack()
 {
-	// undo
 	if (mSelectedControls.size() != 1)
 		return;
 
@@ -1544,13 +1548,11 @@ void GuiEditCtrl::setSnapToGrid(U32 gridsize)
 
 void GuiEditCtrl::controlInspectPreApply(GuiControl* object)
 {
-	// undo
 	Con::executef(this, 2, "onControlInspectPreApply", Con::getIntArg(object->getId()));
 }
 
 void GuiEditCtrl::controlInspectPostApply(GuiControl* object)
 {
-	// undo
 	Con::executef(this, 2, "onControlInspectPostApply", Con::getIntArg(object->getId()));
 }
 

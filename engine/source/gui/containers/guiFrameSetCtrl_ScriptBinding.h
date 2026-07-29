@@ -67,4 +67,31 @@ ConsoleMethodWithDocs(GuiFrameSetCtrl, setFrameSize, ConsoleVoid, 4, 4, (int fra
 	object->setFrameSize(dAtoi(argv[2]), dAtoi(argv[3]));
 }
 
+/*! Gets the frame tree as text: the splits, their sizes, and which control sits
+    in each frame. Opaque - hand it back to setFrameLayout unchanged.
+
+    A frame set destroys a frame when the control in it is removed, so anything
+    that needs to put a removed control back where it was - the Gui Editor's
+    undo - has to keep the layout first.
+	@return The frame tree, as a string.
+*/
+ConsoleMethodWithDocs(GuiFrameSetCtrl, getFrameLayout, ConsoleString, 2, 2, ())
+{
+	return object->getFrameLayout();
+}
+
+/*! Rebuilds the frame tree from text taken earlier by getFrameLayout, and lays
+    the children out again.
+
+    A frame naming a control that is no longer a child of this frame set comes
+    back empty, so a layout recorded before a delete can be restored before the
+    control is.
+	@param layout A string from getFrameLayout.
+	@return No return value.
+*/
+ConsoleMethodWithDocs(GuiFrameSetCtrl, setFrameLayout, ConsoleVoid, 3, 3, (layout))
+{
+	object->setFrameLayout(argv[2]);
+}
+
 ConsoleMethodGroupEndWithDocs(GuiFrameSetCtrl)

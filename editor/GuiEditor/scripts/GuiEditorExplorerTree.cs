@@ -43,6 +43,21 @@ function GuiEditorExplorerTree::onDeleteKey(%this, %index, %text, %item)
 	%this.postEvent("ObjectRemoved", %item);
 }
 
+// Drag-to-reorder in the tree rearranges the real control hierarchy in C++
+// (GuiTreeViewCtrl::reorderFromDrag), and can move several selected controls
+// into several parents in one go. The pair brackets the whole rearrangement:
+// the document's shape is remembered here and read again afterwards, and the
+// difference is the undo step.
+function GuiEditorExplorerTree::onPreReorder(%this)
+{
+	GuiEditor.undoRecorder.snapshotHierarchy(GuiEditor.rootGui);
+}
+
+function GuiEditorExplorerTree::onPostReorder(%this)
+{
+	GuiEditor.undoRecorder.commitHierarchy("Reparent Control");
+}
+
 function GuiEditorExplorerTree::onPostApply(%this, %obj)
 {
     %index = %this.findItemID(%obj.getId());

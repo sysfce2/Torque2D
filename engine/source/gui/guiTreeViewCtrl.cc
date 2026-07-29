@@ -284,6 +284,13 @@ void GuiTreeViewCtrl::reorderFromDrag()
 		return;
 	}
 
+	// Past every bail, so the rearrangement below is certain to happen. A drop
+	// can move any number of selected items into any number of containers, and
+	// the only record of where they came from is the hierarchy itself - hence a
+	// pair, rather than one callback afterwards. The Gui Editor's tree listens
+	// to both and turns the difference into an undo step.
+	Con::executef(this, 1, "onPreReorder");
+
 	vector<SimObject*> objectAboveTargetList;
 	if (mReorderMethod != ReorderMethod::Insert)
 	{
@@ -334,6 +341,8 @@ void GuiTreeViewCtrl::reorderFromDrag()
 	{
 		control->childrenReordered();
 	}
+
+	Con::executef(this, 1, "onPostReorder");
 
 	refreshTree();
 }

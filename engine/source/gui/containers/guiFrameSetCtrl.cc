@@ -513,6 +513,161 @@ void GuiFrameSetCtrl::loadFrame(GuiFrameSetCtrl::Frame* frame, const U32 frameID
 	}
 }
 
+//-----------------------------------------------------------------------------
+// The frame tree as text.
+//
+// A frame set keeps its layout in a tree beside the child list, and destroys a
+// frame outright when the control in it is removed (onChildRemoved below), so
+// deleting a control collapses the split it was in. Nothing could put that
+// back: the tree is built once in onAdd from dynamic fields, which are then
+// cleared, and there was no way to read it or write it afterwards. That made a
+// frame set the one container the Gui Editor's undo could not fully restore.
+//
+// One record per frame, a parent always before its children, eight numbers
+// each:
+//
+//   id  child1  child2  isVertical  extentX  extentY  isAnchored  controlID
+//
+// The control is named by object id rather than by its index among the
+// children, so that restoring a tree recorded before a delete - one naming a
+// control that is now sitting in the editor's trash - simply leaves that frame
+// empty rather than putting the wrong control in it.
+//-----------------------------------------------------------------------------
+
+const char* GuiFrameSetCtrl::getFrameLayout()
+{
+	char* buffer = Con::getReturnBuffer(4096);
+	buffer[0] = '\0';
+
+	appendFrameLayout(&mRootFrame, buffer, 4096);
+
+	return buffer;
+}
+
+void GuiFrameSetCtrl::appendFrameLayout(GuiFrameSetCtrl::Frame* frame, char* buffer, const U32 size)
+{
+	char record[128];
+	dSprintf(record, sizeof(record), "%d %d %d %d %d %d %d %d ",
+		frame->id,
+		frame->child1 ? frame->child1->id : 0,
+		frame->child2 ? frame->child2->id : 0,
+		frame->isVertical ? 1 : 0,
+		frame->extent.x,
+		frame->extent.y,
+		frame->isAnchored ? 1 : 0,
+		frame->control ? frame->control->getId() : 0);
+
+	if ((dStrlen(buffer) + dStrlen(record)) >= size)
+	{
+		Con::warnf("GuiFrameSetCtrl::getFrameLayout - frame tree is too large to write out");
+		return;
+	}
+	dStrcat(buffer, record);
+
+	if (frame->child1)
+	{
+		appendFrameLayout(frame->child1, buffer, size);
+	}
+	if (frame->child2)
+	{
+		appendFrameLayout(frame->child2, buffer, size);
+	}
+}
+
+void GuiFrameSetCtrl::setFrameLayout(const char* layout)
+{
+	Vector<U32> values;
+	for (const char* at = layout; *at; )
+	{
+		while (*at == ' ' || *at == '\t')
+			at++;
+		if (!*at)
+			break;
+
+		values.push_back((U32)dAtoi(at));
+
+		while (*at && *at != ' ' && *at != '\t')
+			at++;
+	}
+
+	if (values.size() < 8 || (values.size() % 8) != 0)
+	{
+		Con::warnf("GuiFrameSetCtrl::setFrameLayout - expected a multiple of eight values, got %d", values.size());
+		return;
+	}
+
+	// Back to a single frame. deleteChildren frees the subtree but leaves the
+	// pointers as they were, so they have to be cleared here or the rebuild
+	// would walk into freed frames.
+	mRootFrame.deleteChildren();
+	mRootFrame.child1 = nullptr;
+	mRootFrame.child2 = nullptr;
+	mRootFrame.control = nullptr;
+
+	buildFrameLayout(&mRootFrame, values[0], values);
+
+	// Frames created from here on must not reuse an id the tree already holds.
+	for (U32 i = 0; i < (U32)values.size(); i += 8)
+	{
+		if (values[i] > mNextFrameID)
+		{
+			mNextFrameID = values[i];
+		}
+	}
+
+	resize(getPosition(), getExtent());
+}
+
+void GuiFrameSetCtrl::buildFrameLayout(GuiFrameSetCtrl::Frame* frame, const U32 frameID, const Vector<U32>& values)
+{
+	S32 at = -1;
+	for (U32 i = 0; i < (U32)values.size(); i += 8)
+	{
+		if (values[i] == frameID)
+		{
+			at = (S32)i;
+			break;
+		}
+	}
+
+	if (at < 0)
+	{
+		return;
+	}
+
+	frame->id = frameID;
+	frame->isVertical = values[at + 3] != 0;
+	frame->extent.set(values[at + 4], values[at + 5]);
+	frame->isAnchored = values[at + 6] != 0;
+	frame->control = nullptr;
+
+	const U32 child1ID = values[at + 1];
+	const U32 child2ID = values[at + 2];
+
+	if (child1ID && child2ID)
+	{
+		// The same call loadFrame makes, and for the same reason: it is what
+		// builds a pair of frames under this one.
+		splitFrame(frame, frame->isVertical ? GuiDirection::Up : GuiDirection::Left);
+
+		buildFrameLayout(frame->child1, child1ID, values);
+		buildFrameLayout(frame->child2, child2ID, values);
+		return;
+	}
+
+	// A leaf, so it may hold a control - but only one that is still a child of
+	// this frame set.
+	const U32 controlID = values[at + 7];
+	if (controlID)
+	{
+		GuiControl* ctrl;
+		if (Sim::findObject(controlID, ctrl) && ctrl->getGroup() == this)
+		{
+			frame->control = ctrl;
+		}
+	}
+}
+
 void GuiFrameSetCtrl::onChildAdded(GuiControl* child)
 {
 	//Ensure the child isn't positioned to the center

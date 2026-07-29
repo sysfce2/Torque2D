@@ -105,6 +105,13 @@ public:
 	bool onAdd();
 	virtual void parentResized(const Point2I& oldParentExtent, const Point2I& newParentExtent);
 	void loadFrame(GuiFrameSetCtrl::Frame* frame, const U32 frameID);
+
+	// The frame tree as text, readable and writable at runtime. See the note on
+	// getFrameLayout in the .cc for why this exists.
+	const char* getFrameLayout();
+	void setFrameLayout(const char* layout);
+	void appendFrameLayout(GuiFrameSetCtrl::Frame* frame, char* buffer, const U32 size);
+	void buildFrameLayout(GuiFrameSetCtrl::Frame* frame, const U32 frameID, const Vector<U32>& values);
 	void resize(const Point2I& newPosition, const Point2I& newExtent);
 	void inspectPostApply();
 	bool onWake();

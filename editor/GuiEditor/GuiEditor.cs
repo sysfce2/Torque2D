@@ -61,6 +61,12 @@ function GuiEditor::create( %this )
     exec("./scripts/GuiEditorDynamicFields.cs");
     exec("./scripts/GuiEditorInspectorPane.cs");
 
+    // Undo. The engine has owned the machinery all along - GuiEditCtrl holds an
+    // UndoManager and a trash group it never empties - and nothing had ever
+    // built it an action.
+    exec("./scripts/GuiEditorUndoAction.cs");
+    exec("./scripts/GuiEditorUndoRecorder.cs");
+
 	%this.guiPage = EditorCore.RegisterEditor("Gui Editor", %this);
 
     // What the control palette can offer and what each entry looks like. Built
@@ -89,6 +95,15 @@ function GuiEditor::create( %this )
     {
         class = "GuiEditorThemeApplier";
         library = %this.themeLibrary;
+    };
+
+    // Every change to the Gui being authored goes through the recorder. It asks
+    // the brain for the UndoManager when it needs one, so it can be built before
+    // the brain is.
+    %this.undoRecorder = new ScriptObject()
+    {
+        class = "GuiEditorUndoRecorder";
+        owner = %this;
     };
 
     %this.content = %this.createFrameSet();
@@ -335,6 +350,15 @@ function GuiEditor::destroy( %this )
 	{
 		%this.controlIcons.delete();
 	}
+
+	// Empty the stacks while the brain (and so the UndoManager it owns) is still
+	// here, rather than leaving the actions to the manager's destructor during
+	// canvas teardown.
+	if(isObject(%this.undoRecorder))
+	{
+		%this.undoRecorder.clear();
+		%this.undoRecorder.delete();
+	}
 }
 
 function GuiEditor::open(%this, %content)
@@ -347,9 +371,17 @@ function GuiEditor::open(%this, %content)
     }
 
     EditorCore.menuBar.setMenuActive("File", true);
-    //EditorCore.menuBar.setMenuActive("Edit", true); //These features still need development
+    EditorCore.menuBar.setMenuActive("Edit", true);
     EditorCore.menuBar.setMenuActive("Layout", true);
     EditorCore.menuBar.setMenuActive("Select", true);
+
+    // Undo and Redo are greyed from the stacks; the other three items on the Edit
+    // menu are still stubs and must not look live.
+    EditorCore.menuBar.setMenuActive("Cut", false);
+    EditorCore.menuBar.setMenuActive("Copy", false);
+    EditorCore.menuBar.setMenuActive("Paste", false);
+    %this.undoRecorder.forceRefreshMenu();
+
     editorMode(true);
 }
 
@@ -373,6 +405,9 @@ function GuiEditor::NewGui(%this)
     %this.module = "";
     %this.brain.clearSelection();
     %this.explorerWindow.tree.refresh();
+
+    // Every record on the stack names controls that have just been freed.
+    %this.undoRecorder.clear();
 
     // A new Gui joins the theme this session is working in, so the first control
     // dropped into it is already themed.
@@ -435,6 +470,9 @@ function GuiEditor::DisplayGuiContent(%this, %content, %includesSimulatedCanvas)
 {
     %this.rootGui.deleteObjects();
     %this.brain.clearSelection();
+
+    // The document the stack was recorded against has just been deleted.
+    %this.undoRecorder.clear();
 
     // Read off the root before it is unpacked - in the simulated-canvas case the
     // object carrying the field is deleted a few lines down.
@@ -563,7 +601,11 @@ function GuiEditor::setTheme(%this, %theme, %overrideStandalone)
 	%this.themeName = %theme.getName();
 	%this.lastThemeName = %this.themeName;
 
+	// One undo step for the whole sweep, however many profile slots it fills.
+	%this.undoRecorder.begin("Set Theme", "");
 	%changed = %this.themeApplier.applyToChildren(%this.rootGui, %theme, %overrideStandalone);
+	%this.undoRecorder.end();
+
 	%this.explorerWindow.tree.refresh();
 
 	// The properties pane caches which profiles it offers, so it has to be told
@@ -646,6 +688,11 @@ function GuiEditor::adoptTheme(%this, %recordedName)
 // moved off the doomed profile before the delete rather than after.
 function GuiEditor::detachTheme(%this, %theme, %profile)
 {
+	// The stack is full of profile ids that are about to stop resolving, and a
+	// detach is not itself something to undo - the profile it moved off will not
+	// exist to move back to.
+	%this.undoRecorder.clear();
+
 	%this.themeApplier.detach(%this.rootGui, %theme, %profile);
 }
 
@@ -656,7 +703,13 @@ function GuiEditor::reattachTheme(%this)
 	%theme = %this.themeByName(%this.themeName);
 	if(isObject(%theme))
 	{
+		// Repairing the document after a revert is not an edit the user made, so
+		// it is not one they can take back. Suspended rather than cleared: the
+		// detach that preceded this already emptied the stack.
+		%this.undoRecorder.suspend();
 		%this.themeApplier.applyToChildren(%this.rootGui, %theme, false);
+		%this.undoRecorder.resume();
+
 		%this.explorerWindow.tree.refresh();
 	}
 }
@@ -731,19 +784,88 @@ function GuiEditor::SaveCore(%this, %filePath, %formatIndex, %folder, %module)
     %this.module = %module;
 }
 
+//UNDO-------------------------------------------------------------------------
+//
+// The stack lives on the UndoManager the brain (a C++ GuiEditCtrl) has always
+// owned; GuiEditorUndoRecorder is what fills it. Undoing writes to the same
+// controls the editor writes to, so the recorder is suspended for the duration
+// or the replay would record itself.
+//-----------------------------------------------------------------------------
+
 function GuiEditor::Undo(%this)
 {
     %undoManager = %this.brain.getUndoManager();
+    if(%undoManager.getUndoCount() == 0)
+    {
+        return;
+    }
+
+    %this.undoRecorder.suspend();
     %undoManager.undo();
+    %this.undoRecorder.resume();
+
+    %this.afterReplay();
 }
 
 function GuiEditor::Redo(%this)
 {
     %undoManager = %this.brain.getUndoManager();
+    if(%undoManager.getRedoCount() == 0)
+    {
+        return;
+    }
+
+    %this.undoRecorder.suspend();
     %undoManager.redo();
+    %this.undoRecorder.resume();
 
-    %count = %undoManager.getRedoCount();
+    %this.afterReplay();
+}
 
+// What the rest of the editor has to be told after a replay. The action reports
+// which controls it touched on its way through, so the selection can land on
+// what just changed - a Ctrl+Z that moves a control scrolled off the top of the
+// canvas would otherwise look like nothing happened.
+function GuiEditor::afterReplay(%this)
+{
+    %this.explorerWindow.tree.refresh();
+    %this.selectAfterReplay(%this.undoRecorder.replayTouched);
+    %this.undoRecorder.refreshMenu();
+}
+
+function GuiEditor::selectAfterReplay(%this, %list)
+{
+    %wanted = "";
+
+    for(%i = 0; %i < getWordCount(%list); %i++)
+    {
+        %ctrl = getWord(%list, %i);
+
+        // Undoing an add puts the control in the trash, and redoing a delete
+        // puts it back there. Either way it is no longer part of the Gui, so
+        // there is nothing to select.
+        if(isObject(%ctrl) && %this.inDocument(%ctrl))
+        {
+            %wanted = (%wanted $= "") ? %ctrl : (%wanted SPC %ctrl);
+        }
+    }
+
+    %this.brain.restoreSelection(%wanted);
+}
+
+function GuiEditor::inDocument(%this, %ctrl)
+{
+    %parent = %ctrl.getParent();
+    while(isObject(%parent))
+    {
+        if(%parent == %this.rootGui)
+        {
+            return true;
+        }
+        %parent = %parent.getParent();
+    }
+
+    return false;
 }
 
 function GuiEditor::Cut(%this)
@@ -761,15 +883,68 @@ function GuiEditor::Paste(%this)
     
 }
 
+//LAYOUT-----------------------------------------------------------------------
+//
+// The Layout menu's commands go through here rather than straight to the brain,
+// because the brain's C++ says nothing when it aligns or restacks a selection -
+// unlike a drag or a nudge, which it brackets with callbacks. Recording either
+// side of the call is cheaper than teaching the engine to announce them.
+//-----------------------------------------------------------------------------
+
 function GuiEditor::changeExtent(%this, %x, %y)
 {
     %set = %this.brain.getSelected();
     if(%set.getCount() >= 1)
     {
+        %this.undoRecorder.snapshot(%set);
+
         %obj = %set.getObject(0);
         %ext = %obj.getExtent();
         %obj.setExtent(getWord(%ext, 0) + %x, getWord(%ext, 1) + %y);
+
+        // Same kind as a nudge, and for the same reason: holding the key down is
+        // one resize, not one per repeat.
+        %this.undoRecorder.commitGeometry("Resize Control", "resize");
     }
+}
+
+function GuiEditor::Justify(%this, %mode)
+{
+    %this.undoRecorder.snapshot(%this.brain.getSelected());
+    %this.brain.Justify(%mode);
+    %this.undoRecorder.commitGeometry("Align Controls", "");
+}
+
+function GuiEditor::BringToFront(%this)
+{
+    %this.restack("BringToFront", "Bring to Front");
+}
+
+function GuiEditor::PushToBack(%this)
+{
+    %this.restack("PushToBack", "Push to Back");
+}
+
+// Both do the same thing to the same one control - the C++ ignores anything but
+// a single selection - and both change only its index among its siblings.
+function GuiEditor::restack(%this, %method, %name)
+{
+    %set = %this.brain.getSelected();
+    if(%set.getCount() != 1)
+    {
+        return;
+    }
+
+    %ctrl = %set.getObject(0);
+    %parent = %ctrl.getParent();
+    if(!isObject(%parent))
+    {
+        return;
+    }
+
+    %oldIndex = %this.undoRecorder.indexOf(%parent, %ctrl);
+    %this.brain.call(%method);
+    %this.undoRecorder.recordMove(%ctrl, %parent, %oldIndex, %name);
 }
 
 function GuiEditor::SetGridSize(%this)
