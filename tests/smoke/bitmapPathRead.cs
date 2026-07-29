@@ -28,6 +28,7 @@ function smokeCheck(%label, %condition)
     }
 }
 
+createPath(testRoot("shots/"));
 schedule(2500, 0, "readStep1");
 
 function readStep1()

@@ -20,6 +20,7 @@ function smokeCheck(%label, %condition)
 	echo(%condition ? ("SMOKE PASS: " @ %label) : ("SMOKE FAIL: " @ %label));
 }
 
+createPath(testRoot("shots/"));
 schedule(4000, 0, "planetXSmoke");
 
 function planetXSmoke()

@@ -110,6 +110,12 @@ sequence; otherwise it is picked up automatically and run last, alphabetically.
   exit code is 0 — so a test that "does nothing" is usually a test that did not
   compile. TorqueScript has no comma operator and no method chaining on a call
   result (`Canvas.getContent().add(%x)` is a parse error; take the two steps).
+- **`screenShot` does not create its folder, and it fails by logging.** `shots/` is
+  gitignored, so a tree that has never run a shot does not have one — a fresh clone,
+  or a git worktree. The harness then runs green all the way to `SHOTS DONE` and
+  writes nothing, and the runner reports `0 shots` with no reason given. Every test
+  that screenshots calls `createPath(testRoot("shots/"))` before its first
+  `schedule` for this reason; keep doing it in new ones.
 - **A debug-build `AssertFatal` is a modal message box.** A test that trips one
   hangs rather than crashing, which is why the runner kills on a timeout. If a
   test "hangs", suspect an undismissed assert before suspecting a loop.

@@ -15,6 +15,7 @@ ModuleDatabase.EchoInfo = false;
 AssetDatabase.EchoInfo = false;
 
 testExec("editor/main.cs");
+createPath(testRoot("shots/"));
 schedule(2500, 0, "sheetShot");
 
 $iconSheet::perPage = 60;

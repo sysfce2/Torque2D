@@ -32,6 +32,7 @@ function smokeCheck(%label, %condition)
 
 $clickText = "toybox/themes/image/ironWindow.png and then some more text";
 
+createPath(testRoot("shots/"));
 schedule(2500, 0, "clickStep1");
 
 function clickStep1()

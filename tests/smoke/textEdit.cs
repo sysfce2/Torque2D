@@ -56,6 +56,7 @@ function teProbe(%stage, %x, %text)
 
 $teText = "abc def";
 
+createPath(testRoot("shots/"));
 schedule(2500, 0, "teStep1");
 
 function teStep1()

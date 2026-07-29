@@ -31,6 +31,7 @@ function ttCheck(%label, %condition)
     else           echo("TTSMOKE FAIL: " @ %label);
 }
 
+createPath(testRoot("shots/"));
 schedule(2500, 0, "ttOpenProject");
 
 // A tip has to be hovered to be seen, so unlike the other pane suites this one
