@@ -104,6 +104,11 @@ function controlIconsTile(%page, %x, %y, %tile, %sheet, %cell, %frame, %label)
 
 function controlIconsGrab()
 {
+	// screenShot does not create the folder, and it fails by logging rather than
+	// throwing -- so in a tree that has never run one (a fresh clone, or a git
+	// worktree, where shots/ is gitignored and therefore absent) the harness
+	// otherwise runs green all the way to SHOTS DONE and writes nothing.
+	createPath(testRoot("shots/"));
 	screenShot(testRoot("shots/controlIcons" @ $controlIcons::page @ ".png"), "PNG");
 	schedule(500, 0, "controlIconsNext");
 }
