@@ -867,6 +867,10 @@ void GuiTextEditCtrl::onUndo()
 
     mUndoText = tempText;
     mUndoSelector = tempSelector;
+
+    // Every other path that changes the buffer reports it, so a Command
+    // watching the box live would have gone quiet on ctrl+Z alone.
+    execConsoleCallback();
 }
 
 bool GuiTextEditCtrl::onKeyDown(const GuiEvent &event)
@@ -1614,6 +1618,17 @@ bool GuiTextEditCtrl::handleEscapeKey()
 
 bool GuiTextEditCtrl::handleEnterKey()
 {
+    // Wrapping is what makes this control multi-line -- it is the flag that
+    // decides whether the text is one line or a paragraph -- so in a wrapped
+    // box return is a line break rather than "I am done with this field".
+    // It takes precedence over returnCommand and returnCausesTab, which are
+    // how a single-line box ends an edit; a box with a paragraph in it ends
+    // its edit by losing focus.
+    if (mTextWrap)
+    {
+        return insertNewLine();
+    }
+
     if (isMethod("onReturn"))
         Con::executef(this, 1, "onReturn");
 
@@ -1636,6 +1651,36 @@ bool GuiTextEditCtrl::handleEnterKey()
 		}
 	}
 
+    return true;
+}
+
+// A newline goes in the buffer directly rather than through
+// handleCharacterInput: the font has no glyph for it, so isValidChar would
+// refuse it, and no InputMode has an opinion about it worth honouring -- a
+// Number-only box is single-line and never reaches this.
+bool GuiTextEditCtrl::insertNewLine()
+{
+    saveUndoState();
+
+    if (mSelector.hasSelection())
+    {
+        mSelector.eraseSelection(mTextBuffer);
+    }
+
+    if (mTextBuffer.length() >= mMaxStrLen)
+    {
+        keyDenied();
+        return true;
+    }
+
+    // Always an insert, never an overwrite: there is no character in a line
+    // break for insert-off mode to replace.
+    mTextBuffer.insert(mSelector.getCursorPos(), "\n");
+    mSelector.setTextLength(mTextBuffer.length());
+    mSelector.stepCursorForward();
+    setText(mTextBuffer);
+
+    execConsoleCallback();
     return true;
 }
 

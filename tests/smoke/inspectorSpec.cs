@@ -106,8 +106,17 @@ function sStep2()
 	sCheck("panel hides textWrap", !%s.isFieldVisible("GuiPanelCtrl", "textWrap"));
 
 	// Where the text box belongs, and what it is called there.
-	sCheck("button text in header", %s.textBelongsInHeader("GuiButtonCtrl"));
-	sCheck("grid text not in header", !%s.textBelongsInHeader("GuiGridCtrl"));
+	// Where the text block goes, which is one answer per class rather than the
+	// two overlapping ones it used to be. Proxy is the interesting case: a list
+	// has no string of its own but draws its items with this control's font, so
+	// the block is worth having open.
+	sCheck("button text in header", %s.textBlockHome("GuiButtonCtrl") $= "header");
+	sCheck("panel caption in header", %s.textBlockHome("GuiPanelCtrl") $= "header");
+	sCheck("tree item font in header", %s.textBlockHome("GuiTreeViewCtrl") $= "header");
+	sCheck("grid text in the section", %s.textBlockHome("GuiGridCtrl") $= "section");
+	sCheck("slider keeps only its font size", %s.textBlockHome("GuiSliderCtrl") $= "section");
+	sCheck("a chain gets no text block", %s.textBlockHome("GuiChainCtrl") $= "none");
+	sCheck("nor does a sprite", %s.textBlockHome("GuiSpriteCtrl") $= "none");
 	sCheck("grid text still shown", %s.isFieldVisible("GuiGridCtrl", "text"));
 	sCheck("drop down text labelled Placeholder",
 		%s.textLabelFor("GuiDropDownCtrl") $= "Placeholder");
@@ -260,9 +269,14 @@ function sStep5()
 	sCheck("bool maps to bool", %s.kindForType("bool") $= "bool");
 	sCheck("int maps to number", %s.kindForType("int") $= "number");
 	sCheck("char maps to number", %s.kindForType("char") $= "number");
-	sCheck("float maps to number", %s.kindForType("float") $= "number");
+	// The two real-numbered kinds are separate from the whole-numbered ones
+	// because the row rounds on the way out, which turned a font size multiplier
+	// of 1.5 into a 1 and a slider value of 0.5 into a 0.
+	sCheck("float maps to decimal", %s.kindForType("float") $= "decimal");
 	sCheck("enumval maps to enum", %s.kindForType("enumval") $= "enum");
 	sCheck("Point2I maps to point", %s.kindForType("Point2I") $= "point");
+	sCheck("Point2F maps to pointf", %s.kindForType("Point2F") $= "pointf");
+	sCheck("Vector2 maps to pointf", %s.kindForType("Vector2") $= "pointf");
 	sCheck("ColorI maps to color", %s.kindForType("ColorI") $= "color");
 	sCheck("FluidColorI maps to color", %s.kindForType("FluidColorI") $= "color");
 	sCheck("filename maps to file", %s.kindForType("filename") $= "file");

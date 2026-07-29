@@ -166,6 +166,7 @@ protected:
    virtual bool handleCharacterInput(const GuiEvent& event);
    virtual bool handleEscapeKey();
    virtual bool handleEnterKey();
+   virtual bool insertNewLine();
    virtual bool handleArrowKey(GuiDirection direction);
    virtual bool handleShiftArrowKey(GuiDirection direction);
    virtual bool handleBackSpace();

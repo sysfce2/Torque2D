@@ -42,7 +42,10 @@ function GuiEditorChoiceRow::addChoice(%this, %value, %icon, %tip)
 
 function GuiEditorChoiceRow::build(%this)
 {
-	%labelW = 68;
+	// Wide enough for a caption by default. The text block asks for a narrow one:
+	// its two rows sit side by side under the text box and are labelled "H:" and
+	// "V:", where the icons say the rest.
+	%labelW = (%this.labelWidth $= "") ? 68 : %this.labelWidth;
 	%size = 24;
 	%gap = 2;
 

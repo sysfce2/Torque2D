@@ -138,8 +138,11 @@ function pStep2()
 	pCheck("button shows easing", pRowShown(%pane, "easeFillColorHL"));
 	pCheck("button shows tooltip", pRowShown(%pane, "tooltip"));
 	pCheck("button can be a container", %pane.header.containerButton.isVisible());
-	pCheck("shared text row hidden while header owns it",
-		!pRowShown(%pane, "text"));
+	// One text block, in one place. The row the pane filters and loads IS the
+	// header block's -- there is no second copy of it to disagree with.
+	pCheck("the text row on show is the header block's",
+		pRowShown(%pane, "text") && %pane.row["text"] == %pane.header.textBlock.row["text"]);
+	pCheck("the text section is not also showing", !%pane.textPanel.isVisible());
 
 	// The header loaded the control's actual values.
 	pCheck("name row loaded", %pane.header.nameRow.getValue() $= $pButton.getName());
@@ -178,7 +181,11 @@ function pStep3()
 
 	pCheck("chain hides the header text block", !%pane.header.textGrid.isVisible());
 	pCheck("chain hides the shared text row", !pRowShown(%pane, "text"));
-	pCheck("chain hides align", !pRowShown(%pane, "align"));
+	// A chain draws no text at all, so the block is in neither of its homes --
+	// checked at both ends, because "no row" and "a hidden row" read the same
+	// through pRowShown and only one of them is the answer here.
+	pCheck("chain hides the text section", !%pane.textPanel.isVisible());
+	pCheck("chain has no text row at all", !pRowBuilt(%pane, "text"));
 	pCheck("chain hides easing", !pRowShown(%pane, "easeFillColorHL"));
 	pCheck("chain promotes IsVertical", pRowBuilt(%pane, "IsVertical"));
 	pCheck("chain promotes ChildSpacing", pRowBuilt(%pane, "ChildSpacing"));
@@ -190,7 +197,9 @@ function pStep3()
 	%pane = pBind($pGrid);
 	pCheck("grid hides the header text block", !%pane.header.textGrid.isVisible());
 	pCheck("grid keeps the shared text row", pRowShown(%pane, "text"));
-	pCheck("grid text section shown", %pane.panel["Text"].isVisible());
+	pCheck("grid text section shown", %pane.textPanel.isVisible());
+	pCheck("and it is the section block's row",
+		%pane.row["text"] == %pane.sectionText.row["text"]);
 	pCheck("grid promotes CellModeX", pRowBuilt(%pane, "CellModeX"));
 	pCheck("grid has its Grid section", pRowBuilt(%pane, "MaxColCount"));
 

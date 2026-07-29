@@ -117,7 +117,7 @@ function GuiEditorInspectorPane::build(%this)
 	%this.add(%this.variantsChain);
 
 	// The shared sections, in the order the work usually goes.
-	%this.buildSection("Text", "Text", %this.spec.textFields());
+	%this.buildTextSection();
 
 	// isContainer and useInput are both in the header's icon row now that there
 	// is art for them, so neither has a row here.
@@ -209,6 +209,51 @@ function GuiEditorInspectorPane::makeSectionPanel(%this, %title)
 	return %panel;
 }
 
+// The text block's second home. Not a buildSection: it holds one component
+// rather than a list of rows, so its visibility is decided by which home the
+// class wants (GuiEditorControlSpec::textBlockHome) and not by counting visible
+// rows. It stays out of panelList for that reason.
+//
+// The three field rows inside a block are named here instead, with no row
+// behind them yet: applyFilter points them at whichever block is in use, and
+// then the shared filter and the shared value loop reach them like any other
+// field. That is what stops two blocks fighting over one entry in the registry.
+function GuiEditorInspectorPane::buildTextSection(%this)
+{
+	%this.textPanel = %this.makeSectionPanel("Text");
+	%this.add(%this.textPanel);
+
+	%this.sectionText = %this.makeTextBlock(%this.textPanel, 24);
+
+	%fields = %this.spec.textBlockRowFields();
+	%count = getWordCount(%fields);
+	for(%i = 0; %i < %count; %i++)
+	{
+		%field = getWord(%fields, %i);
+		%this.row[%field] = "";
+		%this.rowFields = (%this.rowFields $= "") ? %field : (%this.rowFields SPC %field);
+	}
+}
+
+function GuiEditorInspectorPane::makeTextBlock(%this, %parent, %y)
+{
+	%block = new GuiChainCtrl()
+	{
+		class = "GuiEditorTextBlock";
+		HorizSizing = "width";
+		Position = "0" SPC %y;
+		Extent = %this.paneWidth SPC 4;
+		IsVertical = true;
+		ChildSpacing = 2;
+		blockWidth = %this.paneWidth;
+		pane = %this;
+		spec = %this.spec;
+	};
+	%parent.add(%block);
+	%block.build();
+	return %block;
+}
+
 function GuiEditorInspectorPane::buildSection(%this, %key, %title, %fields)
 {
 	%panel = %this.makeSectionPanel(%title);
@@ -230,12 +275,21 @@ function GuiEditorInspectorPane::buildSection(%this, %key, %title, %fields)
 	}
 }
 
-function GuiEditorInspectorPane::addFieldRow(%this, %container, %field, %label, %kind, %enumItems)
+// Build a row without claiming a name for it. Two rows here are not fields of
+// the control -- the Category picker, and the text block's copy in whichever of
+// its two homes is not in use -- so they must stay out of the registry the
+// filter and the value loop walk.
+function GuiEditorInspectorPane::makeFieldRow(%this, %container, %field, %label, %kind, %enumItems)
 {
 	%row = new GuiControl()
 	{
 		class = "GuiProfileEditorFieldRow";
+
+		// A grid resizes every cell it lays out, which makes the flag moot there;
+		// a chain does not, so a row in one follows the pane's width from here.
+		HorizSizing = "width";
 		Position = "0 0";
+		Extent = getWord(%container.getExtent(), 0) SPC 48;
 		fieldName = %field;
 		labelText = %label;
 		kind = %kind;
@@ -247,8 +301,15 @@ function GuiEditorInspectorPane::addFieldRow(%this, %container, %field, %label, 
 
 	// This pane has no reset-to-default, so the row's reset button -- which
 	// means "back to the theme's stamped value" and has no analogue here --
-	// never appears.
+	// never appears. The one exception is the font colour row, where the button
+	// means "stop overriding the profile" and the text block asks for it back.
 	%row.resetButton.setVisible(false);
+	return %row;
+}
+
+function GuiEditorInspectorPane::addFieldRow(%this, %container, %field, %label, %kind, %enumItems)
+{
+	%row = %this.makeFieldRow(%container, %field, %label, %kind, %enumItems);
 
 	%this.row[%field] = %row;
 	%this.rowFields = (%this.rowFields $= "") ? %field : (%this.rowFields SPC %field);
@@ -281,7 +342,10 @@ function GuiEditorInspectorPane::sharedKindFor(%this, %field)
 		case "MinExtent": return "point";
 		case "isContainer" or "textWrap" or "textExtend" or "overrideFontColor" or "useInput": return "bool";
 		case "tooltipWidth" or "hovertime": return "number";
-		case "fontSizeAdjust": return "number";
+
+		// A multiplier on the profile's font size, so 1.25 is an ordinary value
+		// for it and a whole-number row would round every one of them away.
+		case "fontSizeAdjust": return "decimal";
 		case "fontColor": return "color";
 		case "align" or "vAlign": return "enum";
 		case "easeFillColorHL" or "easeFillColorSL": return "enum";
@@ -660,6 +724,13 @@ function GuiEditorInspectorPane::applyFilter(%this)
 	%spec = %this.spec;
 	%class = %this.boundClass;
 
+	// Which copy of the text block this class uses, before anything reads a row:
+	// its three field rows are shared names pointing at whichever block is in
+	// play, so the mapping has to be right before the filter walks them.
+	%home = %spec.textBlockHome(%class);
+	%block = %this.activeTextBlock();
+	%this.mapTextRows(%block);
+
 	%count = getWordCount(%this.rowFields);
 	for(%i = 0; %i < %count; %i++)
 	{
@@ -677,19 +748,13 @@ function GuiEditorInspectorPane::applyFilter(%this)
 	// isContainer moved to the header's icon row, which decides its own
 	// visibility from the same rule -- see GuiEditorHeaderBlock::bindClass.
 
-	// The header carries the text block for the roles that have a caption worth
-	// naming; the shared Text section is for the rest, so the two never both
-	// show it.
-	%inHeader = %spec.textBelongsInHeader(%class);
-	%textCount = getWordCount(%spec.textFields());
-	for(%i = 0; %i < %textCount; %i++)
+	// The block's own parts -- the caption, the two flags and the two alignments
+	// -- are its to filter. The header shows or hides its copy from the same
+	// answer (GuiEditorHeaderBlock::bindClass).
+	%this.textPanel.setVisible(%home $= "section");
+	if(isObject(%block))
 	{
-		%field = getWord(%spec.textFields(), %i);
-		%row = %this.row[%field];
-		if(isObject(%row) && %inHeader)
-		{
-			%row.setVisible(false);
-		}
+		%block.bindClass(%this.target, %class);
 	}
 
 	// A section with nothing left to show gets out of the way entirely.
@@ -714,6 +779,33 @@ function GuiEditorInspectorPane::onDynamicFieldsChanged(%this)
 {
 	%this.dynamicFields.resize(0, 24, %this.paneWidth, getWord(%this.dynamicFields.getExtent(), 1));
 	%this.forceLayout();
+}
+
+// Which of the two text blocks the bound class uses, or nothing where none of
+// it applies (a sprite draws no text and reads no font).
+function GuiEditorInspectorPane::activeTextBlock(%this)
+{
+	switch$(%this.spec.textBlockHome(%this.boundClass))
+	{
+		case "header": return %this.header.textBlock;
+		case "section": return %this.sectionText;
+	}
+	return "";
+}
+
+// Point the three shared names at the block in use. Without this the second
+// block to be built would own the registry and the first would never load or
+// filter -- the rows would be on screen holding whatever the last selection of
+// the other kind left in them.
+function GuiEditorInspectorPane::mapTextRows(%this, %block)
+{
+	%fields = %this.spec.textBlockRowFields();
+	%count = getWordCount(%fields);
+	for(%i = 0; %i < %count; %i++)
+	{
+		%field = getWord(%fields, %i);
+		%this.row[%field] = isObject(%block) ? %block.row[%field] : "";
+	}
 }
 
 function GuiEditorInspectorPane::anyRowVisible(%this, %fields)
@@ -759,17 +851,24 @@ function GuiEditorInspectorPane::refresh(%this)
 		// the control here would undo that: the field answers with whatever
 		// name it holds, and a profile created this session has one the Sim
 		// never registered.
-		if(!isObject(%row) || %this.isProfileSlot(%field))
+		//
+		// fontColor is skipped for a different reason: what its swatch shows is
+		// the profile's colour while the control is not overriding it, which is
+		// not what the field holds. The block works that out.
+		if(!isObject(%row) || %this.isProfileSlot(%field) || %field $= "fontColor")
 		{
 			continue;
 		}
 		%row.setValue(%this.readField(%field));
 	}
 
-	// The alignment rows are segmented controls rather than field rows, so they
-	// are not in rowFields and load here.
-	%this.header.alignRow.setValue(%this.target.getFieldValue("align"));
-	%this.header.vAlignRow.setValue(%this.target.getFieldValue("vAlign"));
+	// What the text block holds beyond its three field rows: two segmented rows,
+	// two toggles, and the font colour swatch.
+	%block = %this.activeTextBlock();
+	if(isObject(%block))
+	{
+		%block.load(%this.target);
+	}
 
 	%this.refreshToggles();
 	%this.header.anchorPicker.readEnums(
@@ -1004,13 +1103,21 @@ function GuiEditorInspectorPane::profileAnchors(%this, %ctrl, %field)
 		return "";
 	}
 
+	return %this.profileAnchorsFor(%category,
+		GuiEditor.themeApplier.fieldProfile(%ctrl, %field));
+}
+
+// The same set for a category named outright. Changing a control's category has
+// to ask what the category it is moving TO can offer, which it cannot get by
+// asking the control -- the control still wears the old one.
+function GuiEditorInspectorPane::profileAnchorsFor(%this, %category, %current)
+{
 	%library = GuiEditor.themeLibrary;
 	%theme = GuiEditor.themeByName(GuiEditor.themeName);
 
 	%list = isObject(%theme) ? %theme.getProfiles(%category) : "";
 	%list = %this.addUnique(%list, %library.getStandaloneProfiles(%category));
 
-	%current = GuiEditor.themeApplier.fieldProfile(%ctrl, %field);
 	if(isObject(%current))
 	{
 		%list = %this.addUnique(%list, %current);
@@ -1029,10 +1136,81 @@ function GuiEditorInspectorPane::profileOptions(%this, %ctrl, %field)
 
 function GuiEditorInspectorPane::categoryForSlot(%this, %ctrl, %field)
 {
+	return GuiEditor.themeApplier.categoryForField(%field, %this.currentCategory(%ctrl));
+}
+
+//-----------------------------------------------------------------------------
+// The control's own category. For every class but one this is the class's
+// answer and there is nothing to ask: a check box wants a CheckBox profile.
+//
+// A bare GuiControl is the exception. The applier guesses at drop time from
+// what the control holds -- root, or text, or neither -- and typing a caption
+// afterwards re-runs nothing, so the guess needs to be correctable. What makes
+// that work with no new state is that a profile carries the category it was
+// stamped for: the control wearing a Label profile IS the record that it was
+// told to be a Label, and it survives being saved, reloaded, and re-themed
+// (GuiEditorThemeApplier::applyToControl carries it across a theme switch).
+//
+// Only a category the class actually offers counts. Anything else -- a
+// hand-written Gui wearing a ListBox profile on a plain GuiControl -- falls
+// back to the guess, and the profile it holds still shows up as a candidate.
+//-----------------------------------------------------------------------------
+
+function GuiEditorInspectorPane::currentCategory(%this, %ctrl)
+{
 	%applier = GuiEditor.themeApplier;
 	%isRoot = (%ctrl.getParent() == %applier.rootContainer);
-	%main = %applier.categoryForControl(%ctrl, %isRoot);
-	return %applier.categoryForField(%field, %main);
+	%guess = %applier.categoryForControl(%ctrl, %isRoot);
+
+	%choices = %this.spec.categoryChoices(%ctrl.getClassName());
+	if(%choices $= "")
+	{
+		return %guess;
+	}
+
+	%current = %applier.fieldProfile(%ctrl, "Profile");
+	if(isObject(%current))
+	{
+		%match = %this.spec.matchCategory(%choices, %current.category);
+		if(%match !$= "")
+		{
+			return %match;
+		}
+	}
+
+	return %guess;
+}
+
+// Move the control onto a category: its main profile becomes that category's,
+// so the picker and the profile can never disagree. The theme's own member
+// first, then any standalone stamped for the category, and if the category is
+// empty the list is refilled and the profile left alone rather than cleared.
+function GuiEditorInspectorPane::setCategory(%this, %category)
+{
+	if(!isObject(%this.target) || %category $= "")
+	{
+		return;
+	}
+
+	%theme = GuiEditor.themeByName(GuiEditor.themeName);
+	%profile = isObject(%theme) ? %theme.getProfile(%category) : 0;
+	if(!isObject(%profile))
+	{
+		%profile = getWord(%this.profileAnchorsFor(%category, 0), 0);
+	}
+
+	if(isObject(%profile))
+	{
+		// By id, not by name: a profile made this session carries a name the Sim
+		// never registered, because the editor runs with assignName stashing
+		// names rather than adding them.
+		%this.writeField("Profile", %profile.getId());
+	}
+
+	// Everything downstream of the profile moves with it -- which profiles the
+	// slot now offers, and the font colour the swatch falls back to.
+	%this.refresh();
+	%this.afterCommit();
 }
 
 function GuiEditorInspectorPane::addUnique(%this, %list, %additions)
@@ -1059,6 +1237,11 @@ function GuiEditorInspectorPane::refreshProfileChoices(%this)
 		return;
 	}
 
+	if(%this.header.categoryRow.isVisible())
+	{
+		%this.fillCategoryRow();
+	}
+
 	if(%this.header.profileRow.isVisible())
 	{
 		%this.fillProfileRow(%this.header.profileRow, "Profile");
@@ -1075,6 +1258,29 @@ function GuiEditorInspectorPane::refreshProfileChoices(%this)
 			%this.fillProfileRow(%row, %field);
 		}
 	}
+}
+
+// The categories this class may take, and which one it is on. Unlike a profile
+// row these are plain strings, so the name in the list is the value.
+function GuiEditorInspectorPane::fillCategoryRow(%this)
+{
+	%row = %this.header.categoryRow;
+	%choices = %this.spec.categoryChoices(%this.boundClass);
+
+	%items = "";
+	%count = getWordCount(%choices);
+	for(%i = 0; %i < %count; %i++)
+	{
+		%item = getWord(%choices, %i);
+		%items = (%items $= "") ? %item : (%items TAB %item);
+	}
+
+	// Same reason as a profile row: the list is recomputed from scratch on every
+	// bind, so a selection the new list does not hold is a ghost of the last one
+	// rather than something worth preserving.
+	%row.currentItem = "";
+	%row.fillItems(%items);
+	%row.setValue(%this.currentCategory(%this.target));
 }
 
 // One slot's candidates, listed by name. The name is only a label: a commit
@@ -1122,6 +1328,26 @@ function GuiEditorInspectorPane::onProfileRowCommit(%this, %row)
 		return;
 	}
 
+	%field = %row.fieldName;
+
+	// The font colour swatch is two fields, and the second of them is why the
+	// changed test cannot come first: picking the colour the profile already
+	// draws in is a real edit when the override was off.
+	if(%field $= "fontColor")
+	{
+		%this.commitFontColor(%row);
+		return;
+	}
+
+	// The text box has been writing to the control on every keystroke, so the
+	// changed test cannot come first here either -- by now the control already
+	// says what the row says.
+	if(%field $= "text")
+	{
+		%this.commitText(%row);
+		return;
+	}
+
 	// A text box commits on blur, so most commits arrive from a field the user
 	// only tabbed through. Writing one anyway would put an edit in the undo
 	// record -- and mark the Gui dirty -- for something that never happened.
@@ -1130,7 +1356,15 @@ function GuiEditorInspectorPane::onProfileRowCommit(%this, %row)
 		return;
 	}
 
-	%field = %row.fieldName;
+	// Category names no field on the control. It picks the control's Profile,
+	// and has to be intercepted here or writeField would put a dynamic field
+	// called "category" on it.
+	if(%field $= "category")
+	{
+		%row.markClean();
+		%this.setCategory(%row.getValue());
+		return;
+	}
 
 	// A profile slot is chosen by name in the list but written by id: a profile
 	// created this session carries a name the Sim cannot resolve, because the
@@ -1181,11 +1415,123 @@ function GuiEditorInspectorPane::rebindDeferred(%this)
 	}
 }
 
-// The row widget's reset means "back to the theme's stamped value", which has
-// no analogue for a control, so the button is hidden and this can never fire.
-// It exists because the row's owner contract names it.
+//-----------------------------------------------------------------------------
+// Text, which reaches the control twice: once per keystroke so the canvas keeps
+// up, and once here so the change is recorded as the single edit it was.
+//
+// The pair matters because a field write is the editor's unit of change --
+// inspectPreApply / inspectPostApply, and whatever an undo record is eventually
+// hung on. Eleven keystrokes are one edit, not eleven, so the control is put
+// back to what it held when the first key landed and the new value written over
+// it once.
+//-----------------------------------------------------------------------------
+
+function GuiEditorInspectorPane::commitText(%this, %row)
+{
+	%block = %this.activeTextBlock();
+
+	// Nobody typed: an ordinary commit, from a box the user tabbed through or a
+	// value that arrived from script. Or the selection moved while an edit was
+	// open, in which case the stash belongs to a control this row is no longer
+	// showing -- the typed text is already on it, so there is nothing to save.
+	if(!isObject(%block) || !%block.typing || %block.typingTarget != %this.target)
+	{
+		if(%row.hasChanged())
+		{
+			%this.writeField("text", %row.getValue());
+			%row.markClean();
+			%this.afterCommit();
+		}
+		if(isObject(%block))
+		{
+			%block.endTyping();
+		}
+		return;
+	}
+
+	%value = %row.getValue();
+	%before = %block.textBeforeEdit;
+	%block.endTyping();
+	%row.markClean();
+
+	// strcmp, not $=: $= runs dStricmp, so retyping a caption in a different
+	// case would read as no change at all.
+	if(strcmp(%value, %before) == 0)
+	{
+		return;
+	}
+
+	%this.target.text = %before;
+	%this.writeField("text", %value);
+	%this.afterCommit();
+}
+
+//-----------------------------------------------------------------------------
+// Font colour, which is two fields wearing one widget. overrideFontColor is
+// what decides whether fontColor is used at all (guiControl.cc renderText), and
+// on its own it is a checkbox that does nothing visible -- so the swatch is
+// both: picking a colour turns the override on, and the row's reset button
+// turns it off again. With it off the swatch shows the profile's own colour,
+// so the row always says what the control will actually draw in.
+//-----------------------------------------------------------------------------
+
+function GuiEditorInspectorPane::commitFontColor(%this, %row)
+{
+	// Nothing to do only when the colour is unchanged AND the override was
+	// already on. Picking the profile's exact colour while it was off is the
+	// user asking to pin that colour down, which is a change to the control
+	// even though the swatch looks the same.
+	if(!%row.hasChanged() && %this.target.overrideFontColor)
+	{
+		return;
+	}
+
+	%this.writeField("fontColor", %row.getValue());
+	%this.writeField("overrideFontColor", true);
+
+	%row.markClean();
+	%row.setOverridden(true);
+	%this.afterCommit();
+}
+
+// The row widget's reset means "back to the theme's stamped value" everywhere
+// else, which has no analogue for a control -- so every other row here hides
+// the button. The font colour row keeps it, meaning "stop overriding the
+// profile's".
 function GuiEditorInspectorPane::onProfileRowReset(%this, %row)
 {
+	if(%row.fieldName !$= "fontColor" || !isObject(%this.target))
+	{
+		return;
+	}
+
+	%this.writeField("overrideFontColor", false);
+
+	%block = %this.activeTextBlock();
+	if(isObject(%block))
+	{
+		%this.populating = true;
+		%block.loadFontColor(%this.target);
+		%this.populating = false;
+	}
+
+	%this.afterCommit();
+}
+
+// The two flags in the text block's caption row. They change the control's size
+// rather than only its look -- textExtend grows the width when wrap is off and
+// the height when it is on -- so the geometry rows are stale the moment either
+// is written.
+function GuiEditorInspectorPane::onTextFlagChanged(%this, %field, %value)
+{
+	if(%this.populating || !isObject(%this.target))
+	{
+		return;
+	}
+
+	%this.writeField(%field, %value);
+	%this.refreshGeometry();
+	%this.afterCommit();
 }
 
 // Everything a write has to tell the rest of the editor. The canvas has to

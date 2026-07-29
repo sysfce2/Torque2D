@@ -42,8 +42,17 @@ function GuiProfileEditorFieldRow::build(%this)
 	%pad = 4;
 	%resetW = 24;
 	%labelH = 16;
-	%editorY = %labelH + 4;
-	%editorH = 24;
+
+	// No caption means no room kept for one. The text block asks for this: its
+	// text box is captioned by the row above, which is what leaves space beside
+	// the caption for the wrap and extend icons. The label control is still
+	// built, so setLabelText can give it one later.
+	%captioned = %this.labelText !$= "";
+	%editorY = %captioned ? (%labelH + 4) : 2;
+
+	// A multiline row is three lines of a wrapped text box rather than one line of
+	// a plain one. Everything else about it is a text row.
+	%editorH = (%this.kind $= "multiline") ? 62 : 24;
 	%h = %editorY + %editorH + 4;
 
 	// The editor stops short of the reset button so the two never overlap once
@@ -61,6 +70,7 @@ function GuiProfileEditorFieldRow::build(%this)
 		Text = %this.labelText;
 		align = "left";
 		vAlign = "middle";
+		Visible = %captioned;
 	};
 	ThemeManager.setProfile(%this.label, "labelProfile");
 	%this.add(%this.label);
@@ -116,9 +126,9 @@ function GuiProfileEditorFieldRow::build(%this)
 			%this.fillItems(%this.enumItems);
 		}
 	}
-	else if(%kind $= "point")
+	else if(%kind $= "point" || %kind $= "pointf")
 	{
-		// A Point2I field ("x y") gets one box per axis; either one commits both.
+		// A two-part field ("x y") gets one box per axis; either one commits both.
 		// Relative sizing splits the widened cell evenly between them.
 		%boxW = (%editorW - 6) / 2;
 		%this.editor = %this.makeInput(%pad, %editorY, %boxW, 22, true, "relative");
@@ -136,9 +146,23 @@ function GuiProfileEditorFieldRow::build(%this)
 		// file dialog -- an asset id is no more typeable from memory than a path.
 		%this.makeFindRow(%pad, %editorY, %editorW, ".onFindAssetClicked();");
 	}
+	else if(%kind $= "multiline")
+	{
+		// The full cell width: this row's reset button is never shown, and the
+		// caption line above it is where its owner puts anything else.
+		//
+		// mTextWrap is what makes GuiTextEditCtrl multi-line -- it wraps, scrolls
+		// and hit-tests in line space (guiTextEditCtrl.cc). It still cannot take a
+		// typed newline: handleEnterKey has no insert path, so Enter goes on
+		// meaning commit and a long string simply wraps.
+		%this.editor = %this.makeInput(%pad, %editorY, %w - (%pad * 2), %editorH, false, "width");
+		%this.editor.textWrap = true;
+		%this.editor.vAlign = "top";
+	}
 	else
 	{
-		%this.editor = %this.makeInput(%pad, %editorY, %editorW, 22, %kind $= "number", "width");
+		%this.editor = %this.makeInput(%pad, %editorY, %editorW, 22,
+			%kind $= "number" || %kind $= "decimal", "width");
 	}
 
 	// The per-field reset, shown only while the field is overridden. The icon is
@@ -178,23 +202,46 @@ function GuiProfileEditorFieldRow::makeFindRow(%this, %pad, %editorY, %editorW, 
 	%this.add(%this.findButton);
 }
 
+// True where the field holds a real number rather than a whole one. Kept as a
+// question about the kind rather than a flag on the row, because it is asked
+// from three places and has to answer the same way in all of them.
+function GuiProfileEditorFieldRow::isDecimalKind(%this)
+{
+	return %this.kind $= "decimal" || %this.kind $= "pointf";
+}
+
 // A text box that commits on blur (AltCommand) and on Enter, matching how the
 // native inspector and the border grid apply their edits.
 function GuiProfileEditorFieldRow::makeInput(%this, %x, %y, %w, %h, %numeric, %sizing)
 {
+	%decimal = %this.isDecimalKind();
+
 	%box = new GuiTextEditCtrl()
 	{
-		class = "GuiProfileEditorRowInput";
+		// The class only goes on a box that wants the arrow keys to step its
+		// value. GuiTextEditCtrl gives a script onUpArrow the key before its own
+		// caret movement (guiTextEditCtrl.cc handleKeyDownWithNoModifier), and
+		// isMethod answers for the CLASS, not the instance -- so wearing this on
+		// a text box meant nudge() swallowed both arrows and did nothing with
+		// them, which is what stopped the caret moving between lines in the
+		// multi-line box.
+		class = %numeric ? "GuiProfileEditorRowInput" : "";
 		HorizSizing = %sizing;
 		Position = %x SPC %y;
 		Extent = %w SPC %h;
 		align = %numeric ? "center" : "left";
 		row = %this;
 		numeric = %numeric;
+
+		// What an arrow key is worth. A font size multiplier lives between 0.5
+		// and 3, so stepping it by one is the same as not offering the key.
+		step = %decimal ? 0.1 : 1;
 	};
 	if(%numeric)
 	{
-		%box.inputMode = "Number";
+		// Number mode refuses the decimal point, which would make a float field
+		// impossible to type into.
+		%box.inputMode = %decimal ? "Decimal" : "Number";
 	}
 	ThemeManager.setProfile(%box, "textEditProfile");
 	%box.AltCommand = %this.getID() @ ".commit();";
@@ -278,7 +325,7 @@ function GuiProfileEditorFieldRow::applyValue(%this, %value)
 	{
 		%this.selectItem(%value);
 	}
-	else if(%kind $= "point")
+	else if(%kind $= "point" || %kind $= "pointf")
 	{
 		%this.editor.setText(getWord(%value, 0));
 		%this.editorY.setText(getWord(%value, 1));
@@ -304,15 +351,24 @@ function GuiProfileEditorFieldRow::getValue(%this)
 	{
 		return %this.editor.getText();
 	}
-	if(%kind $= "point")
+	if(%kind $= "point" || %kind $= "pointf")
 	{
-		return mFloor(%this.editor.getText()) SPC mFloor(%this.editorY.getText());
+		return %this.numberIn(%this.editor) SPC %this.numberIn(%this.editorY);
 	}
-	if(%kind $= "number")
+	if(%kind $= "number" || %kind $= "decimal")
 	{
-		return mFloor(%this.editor.getText());
+		return %this.numberIn(%this.editor);
 	}
 	return %this.editor.getText();
+}
+
+// A whole-number field is floored, so a box left holding "12.0" does not write
+// "12.0" into a Point2I. A real one is not: flooring a font size multiplier
+// turns every 1.5 into a 1, which is how a control that would not resize looked
+// like a control whose font size did nothing.
+function GuiProfileEditorFieldRow::numberIn(%this, %box)
+{
+	return %this.isDecimalKind() ? %box.getText() : mFloor(%box.getText());
 }
 
 //-----------------------------------------------------------------------------
@@ -499,7 +555,11 @@ function GuiProfileEditorRowInput::nudge(%this, %delta)
 	{
 		return;
 	}
-	%this.setText(%this.getText() + %delta);
+
+	// Rounded, or repeated tenths accumulate into 1.2000000476837158.
+	%value = %this.getText() + (%delta * %this.step);
+	%this.setText(%this.step < 1 ? mFloatLength(%value, 2) : %value);
+
 	%this.selectAllText();
 	%this.row.commit();
 }

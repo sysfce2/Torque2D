@@ -62,6 +62,14 @@ function GuiEditorHeaderBlock::buildIdentity(%this)
 	%this.identityGrid = %grid;
 
 	%this.nameRow = %this.pane.addFieldRow(%grid, "name", "Name", "text", "");
+
+	// Category sits between the name and the profile because that is the order
+	// the two are decided in: what the control is, and then which of the theme's
+	// profiles for that answers it. It is not a field on the control -- the
+	// profile it picks is the record of the choice -- so it is built without a
+	// name in the registry, and the pane intercepts its commits.
+	%this.categoryRow = %this.pane.makeFieldRow(%grid, "category", "Category", "dropdown", "");
+
 	%this.profileRow = %this.pane.addFieldRow(%grid, "Profile", "Profile", "dropdown", "");
 }
 
@@ -249,63 +257,21 @@ function GuiEditorHeaderBlock::applyGeometryMode(%this, %mode)
 // Text.
 //-----------------------------------------------------------------------------
 
+// The whole text story is one component now -- the string, the two flags that
+// change what it does to the control, both alignments, and the size and colour
+// it is drawn in. The header holds one copy of it and the pane's Text section
+// holds the other; see GuiEditorTextBlock.
+//
+// textGrid, textRow, alignRow and vAlignRow stay as names for what the block
+// owns, because they are how the pane and the smoke tests reach these widgets.
 function GuiEditorHeaderBlock::buildText(%this)
 {
-	%grid = %this.pane.makeCellGrid(0);
-	%this.add(%grid);
-	%this.textGrid = %grid;
+	%this.textBlock = %this.pane.makeTextBlock(%this, 0);
 
-	%this.textRow = %this.pane.addFieldRow(%grid, "text", "Text", "text", "");
-
-	// The two alignments are segmented rows rather than drop-downs: three or
-	// four values, each with a picture, and which one is set matters more than
-	// its name. They sit directly under the text box, since that is what they
-	// are about.
-	//
-	// "default" leads each row and wears no icon. It is not an absence -- it is
-	// the value a control starts on, which getAlignmentType resolves to the
-	// PROFILE's alignment -- so it needs a button, just not a picture.
-	%this.alignRow = %this.makeAlignRow(%grid, "align", "Align",
-		"left" TAB $EditorIcon::align_left TAB "Align text to the left" NL
-		"center" TAB $EditorIcon::align_center TAB "Centre text" NL
-		"right" TAB $EditorIcon::align_right TAB "Align text to the right");
-
-	%this.vAlignRow = %this.makeAlignRow(%grid, "vAlign", "V-Align",
-		"top" TAB $EditorIcon::align_top TAB "Align text to the top" NL
-		"middle" TAB $EditorIcon::align_middle TAB "Centre text vertically" NL
-		"bottom" TAB $EditorIcon::align_bottom TAB "Align text to the bottom");
-}
-
-// %choices is one record per value: value TAB icon TAB tooltip. The "default"
-// entry is prepended here so both rows spell it the same way.
-function GuiEditorHeaderBlock::makeAlignRow(%this, %grid, %field, %label, %choices)
-{
-	%row = new GuiControl()
-	{
-		class = "GuiEditorChoiceRow";
-		Position = "0 0";
-		labelText = %label;
-		fieldName = %field;
-		owner = %this;
-	};
-	%grid.add(%row);
-
-	%row.addChoice("default", "", "Use the profile's alignment");
-	%count = getRecordCount(%choices);
-	for(%i = 0; %i < %count; %i++)
-	{
-		%rec = getRecord(%choices, %i);
-		%row.addChoice(getField(%rec, 0), getField(%rec, 1), getField(%rec, 2));
-	}
-
-	%row.build();
-	return %row;
-}
-
-// One of the alignment rows was clicked.
-function GuiEditorHeaderBlock::onChoiceRowChanged(%this, %row)
-{
-	%this.pane.onHeaderChoiceChanged(%row.fieldName, %row.getValue());
+	%this.textGrid = %this.textBlock;
+	%this.textRow = %this.textBlock.textRow;
+	%this.alignRow = %this.textBlock.alignRow;
+	%this.vAlignRow = %this.textBlock.vAlignRow;
 }
 
 //-----------------------------------------------------------------------------
@@ -322,6 +288,10 @@ function GuiEditorHeaderBlock::bindClass(%this, %ctrl, %class)
 	// SimObject::initPersistFields rather than GuiControl's -- so it keeps its
 	// name and its caption and loses everything else here.
 	%this.profileRow.setVisible(!%bare);
+
+	// Only one class in the palette is ambiguous enough to need this, and a
+	// class with no profile at all cannot use it either.
+	%this.categoryRow.setVisible(!%bare && %spec.categoryChoices(%class) !$= "");
 	%this.geometryGrid.setVisible(!%bare);
 	%this.visibleButton.setVisible(!%bare);
 	%this.activeButton.setVisible(!%bare);
@@ -332,17 +302,11 @@ function GuiEditorHeaderBlock::bindClass(%this, %ctrl, %class)
 	// rather than sitting there wired to nothing.
 	%this.containerButton.setVisible(%spec.isContainerFieldVisible(%ctrl));
 
-	// The text block is only in the header for the roles that have a string of
-	// their own worth naming. A grid can technically draw text; it goes in a
-	// collapsed section instead of the first thing anyone sees.
-	%inHeader = %spec.textBelongsInHeader(%class);
-	%this.textGrid.setVisible(%inHeader);
-	if(%inHeader)
-	{
-		%this.textRow.setLabelText(%spec.textLabelFor(%class));
-		%this.alignRow.setVisible(%spec.isFieldVisible(%class, "align"));
-		%this.vAlignRow.setVisible(%spec.isFieldVisible(%class, "vAlign"));
-	}
+	// The text block is only in the header for the classes whose text is a
+	// principal property of them. A grid can technically draw text; it goes in a
+	// collapsed section instead of the first thing anyone sees. The pane places
+	// it and binds it -- it owns both copies.
+	%this.textBlock.setVisible(%spec.textBlockHome(%class) $= "header");
 
 	%this.buildValueRows(%ctrl, %class);
 	%this.resizeToFit();

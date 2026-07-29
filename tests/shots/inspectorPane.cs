@@ -94,6 +94,10 @@ function sShoot()
 
 	// Every section open, so the shot shows what each control actually offers
 	// rather than a column of collapsed headers.
+	// textPanel is not in panelList: it holds one component rather than a list
+	// of rows, so the pane decides its visibility outright.
+	%pane.textPanel.setExpanded(true);
+
 	%panels = %pane.panelList SPC %pane.classPanels;
 	for(%i = 0; %i < getWordCount(%panels); %i++)
 	{

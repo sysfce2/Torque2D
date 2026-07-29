@@ -586,13 +586,93 @@ function GuiEditorControlSpec::isContainerFieldVisible(%this, %ctrl)
 		%ctrl.rendersChildren();
 }
 
-// The header shows a text box for the roles that have a string of their own;
-// inherited and proxy put theirs in a collapsed section instead, because a grid
-// that can technically draw text is not a control anyone reaches for text on.
-function GuiEditorControlSpec::textBelongsInHeader(%this, %class)
+// Where the class's text block goes. The block itself is one component holding
+// every field GuiControl::renderText reads, so the only question left here is
+// which of the two copies of it -- the header's or the Text section's -- the
+// class wants.
+//
+//   header   the string, or the type it is drawn in, is a principal property.
+//            Proxy joins the three header roles: a list draws its items with
+//            this control's font, and the size of that is worth reaching for
+//            even though the "text" field itself is never drawn.
+//   section  live, but not what anyone opens the pane for. A grid can draw text
+//            and nobody asks it to; a slider draws none but still sizes its
+//            value with fontSizeAdjust.
+//   none     nothing in the block applies.
+function GuiEditorControlSpec::textBlockHome(%this, %class)
 {
 	%role = %this.textRoleFor(%class);
-	return %role $= "render" || %role $= "caption" || %role $= "placeholder";
+	if(%role $= "inherited")
+	{
+		return "section";
+	}
+	if(%role $= "none")
+	{
+		return %this.hasFlag(%class, "fontAdjust") ? "section" : "none";
+	}
+	return "header";
+}
+
+// The text block owns every field in textFields() except textID, which belongs
+// to Localization and is the only one of the nine that is not about how the
+// text is drawn.
+//
+// These three of them are ordinary field rows, so they go in the pane's shared
+// registry and are filtered and loaded with everything else. The other four are
+// two toggle icons and two segmented rows, which the block owns outright.
+//
+// overrideFontColor is in neither group: it has no row at all. The font colour
+// swatch is both fields, because picking a colour IS turning the override on.
+function GuiEditorControlSpec::textBlockRowFields(%this)
+{
+	return "text fontSizeAdjust fontColor";
+}
+
+//-----------------------------------------------------------------------------
+// Profile category. Every class but one is pinned by
+// GuiEditorThemeApplier::buildClassTable -- a check box wants a CheckBox
+// profile, and there is nothing to ask about. A bare GuiControl is the
+// exception: in 4.0 it is the wrapper, the backdrop, the line of text, the
+// paragraph and the modal scrim, and which of those it is cannot be read off
+// the class. The applier guesses from what the control holds when it is dropped
+// (categoryForControl), which is a good default and a guess all the same, so
+// the pane offers these four and lets the answer be corrected.
+//
+// The choice needs no storage: a profile carries the category it was stamped
+// for, so what the control wears is the record of what it was told to be.
+//-----------------------------------------------------------------------------
+
+function GuiEditorControlSpec::categoryChoices(%this, %class)
+{
+	return (%class $= "GuiControl") ? "Empty Panel Label Overlay" : "";
+}
+
+// Which of the choices a profile's category names, spelled the way the choices
+// spell it -- or "" if it names none of them.
+//
+// The case has to be thrown away to match and kept to answer. A category is
+// stored with StringTable->insert, which interns case-insensitively and hands
+// back whichever spelling reached the table first, so a profile stamped for
+// "Empty" reads back as "empty" if anything else interned that word in lower
+// case first. listHas cannot be used here: it is built on strstr, which unlike
+// $= is case-sensitive.
+function GuiEditorControlSpec::matchCategory(%this, %choices, %category)
+{
+	if(%category $= "")
+	{
+		return "";
+	}
+
+	%count = getWordCount(%choices);
+	for(%i = 0; %i < %count; %i++)
+	{
+		%choice = getWord(%choices, %i);
+		if(%choice $= %category)
+		{
+			return %choice;
+		}
+	}
+	return "";
 }
 
 // What to call the text field. A drop-down only ever shows it while nothing is
@@ -648,9 +728,16 @@ function GuiEditorControlSpec::kindForType(%this, %type)
 	switch$(%type)
 	{
 		case "bool": return "bool";
-		case "int" or "char" or "float": return "number";
+		case "int" or "char": return "number";
+
+		// Separate kinds for the real-numbered fields, because the row rounds a
+		// whole-number one on the way out. A slider's value is a TypeF32 between
+		// its two bounds and fontSizeAdjust is a multiplier around 1: rounding
+		// either is the difference between the field working and not.
+		case "float": return "decimal";
 		case "enumval": return "enum";
-		case "Point2I" or "Point2F" or "Vector2": return "point";
+		case "Point2I": return "point";
+		case "Point2F" or "Vector2": return "pointf";
 		case "ColorI" or "ColorF" or "FluidColorI": return "color";
 		case "filename": return "file";
 		case "assetIdString": return "asset";
