@@ -378,6 +378,7 @@ public:
     /// @param   value   True if object should be visible
     virtual void setVisible(bool value);
     inline bool isVisible() { return mVisible; } ///< Returns true if the object is visible
+	inline bool rendersChildren() { return mRendersChildren; } ///< True if the control draws its children, which is what makes it able to be a container.
 	static bool writeVisibleFn(void* obj, const char* data) { GuiControl* ctrl = static_cast<GuiControl*>(obj); return !ctrl->isVisible(); }
 	static bool writeUseInputFn(void* obj, const char* data) { GuiControl* ctrl = static_cast<GuiControl*>(obj); return !ctrl->mUseInput; }
 	static bool writeIsContainerFn(void* obj, const char* data) { GuiControl* ctrl = static_cast<GuiControl*>(obj); return ctrl->mRendersChildren && !ctrl->mIsContainer; }

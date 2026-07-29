@@ -373,4 +373,42 @@ ConsoleMethodWithDocs(GuiControl, getTextExtend, ConsoleBool, 2, 2, ())
     return object->getTextExtend();
 }
 
+/*! Re-applies this control's sizing flags against its parent's current size.
+
+    HorizSizing and VertSizing are only ever consulted from parentResized, so
+    setting one leaves the control exactly where it was until something else
+    resizes the parent. That is fine for the modes that describe what happens to
+    a size CHANGE, but "center" and "fill" describe a position the control
+    should always be in, and those look broken until the next layout pass.
+
+    Calling this runs the layout with a zero delta, so the modes that need a
+    delta do nothing -- which is correct, they have nothing to respond to -- and
+    center and fill take effect at once.
+
+    Does nothing if the control has no parent.
+    @return No return value
+*/
+ConsoleMethodWithDocs(GuiControl, applySizing, ConsoleVoid, 2, 2, ())
+{
+    GuiControl* parent = object->getParent();
+    if( parent == NULL )
+        return;
+
+    // Both extents the same: parentResized derives the inner rect itself for
+    // the two modes that need it, so the outer extent is all it wants here.
+    const Point2I extent = parent->getExtent();
+    object->parentResized( extent, extent );
+}
+
+/*! Returns true if this control draws its children.
+    A control that does not render children can never be a container: the
+    isContainer field is forced to false for it and editing that field is
+    meaningless. This is fixed by the class and cannot be changed.
+    @return Returns true if the control renders its children.
+*/
+ConsoleMethodWithDocs(GuiControl, rendersChildren, ConsoleBool, 2, 2, ())
+{
+    return object->rendersChildren();
+}
+
 ConsoleMethodGroupEndWithDocs(GuiControl)
