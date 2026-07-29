@@ -53,23 +53,32 @@
 
 IMPLEMENT_CONOBJECT_CHILDREN(GuiControl);
 
+/// Counts are 4, not 3: "default" is a real, reachable value.
+///
+/// It used to be excluded, and that was a bug rather than a choice. A control
+/// starts on DefaultAlign, which getAlignmentType resolves to the PROFILE's
+/// alignment -- so it is the setting that means "inherit", and every control
+/// has it until someone picks otherwise. Hiding it from the table meant
+/// ConsoleGetType could not name the value it found and answered with an empty
+/// string, so an untouched control's align read back as nothing, and there was
+/// no way to put a control back to inheriting once you had chosen a side.
 static EnumTable::Enums alignCtrlEnums[] =
 {
    { AlignmentType::LeftAlign,          "left"      },
    { AlignmentType::CenterAlign,        "center"    },
    { AlignmentType::RightAlign,         "right"     },
-   { AlignmentType::DefaultAlign,       "default"   }
+   { AlignmentType::DefaultAlign,       "default"   }   ///< Inherit the profile's alignment.
 };
-static EnumTable gAlignCtrlTable(3, &alignCtrlEnums[0]);
+static EnumTable gAlignCtrlTable(4, &alignCtrlEnums[0]);
 
 static EnumTable::Enums vAlignCtrlEnums[] =
 {
    { VertAlignmentType::TopVAlign,          "top"      },
    { VertAlignmentType::MiddleVAlign,        "middle"    },
    { VertAlignmentType::BottomVAlign,         "bottom"     },
-   { VertAlignmentType::DefaultVAlign,       "default"   }
+   { VertAlignmentType::DefaultVAlign,       "default"   }   ///< Inherit the profile's alignment.
 };
-static EnumTable gVAlignCtrlTable(3, &vAlignCtrlEnums[0]);
+static EnumTable gVAlignCtrlTable(4, &vAlignCtrlEnums[0]);
 
 //used to locate the next/prev responder when tab is pressed
 S32 GuiControl::smCursorChanged           = -1;
@@ -148,6 +157,22 @@ bool GuiControl::onAdd()
    mBounds.extent.x = getMax( mMinExtent.x, mBounds.extent.x );
    mBounds.extent.y = getMax( mMinExtent.y, mBounds.extent.y );
 
+   // Nothing below this class may be left without a profile. Most constructors
+   // setField one themselves, but several never did -- GuiChainCtrl,
+   // GuiTabPageCtrl, GuiSliderCtrl, GuiTextEditCtrl, GuiInputCtrl,
+   // GuiSpriteCtrl and SceneWindow among them -- and a control with a null
+   // mProfile is a crash waiting for the first thing that reads it. A chain
+   // does not even need to be rendered: adding a child runs calculateExtent,
+   // which asks the profile for its borders.
+   //
+   // Doing it here rather than in each constructor is the point: it is one
+   // place, it covers every class that already exists, and a class added later
+   // cannot forget. GuiDefaultProfile is created during engine start-up
+   // (defaultGame.cc) and is the same fallback the TypeGuiProfile setter uses,
+   // so this is the behaviour every named profile already had on a miss.
+   if( mProfile == NULL )
+      setField( "profile", "GuiDefaultProfile" );
+
 
    // Add to root group.
    Sim::getGuiGroup()->addObject(this);
@@ -179,27 +204,63 @@ void GuiControl::onChildRemoved(GuiControl* child)
 	}
 }
 
+/// The sizing names, and why there are two sets of them.
+///
+/// The original names describe the edge that MOVES; the field controls the edge
+/// that STAYS. So "right" pins the LEFT edge (parentResized has no branch for
+/// it, so nothing moves) and "left" pins the RIGHT one (newPosition.x += delta).
+/// Reading a Gui file meant inverting every one of them in your head, and
+/// picking one from a list was a memory test.
+///
+/// The anchor names say what actually happens. Ordering is load-bearing in two
+/// directions:
+///
+///   ConsoleGetType returns the FIRST label whose value matches, so whichever
+///   name is listed first is what a field reads back as and what TAML writes.
+///   The preferred names are therefore at the top.
+///
+///   ConsoleSetType accepts ANY label in the table, case-insensitively, so the
+///   deprecated names below still load. Every .gui.taml already on disk, and
+///   every script that spells a sizing flag the old way, keeps working.
+///
+/// Note that a Gui saved by this build writes the new names, which an older
+/// build cannot read -- its table has no "anchorLeft", and ConsoleSetType
+/// silently falls back to index 0 on a miss.
+///
+/// "width"/"height" (both edges pinned) and "center"/"fill" were never
+/// misleading and keep their names. "relative" gains "scale", which is what it
+/// does.
 static EnumTable::Enums horzEnums[] =
 {
-    { GuiControl::horizResizeRight,      "right"     },
-    { GuiControl::horizResizeWidth,      "width"     },
-    { GuiControl::horizResizeLeft,       "left"      },
-    { GuiControl::horizResizeCenter,      "center"   },
-    { GuiControl::horizResizeRelative,    "relative" },
-    { GuiControl::horizResizeFill,        "fill"     }
+    { GuiControl::horizResizeRight,       "anchorLeft"  },   ///< Left edge stays put.
+    { GuiControl::horizResizeLeft,        "anchorRight" },   ///< Right edge stays put.
+    { GuiControl::horizResizeWidth,       "width"       },   ///< Both edges stay; the width follows the parent.
+    { GuiControl::horizResizeCenter,      "center"      },   ///< Neither edge; stays centred.
+    { GuiControl::horizResizeRelative,    "scale"       },   ///< Both edges scale with the parent.
+    { GuiControl::horizResizeFill,        "fill"        },   ///< Fills the parent's inner rect.
+
+    // Deprecated. Accepted for reading; never written.
+    { GuiControl::horizResizeRight,       "right"       },   ///< \deprecated Use anchorLeft.
+    { GuiControl::horizResizeLeft,        "left"        },   ///< \deprecated Use anchorRight.
+    { GuiControl::horizResizeRelative,    "relative"    }    ///< \deprecated Use scale.
 };
-static EnumTable gHorizSizingTable(6, &horzEnums[0]);
+static EnumTable gHorizSizingTable(9, &horzEnums[0]);
 
 static EnumTable::Enums vertEnums[] =
 {
-    { GuiControl::vertResizeBottom,      "bottom"     },
-    { GuiControl::vertResizeHeight,      "height"     },
-    { GuiControl::vertResizeTop,         "top"        },
-    { GuiControl::vertResizeCenter,       "center"    },
-    { GuiControl::vertResizeRelative,     "relative"  },
-    { GuiControl::vertResizeFill,         "fill"      }
+    { GuiControl::vertResizeBottom,       "anchorTop"    },  ///< Top edge stays put.
+    { GuiControl::vertResizeTop,          "anchorBottom" },  ///< Bottom edge stays put.
+    { GuiControl::vertResizeHeight,       "height"       },  ///< Both edges stay; the height follows the parent.
+    { GuiControl::vertResizeCenter,       "center"       },  ///< Neither edge; stays centred.
+    { GuiControl::vertResizeRelative,     "scale"        },  ///< Both edges scale with the parent.
+    { GuiControl::vertResizeFill,         "fill"         },  ///< Fills the parent's inner rect.
+
+    // Deprecated. Accepted for reading; never written.
+    { GuiControl::vertResizeBottom,       "bottom"       },  ///< \deprecated Use anchorTop.
+    { GuiControl::vertResizeTop,          "top"          },  ///< \deprecated Use anchorBottom.
+    { GuiControl::vertResizeRelative,     "relative"     }   ///< \deprecated Use scale.
 };
-static EnumTable gVertSizingTable(6, &vertEnums[0]);
+static EnumTable gVertSizingTable(9, &vertEnums[0]);
 
 void GuiControl::initPersistFields()
 {
