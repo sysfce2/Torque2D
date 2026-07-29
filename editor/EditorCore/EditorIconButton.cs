@@ -33,7 +33,7 @@ function EditorIconButton::onAdd(%this)
 // engine still delivers touch events to a disabled control: GuiControl::
 // findHitControl tests mVisible and mUseInput and never mActive. Without the
 // guard, moving the pointer over a disabled button repainted its icon in the
-// enabled hover colour and the disabled look was gone until something else
+// enabled hover color and the disabled look was gone until something else
 // forced it back -- the button read as clickable when it was not.
 function EditorIconButton::onTouchEnter(%this)
 {

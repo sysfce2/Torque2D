@@ -46,8 +46,10 @@ function GuiEditorHeaderBlock::build(%this)
 	%this.buildText();
 
 	// The value grid starts empty; bindClass fills it, because what belongs
-	// there is the one thing here that changes with the class.
-	%this.valueGrid = %this.pane.makeCellGrid(0);
+	// there is the one thing here that changes with the class. Pair-width cells:
+	// a principal value is usually one or two short fields, and a window's title
+	// height wants its six switches beside it rather than under them.
+	%this.valueGrid = %this.pane.makeCellGrid(0, %this.pane.pairWidth);
 	%this.add(%this.valueGrid);
 }
 
@@ -99,12 +101,14 @@ function GuiEditorHeaderBlock::buildToggles(%this)
 	// carries both ($EditorIcon::eye and ::invisible_light). Left alone here
 	// because hidden is moving out to its own Explorer tree column, and that is
 	// the change that should pick the icon.
-	%this.hiddenButton = %this.makeIconToggle(%row, 4, "hidden",
+	%this.hiddenButton = %this.makeIconToggle(%row, 4, "hidden", "Hidden",
 		$EditorIcon::round_delete, $EditorIcon::round_checkmark,
-		"Hidden in the editor", "Shown in the editor");
-	%this.lockedButton = %this.makeIconToggle(%row, 32, "locked",
+		"Hidden while you work. The control still draws when the game runs -- this only takes it out of the way on the canvas, so you can reach what is behind it. It is not saved with the Gui.",
+		"Drawn on the canvas as it will be in the game.");
+	%this.lockedButton = %this.makeIconToggle(%row, 32, "locked", "Locked",
 		$EditorIcon::padlock_closed, $EditorIcon::padlock_open,
-		"Locked against editing", "Unlocked");
+		"Cannot be picked or dragged on the canvas. Use this to stop a backdrop swallowing every click meant for what sits on top of it. It is not saved with the Gui.",
+		"Can be picked and dragged on the canvas.");
 
 	// The four runtime flags, now that the sheet has art for them. They were
 	// captioned checkboxes, which cost so much width that only two fitted and
@@ -114,26 +118,28 @@ function GuiEditorHeaderBlock::buildToggles(%this)
 	// Two of the four have a genuine pair (an eye against a struck-through one,
 	// on against off) and two do not, so those reuse one icon and let the
 	// pressed state carry the reading -- the same thing the anchor pins do.
-	%this.visibleButton = %this.makeIconToggle(%row, 68, "Visible",
+	%this.visibleButton = %this.makeIconToggle(%row, 68, "Visible", "Visible",
 		$EditorIcon::eye, $EditorIcon::invisible_light,
-		"Draws when the game runs", "Does not draw when the game runs");
-	%this.activeButton = %this.makeIconToggle(%row, 96, "Active",
+		"Draws when the game runs. Its children draw with it -- hiding a control hides everything inside it.",
+		"Does not draw when the game runs, and neither do its children. A layout container skips a hidden control entirely, so hiding one can move its siblings.");
+	%this.activeButton = %this.makeIconToggle(%row, 96, "Active", "Active",
 		$EditorIcon::on, $EditorIcon::off,
-		"Responds when the game runs", "Inert when the game runs");
-	%this.inputButton = %this.makeIconToggle(%row, 124, "useInput",
+		"Responds when the game runs: it takes clicks and keys and draws in its ordinary colors.",
+		"Inert when the game runs. It still draws, in the profile's disabled colors, but ignores every click and key.");
+	%this.inputButton = %this.makeIconToggle(%row, 124, "useInput", "Accepts Input",
 		$EditorIcon::cursor_arrow, $EditorIcon::cursor_arrow,
-		"Touch and key events reach this control",
-		"Touch and key events pass straight through");
-	%this.containerButton = %this.makeIconToggle(%row, 152, "isContainer",
+		"Touch and key events reach this control.",
+		"Touch and key events pass straight through to whatever is behind it. Turn this off on a backdrop or a label so it cannot swallow clicks meant for something else.");
+	%this.containerButton = %this.makeIconToggle(%row, 152, "isContainer", "Accepts Children",
 		$EditorIcon::folder_open, $EditorIcon::folder,
-		"The editor may drop controls into this one",
-		"The editor will not drop controls into this one");
+		"The editor drops controls into this one when you draw them over it.",
+		"The editor never drops controls into this one. They land in its parent instead, on top of it.");
 }
 
 // A checkbox wearing an icon, which is what a toggle button is here. It holds
 // its own state and refuses to change it while inactive; the pane is told what
 // the value became.
-function GuiEditorHeaderBlock::makeIconToggle(%this, %row, %x, %field, %frameOn, %frameOff, %tipOn, %tipOff)
+function GuiEditorHeaderBlock::makeIconToggle(%this, %row, %x, %field, %label, %frameOn, %frameOff, %tipOn, %tipOff)
 {
 	%button = new GuiCheckBoxCtrl()
 	{
@@ -145,6 +151,7 @@ function GuiEditorHeaderBlock::makeIconToggle(%this, %row, %x, %field, %frameOn,
 		tipOn = %tipOn;
 		tipOff = %tipOff;
 		toggleName = %field;
+		toggleLabel = %label;
 		owner = %this;
 	};
 	ThemeManager.setProfile(%button, "iconButtonProfile");
@@ -157,34 +164,77 @@ function GuiEditorHeaderBlock::makeIconToggle(%this, %row, %x, %field, %frameOn,
 // the new value rather than being asked to work it out.
 function GuiEditorHeaderBlock::onToggleIconChanged(%this, %toggle)
 {
-	%this.pane.onToggleChanged(%toggle.toggleName);
+	%this.pane.onToggleChanged(%toggle.toggleName, %toggle.getValue());
 }
 
-function GuiEditorHeaderBlock::makeToggleBox(%this, %row, %x, %w, %field, %label, %tip)
+//-----------------------------------------------------------------------------
+// A window's six switches. They were a section of six captioned checkboxes;
+// as icons they are one cell, which fits beside Title Height in the value
+// block -- the same trade the state toggles made in the row above.
+//-----------------------------------------------------------------------------
+
+function GuiEditorHeaderBlock::buildWindowToggles(%this, %grid)
 {
-	%box = new GuiCheckBoxCtrl()
+	%size = 24;
+	%gap = 2;
+	%fields = %this.spec.windowToggles();
+
+	%row = new GuiControl()
 	{
-		Position = %x SPC 3;
-		Extent = %w SPC 22;
-		Text = %label;
-		boxOffset = "0 2";
-		boxExtent = "18 18";
-		textOffset = "22 2";
-		textExtent = (%w - 22) SPC 18;
-		Tooltip = %tip;
-		Command = %this.getID() @ ".onToggleClicked(\"" @ %field @ "\");";
+		Position = "0 0";
+		Extent = (getWordCount(%fields) * (%size + %gap)) SPC (%size + 4);
 	};
-	ThemeManager.setProfile(%box, "checkboxProfile");
-	ThemeManager.setProfile(%box, "tipProfile", "TooltipProfile");
-	%row.add(%box);
+	ThemeManager.setProfile(%row, "emptyProfile");
+	%grid.add(%row);
 
-	%box.fieldName = %field;
-	return %box;
+	// field TAB label TAB icon TAB on TAB off
+	%table =
+		"canMove"      TAB "Move"          TAB $EditorIcon::cursor_drag_arrow TAB
+			"The player can drag the window by its title bar." TAB
+			"The window stays where it is put. Use this for a dialog that should not be moved off what it is explaining." NL
+		"canClose"     TAB "Close"         TAB $EditorIcon::app_window_cross TAB
+			"The title bar carries a close button." TAB
+			"No close button. The game has to take the window down itself, which is what a modal dialog with its own buttons wants." NL
+		"canMinimize"  TAB "Minimize"      TAB $EditorIcon::round_minus TAB
+			"The title bar carries a minimise button, which rolls the window up to its title." TAB
+			"No minimise button." NL
+		"canMaximize"  TAB "Maximize"      TAB $EditorIcon::expand TAB
+			"The title bar carries a maximise button, which fills the window's parent." TAB
+			"No maximise button." NL
+		"resizeWidth"  TAB "Resize Width"  TAB $EditorIcon::arrow_two_head TAB
+			"The player can drag the window's left and right edges." TAB
+			"The width is fixed at whatever the Gui was saved with." NL
+		"resizeHeight" TAB "Resize Height" TAB $EditorIcon::arrow_two_head_2 TAB
+			"The player can drag the window's top and bottom edges." TAB
+			"The height is fixed at whatever the Gui was saved with.";
+
+	%count = getRecordCount(%table);
+	for(%i = 0; %i < %count; %i++)
+	{
+		%rec = getRecord(%table, %i);
+		%field = getField(%rec, 0);
+		%this.windowButton[%field] = %this.makeIconToggle(%row, %i * (%size + %gap),
+			%field, getField(%rec, 1), getField(%rec, 2), getField(%rec, 2),
+			getField(%rec, 3), getField(%rec, 4));
+	}
+
+	%this.windowToggleRow = %row;
 }
 
-function GuiEditorHeaderBlock::onToggleClicked(%this, %field)
+// Load the six from the control, when the bound class has them.
+function GuiEditorHeaderBlock::refreshWindowToggles(%this, %ctrl)
 {
-	%this.pane.onToggleChanged(%field);
+	if(!isObject(%this.windowToggleRow))
+	{
+		return;
+	}
+
+	%fields = %this.spec.windowToggles();
+	for(%i = 0; %i < getWordCount(%fields); %i++)
+	{
+		%field = getWord(%fields, %i);
+		%this.windowButton[%field].setValue(%ctrl.getFieldValue(%field));
+	}
 }
 
 //-----------------------------------------------------------------------------
@@ -234,23 +284,35 @@ function GuiEditorHeaderBlock::applyGeometryMode(%this, %mode)
 	%spec = %this.spec;
 	%reason = "The parent container sets this.";
 
+	// A field the control's own class rewrites every frame is not greyed but
+	// gone: there is no value to look at and nothing a tooltip could usefully
+	// say about it. A menu bar is always at the top of what it is in.
+	%this.positionRow.setVisible(%spec.isGeometryFieldShown(%mode, "Position"));
+	%this.extentRow.setVisible(%spec.isGeometryFieldShown(%mode, "Extent"));
+	%this.anchorPicker.setVisible(%spec.isGeometryFieldShown(%mode, "HorizSizing"));
+
 	%this.anchorPicker.setAxisEnabled(
 		%spec.isGeometryFieldLive(%mode, "HorizSizing"),
 		%spec.isGeometryFieldLive(%mode, "VertSizing"));
-	%this.extentRow.setEnabled(%spec.isGeometryFieldLive(%mode, "Extent"), %reason);
 
-	// Position is the one field whose two axes can disagree: a vertical chain
-	// stacks its children on Y and copies X straight back from the child, so
-	// half of this row is live. The row's own setEnabled works on both boxes at
-	// once, so the axes are set directly -- the same two widgets it would touch.
-	%axes = %spec.livePositionAxes(%mode);
+	// Position and Extent are the two fields whose axes can disagree. A vertical
+	// chain stacks its children on Y and copies X straight back from the child;
+	// a menu bar's width is its parent's and its height is its own. The rows'
+	// own setEnabled works on both boxes at once, so the axes are set directly --
+	// the same two widgets it would touch.
+	%this.applyAxes(%this.positionRow, %spec.livePositionAxes(%mode), %reason);
+	%this.applyAxes(%this.extentRow, %spec.liveExtentAxes(%mode), %reason);
+}
+
+function GuiEditorHeaderBlock::applyAxes(%this, %row, %axes, %reason)
+{
 	%liveX = strstr(%axes, "x") >= 0;
 	%liveY = strstr(%axes, "y") >= 0;
 
-	%this.positionRow.editor.setActive(%liveX);
-	%this.positionRow.editorY.setActive(%liveY);
-	%this.positionRow.editor.Tooltip = %liveX ? "" : %reason;
-	%this.positionRow.editorY.Tooltip = %liveY ? "" : %reason;
+	%row.editor.setActive(%liveX);
+	%row.editorY.setActive(%liveY);
+	%row.editor.Tooltip = %liveX ? "" : %reason;
+	%row.editorY.Tooltip = %liveY ? "" : %reason;
 }
 
 //-----------------------------------------------------------------------------
@@ -258,7 +320,7 @@ function GuiEditorHeaderBlock::applyGeometryMode(%this, %mode)
 //-----------------------------------------------------------------------------
 
 // The whole text story is one component now -- the string, the two flags that
-// change what it does to the control, both alignments, and the size and colour
+// change what it does to the control, both alignments, and the size and color
 // it is drawn in. The header holds one copy of it and the pane's Text section
 // holds the other; see GuiEditorTextBlock.
 //
@@ -320,6 +382,7 @@ function GuiEditorHeaderBlock::buildValueRows(%this, %ctrl, %class)
 	%this.pane.clearRows(%this.valueFields);
 	%this.valueGrid.deleteObjects();
 	%this.valueFields = "";
+	%this.windowToggleRow = "";
 
 	%fields = %this.spec.headerValueFields(%class);
 
@@ -338,6 +401,14 @@ function GuiEditorHeaderBlock::buildValueRows(%this, %ctrl, %class)
 			%this.spec.labelFor(%field), %this.pane.kindFor(%ctrl, %field),
 			%this.pane.enumItemsFor(%ctrl, %field));
 		%this.valueFields = (%this.valueFields $= "") ? %field : (%this.valueFields SPC %field);
+	}
+
+	// A window's switches go in the same grid as its Title Height, so the two
+	// share a line rather than costing a section of their own.
+	if(%class $= "GuiWindowCtrl")
+	{
+		%this.buildWindowToggles(%this.valueGrid);
+		%count++;
 	}
 
 	%this.valueGrid.setVisible(%count > 0);

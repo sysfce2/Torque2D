@@ -181,7 +181,7 @@ function tStep4()
 	%pane = tBind($tHeading);
 
 	tCheck("font size is reachable", tRowShown(%pane, "fontSizeAdjust"));
-	tCheck("font colour is reachable", tRowShown(%pane, "fontColor"));
+	tCheck("font color is reachable", tRowShown(%pane, "fontColor"));
 	tCheck("the text box is reachable", tRowShown(%pane, "text"));
 
 	%block = %pane.activeTextBlock();
@@ -290,13 +290,18 @@ function tStep5()
 
 	%block.extendButton.performClick();
 	tCheck("extend reached the control", $tHeading.textExtend);
-	tCheck("its tooltip says which way it grows",
-		%block.extendButton.Tooltip $= "Grows wider to fit the text");
+	// The tip is two lines: what the switch is and how it is set, then what that
+	// means. The second line is the one that has to follow the wrap state, since
+	// extend grows a different axis depending on it.
+	tCheck("its tooltip names the switch and its state",
+		getRecord(%block.extendButton.Tooltip, 0) $= "Extend To Fit Text - On");
+	tCheck("and says which way it grows",
+		strstr(getRecord(%block.extendButton.Tooltip, 1), "wider") >= 0);
 
 	%block.wrapButton.performClick();
 	tCheck("wrap reached the control", $tHeading.textWrap);
 	tCheck("and the tooltip changed with it",
-		%block.extendButton.Tooltip $= "Grows taller to fit the wrapped text");
+		strstr(getRecord(%block.extendButton.Tooltip, 1), "taller") >= 0);
 
 	// Off again, and loaded back the same way on a rebind.
 	%block.wrapButton.performClick();
@@ -312,7 +317,7 @@ function tStep5()
 }
 
 //-----------------------------------------------------------------------------
-// Font colour, which is two fields wearing one swatch.
+// Font color, which is two fields wearing one swatch.
 //-----------------------------------------------------------------------------
 
 function tStep6()
@@ -321,20 +326,20 @@ function tStep6()
 	%row = %pane.row["fontColor"];
 
 	tCheck("nothing is overridden to begin with", !$tHeading.overrideFontColor);
-	tCheck("so the swatch shows the profile's colour",
+	tCheck("so the swatch shows the profile's color",
 		%row.getValue() $= tProfileOf($tHeading).fontColor);
 	tCheck("and there is nothing to revert", !%row.resetButton.isVisible());
 
 	%row.editor.setColorI("10 20 30 255");
 	%row.commit();
-	tCheck("picking a colour wrote it", $tHeading.fontColor $= "10 20 30 255");
+	tCheck("picking a color wrote it", $tHeading.fontColor $= "10 20 30 255");
 	tCheck("and turned the override on", $tHeading.overrideFontColor);
 	tCheck("the revert appeared", %row.resetButton.isVisible());
 
-	// The revert is the only way back to the profile's colour.
+	// The revert is the only way back to the profile's color.
 	%pane.onProfileRowReset(%row);
 	tCheck("revert turned the override off", !$tHeading.overrideFontColor);
-	tCheck("the swatch fell back to the profile's colour",
+	tCheck("the swatch fell back to the profile's color",
 		%row.getValue() $= tProfileOf($tHeading).fontColor);
 	tCheck("and the revert went away", !%row.resetButton.isVisible());
 

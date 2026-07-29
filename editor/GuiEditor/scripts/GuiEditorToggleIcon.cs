@@ -19,7 +19,7 @@
 //
 // The icon carries the on/off reading rather than the background, because a
 // profile cannot express it without art: GuiControlProfile::getFillColor maps
-// NormalStateOn to mFillColor, the same colour as NormalState, so the four "On"
+// NormalStateOn to mFillColor, the same color as NormalState, so the four "On"
 // states differ only when the profile renders from an image or bitmap. Bright
 // icon means on, dim means off, and a second frame can say it again where there
 // is art for one (a closed and an open padlock).
@@ -27,7 +27,7 @@
 // There is deliberately no hover animation. EditorIconButton has one and it is
 // where its disabled state went: the engine delivers touch events to inactive
 // controls (findHitControl checks mVisible and mUseInput, never mActive), so
-// the hover handler repainted over the disabled colour. Here the state is
+// the hover handler repainted over the disabled color. Here the state is
 // computed in one place, refresh(), and nothing else writes the icon.
 //
 // The creator sets frameOn, frameOff, tipOn, tipOff, owner and toggleName
@@ -95,7 +95,7 @@ function GuiEditorToggleIcon::getValue(%this)
 }
 
 // The single place the icon's look is decided: which frame, which tooltip, and
-// which of the profile's font colours tints it.
+// which of the profile's font colors tints it.
 function GuiEditorToggleIcon::refresh(%this)
 {
 	%on = %this.getStateOn();
@@ -123,11 +123,30 @@ function GuiEditorToggleIcon::refresh(%this)
 		%this.icon.setImageColor(%on ? %profile.fontColorHL : %profile.fontColor);
 	}
 
+	%this.Tooltip = %this.buildTip(%on);
+}
+
+// Two lines, now that a control's text can hold a line break: what this is and
+// which way it is set, then what that means.
+//
+//     Visible - On
+//     Draws when the game runs...
+//
+// The first line only appears for a toggle that names itself. A segmented row's
+// buttons are choices rather than switches -- "Centre text - On" would be a
+// worse caption than "Centre text" -- so those pass no label and keep the one
+// line they had.
+function GuiEditorToggleIcon::buildTip(%this, %on)
+{
 	%tip = %on ? %this.tipOn : %this.tipOff;
-	if(%tip !$= "")
+
+	if(%this.toggleLabel $= "")
 	{
-		%this.Tooltip = %tip;
+		return %tip;
 	}
+
+	%heading = %this.toggleLabel @ " - " @ (%on ? "On" : "Off");
+	return (%tip $= "") ? %heading : (%heading NL %tip);
 }
 
 // setActive does not repaint on its own, and the disabled tint is ours to draw.

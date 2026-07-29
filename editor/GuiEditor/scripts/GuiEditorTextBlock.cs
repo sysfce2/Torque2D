@@ -20,7 +20,7 @@
 //                   view of a paragraph.
 //     align grid    the two alignments, as segmented rows labelled "H:" and
 //                   "V:" -- one decision each, and the icons say the rest.
-//     font grid     size and colour, the pair anyone reaching for "this text is
+//     font grid     size and color, the pair anyone reaching for "this text is
 //                   too small" wants.
 //
 // Both grids are cell grids, so they sit side by side in a wide Properties
@@ -90,17 +90,17 @@ function GuiEditorTextBlock::buildCaption(%this)
 	%row.add(%this.label);
 
 	%this.wrapButton = %this.makeIcon(%row, %w - ((%size + 2) * 2), %size, "textWrap",
-		$EditorIcon::align_just,
-		"Wraps onto as many lines as it needs",
-		"Draws on one line whatever its width");
+		"Wrap Text", $EditorIcon::align_just,
+		"Wraps onto as many lines as it needs, breaking between words. Return puts a line break in while you are typing here.",
+		"Draws on one line whatever the control's width, and anything past the edge is clipped. Return finishes the edit.");
 
 	%this.extendButton = %this.makeIcon(%row, %w - (%size + 2), %size, "textExtend",
-		$EditorIcon::expand, "", "");
+		"Extend To Fit Text", $EditorIcon::expand, "", "");
 	%this.applyExtendTip(false);
 }
 
 // One icon in the caption row, pinned to the right edge as the pane widens.
-function GuiEditorTextBlock::makeIcon(%this, %row, %x, %size, %field, %frame, %tipOn, %tipOff)
+function GuiEditorTextBlock::makeIcon(%this, %row, %x, %size, %field, %label, %frame, %tipOn, %tipOff)
 {
 	%button = new GuiCheckBoxCtrl()
 	{
@@ -113,6 +113,7 @@ function GuiEditorTextBlock::makeIcon(%this, %row, %x, %size, %field, %frame, %t
 		tipOn = %tipOn;
 		tipOff = %tipOff;
 		toggleName = %field;
+		toggleLabel = %label;
 		owner = %this;
 	};
 	ThemeManager.setProfile(%button, "iconButtonProfile");
@@ -127,8 +128,9 @@ function GuiEditorTextBlock::makeIcon(%this, %row, %x, %size, %field, %frame, %t
 // when not).
 function GuiEditorTextBlock::applyExtendTip(%this, %wrapping)
 {
-	%tip = %wrapping ? "Grows taller to fit the wrapped text"
-		: "Grows wider to fit the text";
+	%tip = %wrapping
+		? "Grows taller to fit however many lines the text wraps onto, so nothing is clipped."
+		: "Grows wider to fit the text on its one line, so nothing is clipped.";
 
 	%this.extendButton.tipOn = %tip;
 	%this.extendButton.tipOff = %tip;
@@ -249,7 +251,7 @@ function GuiEditorTextBlock::makeChoiceRow(%this, %grid, %field, %label, %choice
 }
 
 //-----------------------------------------------------------------------------
-// Size and colour.
+// Size and color.
 //-----------------------------------------------------------------------------
 
 function GuiEditorTextBlock::buildFont(%this)
@@ -266,10 +268,10 @@ function GuiEditorTextBlock::buildFont(%this)
 		"Font Size", %this.pane.sharedKindFor("fontSizeAdjust"), "");
 	%this.fontSizeRow = %this.row["fontSizeAdjust"];
 
-	// One widget for two fields. overrideFontColor has no row: picking a colour
+	// One widget for two fields. overrideFontColor has no row: picking a color
 	// is what turns it on, and the reset button -- which every field row already
 	// carries -- is what turns it off again. With it off the swatch shows the
-	// profile's own colour, so the row always says what the control will draw in.
+	// profile's own color, so the row always says what the control will draw in.
 	%this.row["fontColor"] = %this.pane.makeFieldRow(%grid, "fontColor",
 		"Font Color", %this.pane.sharedKindFor("fontColor"), "");
 	%this.fontColorRow = %this.row["fontColor"];
@@ -352,12 +354,22 @@ function GuiEditorTextBlock::resizeGrid(%this, %grid)
 // A GuiChainCtrl positions its children without resizing them, and a grid only
 // learns its height once something lays it out, so nudge the width by a pixel
 // and back to force exactly one parentResized through every child.
+//
+// Through its own position, not through zero: resize() sets the position as
+// well as the extent. The header's copy lives in a chain, which puts its
+// children back wherever it likes, but the Text section's copy sits at y=24
+// under the panel's title bar -- and moving it to zero drew its caption and its
+// two icons on top of that title, which read as a second "Text" printed over
+// the first.
 function GuiEditorTextBlock::resizeToFit(%this)
 {
+	%x = getWord(%this.getPosition(), 0);
+	%y = getWord(%this.getPosition(), 1);
 	%w = getWord(%this.getExtent(), 0);
 	%h = getWord(%this.getExtent(), 1);
-	%this.resize(0, 0, %w + 1, %h);
-	%this.resize(0, 0, %w, %h);
+
+	%this.resize(%x, %y, %w + 1, %h);
+	%this.resize(%x, %y, %w, %h);
 }
 
 //-----------------------------------------------------------------------------
@@ -389,9 +401,9 @@ function GuiEditorTextBlock::load(%this, %ctrl)
 	%this.populating = false;
 }
 
-// The swatch shows what the control will actually draw in: its own colour while
+// The swatch shows what the control will actually draw in: its own color while
 // it is overriding, and the profile's while it is not. Anything else would have
-// the row claim a colour the control does not use.
+// the row claim a color the control does not use.
 function GuiEditorTextBlock::loadFontColor(%this, %ctrl)
 {
 	%override = %ctrl.overrideFontColor;

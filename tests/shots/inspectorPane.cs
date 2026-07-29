@@ -65,12 +65,21 @@ function sStep1()
 
 	createPath(testRoot("shots/"));
 
-	// case TAB object global
+	// An inherited-role control, whose text block lives in the Text section
+	// rather than the header, and the one control that owns none of its own
+	// position.
+	$sInput = sPlace("GuiInputCtrl");
+	$sMenuBar = sPlace("GuiMenuBarCtrl");
+
+	// case TAB object global [TAB "bottom" to scroll down first]
 	$sCases =
 		"pane-button"   TAB "$sButton"   NL
+		"pane-sections" TAB "$sButton"   TAB "bottom" NL
 		"pane-window"   TAB "$sWindow"   NL
 		"pane-tabpage"  TAB "$sPage"     NL
-		"pane-chainkid" TAB "$sChainKid";
+		"pane-chainkid" TAB "$sChainKid" NL
+		"pane-input"    TAB "$sInput"    NL
+		"pane-menubar"  TAB "$sMenuBar";
 	$sIndex = 0;
 	schedule(1000, 0, "sShoot");
 }
@@ -108,6 +117,18 @@ function sShoot()
 		}
 	}
 	%pane.dynamicPanel.setExpanded(true);
+
+	// The pane is taller than its frame, so the sections that come after the
+	// header are only visible from the bottom of the scroller.
+	%scroller = GuiEditor.inspectorWindow.scroller;
+	if(getField(%rec, 2) $= "bottom")
+	{
+		%scroller.scrollToBottom();
+	}
+	else
+	{
+		%scroller.scrollToTop();
+	}
 
 	// Let the chain, the grids and the panels settle before grabbing.
 	schedule(500, 0, "sGrab", %name);

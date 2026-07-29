@@ -910,6 +910,90 @@ GuiControlProfile* GuiControl::resolveDefaultTooltipProfile()
 	return dynamic_cast<GuiControlProfile*>(Sim::findObject("GuiDefaultProfile"));
 }
 
+// Wrap one paragraph of tooltip text to maxWidth, appending to lines and
+// returning the new line count. This is the word wrapping renderTooltip has
+// always done, lifted out so it can run once per paragraph -- a tooltip splits
+// on line breaks first now, which is what lets one carry a heading and an
+// explanation of what it means on separate lines.
+//
+// Not GuiControl::getLineList: that wraps only when the CONTROL wraps, and a
+// tooltip has to wrap whatever the control it belongs to does.
+static S32 wrapTooltipParagraph(const char* paragraph, GFont* font, const S32 maxWidth,
+    const S32 spaceWidth, FrameTemp<StringBuffer>& lines, S32 lineCount,
+    const S32 maxLines, S32& widestLine)
+{
+    const S32 wordCount = StringUnit::getUnitCount( paragraph, " " );
+    S32 lineWidth = 0;
+    S32 wordStartIndex = 0;
+    S32 wordEndIndex = 0;
+
+    while( true )
+    {
+        // Do we have any words left?
+        if ( wordEndIndex < wordCount )
+        {
+            // Yes, so fetch the word.
+            const char* pWord = StringUnit::getUnit( paragraph, wordEndIndex, " " );
+
+            // Add word length.
+            const S32 wordLength = (S32)font->getStrWidth( pWord ) + spaceWidth;
+
+            // Do we still have room?
+            if ( (lineWidth + wordLength) < maxWidth )
+            {
+                // Yes, so add word length.
+                lineWidth += wordLength;
+
+                // Next word.
+                wordEndIndex++;
+
+                continue;
+            }
+
+            // Do we have any lines left?
+            if ( lineCount < maxLines )
+            {
+                // Yes, so insert line.
+                lines[lineCount++] = StringUnit::getUnits( paragraph, wordStartIndex, wordEndIndex-1, " " );
+
+                // Update horizontal text bounds.
+                if ( lineWidth > widestLine )
+                    widestLine = lineWidth;
+            }
+
+            // Set new line length.
+            lineWidth = wordLength;
+
+            // Set word start.
+            wordStartIndex = wordEndIndex;
+
+            // Next word.
+            wordEndIndex++;
+
+            continue;
+        }
+
+        // Do we have any words left?
+        if ( wordStartIndex < wordCount )
+        {
+            // Yes, so do we have any lines left?
+            if ( lineCount < maxLines )
+            {
+                // Yes, so insert line.
+                lines[lineCount++] = StringUnit::getUnits( paragraph, wordStartIndex, wordCount-1, " " );
+
+                // Update horizontal text bounds.
+                if ( lineWidth > widestLine )
+                    widestLine = lineWidth;
+            }
+        }
+
+        break;
+    }
+
+    return lineCount;
+}
+
 bool GuiControl::renderTooltip(Point2I &cursorPos, const char* tipText )
 {
 #if !defined(TORQUE_OS_IOS) && !defined(TORQUE_OS_ANDROID) && !defined(TORQUE_OS_EMSCRIPTEN)
@@ -976,83 +1060,31 @@ bool GuiControl::renderTooltip(Point2I &cursorPos, const char* tipText )
     // Fetch the maximum allowed tooltip extent.
     const S32 maxTooltipWidth = mTooltipWidth;
 
-    // Fetch word count.
-    const S32 wordCount = StringUnit::getUnitCount( renderTip, " " );
-
     // Reset line storage.
     const S32 tooltipLineStride = (S32)font->getHeight() + 4;
     const S32 maxTooltipLines = 20;
     S32 tooltipLineCount = 0;
-    S32 tooltipLineWidth = 0;
     FrameTemp<StringBuffer> tooltipLines( maxTooltipLines );
 
-    // Reset word indexing.
-    S32 wordStartIndex = 0;
-    S32 wordEndIndex = 0;
-
-    // Search for end word.
-    while( true )
+    // Paragraph by paragraph, wrapping each to the tooltip width. Breaking on
+    // newlines first is what lets a tip say what a thing is on one line and
+    // what it does on the next.
+    const string tip(renderTip);
+    string::size_type paragraphStart = 0;
+    while ( paragraphStart <= tip.length() )
     {
-        // Do we have any words left?
-        if ( wordEndIndex < wordCount )
-        {
-            // Yes, so fetch the word.
-            const char* pWord = StringUnit::getUnit( renderTip, wordEndIndex, " " );
+        const string::size_type breakAt = tip.find('\n', paragraphStart);
+        const string paragraph = (breakAt == string::npos)
+            ? tip.substr(paragraphStart)
+            : tip.substr(paragraphStart, breakAt - paragraphStart);
 
-            // Add word length.
-            const S32 wordLength = (S32)font->getStrWidth( pWord ) + spaceWidth;
+        tooltipLineCount = wrapTooltipParagraph( paragraph.c_str(), font, maxTooltipWidth,
+            spaceWidth, tooltipLines, tooltipLineCount, maxTooltipLines, textBounds.x );
 
-            // Do we still have room?
-            if ( (tooltipLineWidth + wordLength) < maxTooltipWidth )
-            {
-                // Yes, so add word length.
-                tooltipLineWidth += wordLength;
+        if ( breakAt == string::npos )
+            break;
 
-                // Next word.
-                wordEndIndex++;
-
-                continue;
-            }
-
-            // Do we have any lines left?
-            if ( tooltipLineCount < maxTooltipLines )
-            {
-                // Yes, so insert line.
-                tooltipLines[tooltipLineCount++] = StringUnit::getUnits( renderTip, wordStartIndex, wordEndIndex-1, " " );
-
-                // Update horizontal text bounds.
-                if ( tooltipLineWidth > textBounds.x )
-                    textBounds.x = tooltipLineWidth;
-            }
-
-            // Set new line length.
-            tooltipLineWidth = wordLength;
-
-            // Set word start.
-            wordStartIndex = wordEndIndex;
-
-            // Next word.
-            wordEndIndex++;
-
-            continue;
-        }
-
-        // Do we have any words left?
-        if ( wordStartIndex < wordCount )
-        {
-            // Yes, so do we have any lines left?
-            if ( tooltipLineCount < maxTooltipLines )
-            {
-                // Yes, so insert line.
-                tooltipLines[tooltipLineCount++] = StringUnit::getUnits( renderTip, wordStartIndex, wordCount-1, " " );
-
-                // Update horizontal text bounds.
-                if ( tooltipLineWidth > textBounds.x )
-                    textBounds.x = tooltipLineWidth;
-            }
-        }
-
-        break;
+        paragraphStart = breakAt + 1;
     }
 
     // Controls the size of the inside (gutter) tooltip region.

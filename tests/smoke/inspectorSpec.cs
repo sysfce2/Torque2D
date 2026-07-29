@@ -322,9 +322,14 @@ function sStep5()
 	sCheck("tree view has both its sections",
 		%s.listHas(%s.sectionKeys("GuiTreeViewCtrl"), "List") &&
 		%s.listHas(%s.sectionKeys("GuiTreeViewCtrl"), "Tree"));
-	sCheck("window has its two sections",
-		%s.listHas(%s.sectionKeys("GuiWindowCtrl"), "Window") &&
+	// The window's six switches are an icon row in the header beside Title
+	// Height, not a section of six checkboxes, so Grips is all it has left.
+	sCheck("window has its Grips section",
 		%s.listHas(%s.sectionKeys("GuiWindowCtrl"), "Grips"));
+	sCheck("and no Window section", !%s.listHas(%s.sectionKeys("GuiWindowCtrl"), "Window"));
+	sCheck("its switches are named for the header instead",
+		getWordCount(%s.windowToggles()) == 6 &&
+		%s.listHas(%s.windowToggles(), "canClose"));
 	sCheck("plain control has no sections", %s.sectionKeys("GuiControl") $= "");
 	sCheck("window section titled",
 		%s.sectionTitle("GuiWindowCtrl", "Grips") $= "Resize Grips");

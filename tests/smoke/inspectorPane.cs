@@ -215,7 +215,12 @@ function pStep4()
 {
 	$pWindow = pAdd("GuiWindowCtrl");
 	%pane = pBind($pWindow);
-	pCheck("window has its Window section", pRowBuilt(%pane, "canClose"));
+	// The six switches are icons in the header's value block now, sharing a line
+	// with Title Height rather than costing a section of six checkboxes.
+	pCheck("window has no Window section", !pRowBuilt(%pane, "canClose"));
+	pCheck("its switches are in the header",
+		isObject(%pane.header.windowToggleRow) &&
+		isObject(%pane.header.windowButton["canClose"]));
 	pCheck("window has its Grips section", pRowBuilt(%pane, "resizeRightWidth"));
 	pCheck("window keeps its title text", %pane.header.textGrid.isVisible());
 	pCheck("window promotes titleHeight", pRowBuilt(%pane, "titleHeight"));
@@ -223,7 +228,8 @@ function pStep4()
 	// Moving to a slider must take the window's fields away again.
 	$pSlider = pAdd("GuiSliderCtrl");
 	%pane = pBind($pSlider);
-	pCheck("window fields gone after reselect", !pRowBuilt(%pane, "canClose"));
+	pCheck("window fields gone after reselect", !pRowBuilt(%pane, "resizeRightWidth"));
+	pCheck("and its switch row went with them", !isObject(%pane.header.windowToggleRow));
 	pCheck("slider has its ticks", pRowBuilt(%pane, "ticks"));
 	pCheck("slider promotes range", pRowBuilt(%pane, "range"));
 	pCheck("slider hides the header text block", !%pane.header.textGrid.isVisible());
@@ -232,7 +238,8 @@ function pStep4()
 
 	// And back again, to prove the rebuild is not one-way.
 	%pane = pBind($pWindow);
-	pCheck("window fields returned", pRowBuilt(%pane, "canClose"));
+	pCheck("window fields returned", pRowBuilt(%pane, "resizeRightWidth"));
+	pCheck("and so did its switch row", isObject(%pane.header.windowToggleRow));
 	pCheck("slider fields gone", !pRowBuilt(%pane, "ticks"));
 
 	schedule(200, 0, "pStep5");

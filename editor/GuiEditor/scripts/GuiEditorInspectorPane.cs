@@ -67,6 +67,12 @@ function GuiEditorInspectorPane::build(%this)
 	// remainder evenly -- which is what makes dragging the frame wider add
 	// columns rather than whitespace.
 	%this.rowWidth = 220;
+
+	// Half of that, for the sections whose fields are read in pairs: an easing
+	// and the time it takes, a tooltip's width and its delay, a window's title
+	// height and its six switches.
+	%this.pairWidth = 152;
+
 	%this.rowFields = "";
 	%this.panelList = "";
 	%this.classPanels = "";
@@ -123,8 +129,11 @@ function GuiEditorInspectorPane::build(%this)
 	// is art for them, so neither has a row here.
 	%this.buildSection("Layout", "Layout", "MinExtent");
 	%this.buildSection("Command", "Command", "Command AltCommand Variable Accelerator");
-	%this.buildSection("Animation", "Animation", %this.spec.easingFields());
-	%this.buildSection("Tooltip", "Tooltip", %this.spec.tooltipFields());
+
+	// Each easing beside the time it takes: hover on one line, press on the next.
+	%this.buildSection("Animation", "Animation", %this.spec.easingFields(), %this.pairWidth);
+
+	%this.buildTooltipSection();
 	%this.buildSection("Localization", "Localization", "langTableMod textID");
 	%this.buildSection("Scripting", "Scripting", "class superclass internalName");
 
@@ -167,7 +176,12 @@ function GuiEditorInspectorPane::forceLayout(%this)
 // The grid configuration every block here uses, matching what the native
 // inspector gave its group grids. A hidden cell is skipped rather than left as
 // a hole, so filtering closes the gap (GuiGridCtrl::resize).
-function GuiEditorInspectorPane::makeCellGrid(%this, %y)
+// %cellW is the NARROWEST a column may be, not its width: the grid fits as many
+// columns as the pane can hold at that size and shares the remainder evenly. So
+// a section that wants its fields in pairs asks for half a pane rather than
+// arranging them itself -- and still reflows to one column when the frame is
+// dragged narrow. Omit it for the ordinary one-field-per-row width.
+function GuiEditorInspectorPane::makeCellGrid(%this, %y, %cellW)
 {
 	%grid = new GuiGridCtrl()
 	{
@@ -176,7 +190,7 @@ function GuiEditorInspectorPane::makeCellGrid(%this, %y)
 		Extent = %this.paneWidth SPC 4;
 		CellModeX = "variable";
 		CellModeY = "variable";
-		CellSizeX = %this.rowWidth;
+		CellSizeX = (%cellW $= "") ? %this.rowWidth : %cellW;
 		CellSizeY = 48;
 		CellSpacingX = 4;
 		CellSpacingY = 4;
@@ -235,6 +249,39 @@ function GuiEditorInspectorPane::buildTextSection(%this)
 	}
 }
 
+// The tooltip is a paragraph rather than a caption -- it is where an editor
+// answers a question instead of sending someone looking -- so it gets the same
+// three-line box the text block uses, at the full width of the pane. Its width
+// and its delay are two small numbers that read as a pair, so they share the
+// line beneath it.
+function GuiEditorInspectorPane::buildTooltipSection(%this)
+{
+	%panel = %this.makeSectionPanel("Tooltip");
+	%this.add(%panel);
+
+	%chain = new GuiChainCtrl()
+	{
+		HorizSizing = "width";
+		Position = "0 24";
+		Extent = %this.paneWidth SPC 4;
+		IsVertical = true;
+		ChildSpacing = 2;
+	};
+	ThemeManager.setProfile(%chain, "emptyProfile");
+	%panel.add(%chain);
+
+	%this.panel["Tooltip"] = %panel;
+	%this.panelFields["Tooltip"] = %this.spec.tooltipFields();
+	%this.panelList = (%this.panelList $= "") ? "Tooltip" : (%this.panelList SPC "Tooltip");
+
+	%this.addFieldRow(%chain, "tooltip", %this.spec.labelFor("tooltip"), "multiline", "");
+
+	%grid = %this.makeCellGrid(0, %this.pairWidth);
+	%chain.add(%grid);
+	%this.addFieldRow(%grid, "tooltipWidth", %this.spec.labelFor("tooltipWidth"), "number", "");
+	%this.addFieldRow(%grid, "hovertime", %this.spec.labelFor("hovertime"), "number", "");
+}
+
 function GuiEditorInspectorPane::makeTextBlock(%this, %parent, %y)
 {
 	%block = new GuiChainCtrl()
@@ -254,12 +301,12 @@ function GuiEditorInspectorPane::makeTextBlock(%this, %parent, %y)
 	return %block;
 }
 
-function GuiEditorInspectorPane::buildSection(%this, %key, %title, %fields)
+function GuiEditorInspectorPane::buildSection(%this, %key, %title, %fields, %cellW)
 {
 	%panel = %this.makeSectionPanel(%title);
 	%this.add(%panel);
 
-	%grid = %this.makeCellGrid(24);
+	%grid = %this.makeCellGrid(24, %cellW);
 	%panel.add(%grid);
 
 	%this.panel[%key] = %panel;
@@ -301,7 +348,7 @@ function GuiEditorInspectorPane::makeFieldRow(%this, %container, %field, %label,
 
 	// This pane has no reset-to-default, so the row's reset button -- which
 	// means "back to the theme's stamped value" and has no analogue here --
-	// never appears. The one exception is the font colour row, where the button
+	// never appears. The one exception is the font color row, where the button
 	// means "stop overriding the profile" and the text block asks for it back.
 	%row.resetButton.setVisible(false);
 	return %row;
@@ -853,7 +900,7 @@ function GuiEditorInspectorPane::refresh(%this)
 		// never registered.
 		//
 		// fontColor is skipped for a different reason: what its swatch shows is
-		// the profile's colour while the control is not overriding it, which is
+		// the profile's color while the control is not overriding it, which is
 		// not what the field holds. The block works that out.
 		if(!isObject(%row) || %this.isProfileSlot(%field) || %field $= "fontColor")
 		{
@@ -863,7 +910,7 @@ function GuiEditorInspectorPane::refresh(%this)
 	}
 
 	// What the text block holds beyond its three field rows: two segmented rows,
-	// two toggles, and the font colour swatch.
+	// two toggles, and the font color swatch.
 	%block = %this.activeTextBlock();
 	if(isObject(%block))
 	{
@@ -1031,6 +1078,8 @@ function GuiEditorInspectorPane::refreshToggles(%this)
 	%header.activeButton.setValue(%this.target.Active);
 	%header.inputButton.setValue(%this.target.useInput);
 	%header.containerButton.setValue(%this.target.isContainer);
+
+	%header.refreshWindowToggles(%this.target);
 }
 
 // A segmented row in the header picked a value. Same contract as the toggles:
@@ -1046,35 +1095,17 @@ function GuiEditorInspectorPane::onHeaderChoiceChanged(%this, %field, %value)
 	%this.afterCommit();
 }
 
-// A toggle reports the click and lets the pane decide what the value becomes,
-// so that every write to the control still goes through one place.
-function GuiEditorInspectorPane::onToggleChanged(%this, %field)
+// A toggle reports the click and the value it flipped itself to, and the pane
+// does the writing -- so that every write to the control still goes through one
+// place, and a new toggle needs no case of its own here.
+function GuiEditorInspectorPane::onToggleChanged(%this, %field, %value)
 {
 	if(%this.populating || !isObject(%this.target))
 	{
 		return;
 	}
 
-	// Every widget in the row holds its own state and has already flipped it, so
-	// the value is read back rather than derived -- the control and the widget
-	// can never disagree about what was just asked for.
-	%header = %this.header;
-	switch$(%field)
-	{
-		case "hidden":
-			%this.writeField("hidden", %header.hiddenButton.getValue());
-		case "locked":
-			%this.writeField("locked", %header.lockedButton.getValue());
-		case "Visible":
-			%this.writeField("Visible", %header.visibleButton.getValue());
-		case "Active":
-			%this.writeField("Active", %header.activeButton.getValue());
-		case "useInput":
-			%this.writeField("useInput", %header.inputButton.getValue());
-		case "isContainer":
-			%this.writeField("isContainer", %header.containerButton.getValue());
-	}
-
+	%this.writeField(%field, %value);
 	%this.refreshToggles();
 	%this.afterCommit();
 }
@@ -1208,7 +1239,7 @@ function GuiEditorInspectorPane::setCategory(%this, %category)
 	}
 
 	// Everything downstream of the profile moves with it -- which profiles the
-	// slot now offers, and the font colour the swatch falls back to.
+	// slot now offers, and the font color the swatch falls back to.
 	%this.refresh();
 	%this.afterCommit();
 }
@@ -1330,8 +1361,8 @@ function GuiEditorInspectorPane::onProfileRowCommit(%this, %row)
 
 	%field = %row.fieldName;
 
-	// The font colour swatch is two fields, and the second of them is why the
-	// changed test cannot come first: picking the colour the profile already
+	// The font color swatch is two fields, and the second of them is why the
+	// changed test cannot come first: picking the color the profile already
 	// draws in is a real edit when the override was off.
 	if(%field $= "fontColor")
 	{
@@ -1467,19 +1498,19 @@ function GuiEditorInspectorPane::commitText(%this, %row)
 }
 
 //-----------------------------------------------------------------------------
-// Font colour, which is two fields wearing one widget. overrideFontColor is
+// Font color, which is two fields wearing one widget. overrideFontColor is
 // what decides whether fontColor is used at all (guiControl.cc renderText), and
 // on its own it is a checkbox that does nothing visible -- so the swatch is
-// both: picking a colour turns the override on, and the row's reset button
-// turns it off again. With it off the swatch shows the profile's own colour,
+// both: picking a color turns the override on, and the row's reset button
+// turns it off again. With it off the swatch shows the profile's own color,
 // so the row always says what the control will actually draw in.
 //-----------------------------------------------------------------------------
 
 function GuiEditorInspectorPane::commitFontColor(%this, %row)
 {
-	// Nothing to do only when the colour is unchanged AND the override was
-	// already on. Picking the profile's exact colour while it was off is the
-	// user asking to pin that colour down, which is a change to the control
+	// Nothing to do only when the color is unchanged AND the override was
+	// already on. Picking the profile's exact color while it was off is the
+	// user asking to pin that color down, which is a change to the control
 	// even though the swatch looks the same.
 	if(!%row.hasChanged() && %this.target.overrideFontColor)
 	{
@@ -1496,7 +1527,7 @@ function GuiEditorInspectorPane::commitFontColor(%this, %row)
 
 // The row widget's reset means "back to the theme's stamped value" everywhere
 // else, which has no analogue for a control -- so every other row here hides
-// the button. The font colour row keeps it, meaning "stop overriding the
+// the button. The font color row keeps it, meaning "stop overriding the
 // profile's".
 function GuiEditorInspectorPane::onProfileRowReset(%this, %row)
 {

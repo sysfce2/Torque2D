@@ -212,11 +212,9 @@ function GuiEditorControlSpec::buildSections(%this)
 
 	%this.addSection("GuiTabBookCtrl", "Tabs", "Tabs", "MinTabWidth");
 
-	// The six window toggles are a second icon row rather than six checkboxes;
-	// the pane reads this key specially. Kept here so the field list stays in
-	// one place.
-	%this.addSection("GuiWindowCtrl", "Window", "Window",
-		"canMove canClose canMinimize canMaximize resizeWidth resizeHeight");
+	// The six window toggles have no section: they are an icon row beside Title
+	// Height in the header, where six switches take one line instead of six.
+	// See GuiEditorControlSpec::windowToggles.
 	%this.addSection("GuiWindowCtrl", "Grips", "Resize Grips",
 		"resizeRightWidth resizeBottomHeight");
 
@@ -369,9 +367,11 @@ function GuiEditorControlSpec::localizationFields(%this)
 	return "langTableMod textID";
 }
 
+// Each easing beside the time it takes, because that is how they are read: the
+// section runs them in pairs and the grid puts two on a line.
 function GuiEditorControlSpec::easingFields(%this)
 {
-	return "easeFillColorHL easeFillColorSL easeTimeFillColorHL easeTimeFillColorSL";
+	return "easeFillColorHL easeTimeFillColorHL easeFillColorSL easeTimeFillColorSL";
 }
 
 // The toggles the header draws as icons instead of rows. Visible, Active and
@@ -385,6 +385,14 @@ function GuiEditorControlSpec::runtimeToggles(%this)
 function GuiEditorControlSpec::editorToggles(%this)
 {
 	return "hidden locked";
+}
+
+// A window's six switches, which are what its title bar offers and what it lets
+// you do to it. Six captioned checkboxes were a section of their own; six icons
+// are a row that fits beside Title Height.
+function GuiEditorControlSpec::windowToggles(%this)
+{
+	return "canMove canClose canMinimize canMaximize resizeWidth resizeHeight";
 }
 
 // Never shown anywhere, for any class.
@@ -444,11 +452,22 @@ function GuiEditorControlSpec::classHides(%this, %class, %field)
 // none    the parent owns all of it
 // chainV  a vertical chain owns the Y position and the vertical sizing
 // chainH  a horizontal chain owns the X position and the horizontal sizing
+// bar     the control owns nothing but its height -- see below
 function GuiEditorControlSpec::geometryModeOf(%this, %ctrl)
 {
 	if(!isObject(%ctrl))
 	{
 		return "full";
+	}
+
+	// The one class that overrules its own geometry rather than its parent's.
+	// GuiMenuBarCtrl::resize throws away the position it is handed and passes
+	// (0,0), and onRender resizes the bar to the clip rect's width on every
+	// frame it draws -- but it keeps mBounds.extent.y, so the bar's height is
+	// its own and is the only geometry there is to set on it.
+	if(%ctrl.getClassName() $= "GuiMenuBarCtrl")
+	{
+		return "bar";
 	}
 
 	// A tab page's geometry is not its parent's doing alone -- the class is
@@ -483,12 +502,30 @@ function GuiEditorControlSpec::geometryModeOf(%this, %ctrl)
 	return "full";
 }
 
+// Grey or gone. Where the PARENT owns a field the control still has one, and
+// blanking it would leave no way to see where the parent put it -- so those are
+// greyed, with a tooltip saying why. Where the control's own class overwrites a
+// field every frame there is nothing to look at, so the row goes entirely.
+function GuiEditorControlSpec::isGeometryFieldShown(%this, %mode, %field)
+{
+	if(%mode $= "bar")
+	{
+		return %field $= "Extent";
+	}
+	return true;
+}
+
 // True when the control, sitting where it is, may edit this geometry field.
 function GuiEditorControlSpec::isGeometryFieldLive(%this, %mode, %field)
 {
 	if(%mode $= "none")
 	{
 		return false;
+	}
+	if(%mode $= "bar")
+	{
+		// Only the extent, and only half of it -- see liveExtentAxes.
+		return %field $= "Extent";
 	}
 	if(%mode $= "chainV")
 	{
@@ -507,8 +544,22 @@ function GuiEditorControlSpec::livePositionAxes(%this, %mode)
 	switch$(%mode)
 	{
 		case "none": return "";
+		case "bar": return "";
 		case "chainV": return "x";
 		case "chainH": return "y";
+	}
+	return "xy";
+}
+
+// The same question for the extent. A menu bar is the one control that owns one
+// axis of its size and not the other: its width is rewritten to its parent's on
+// every frame it draws, and its height is never touched.
+function GuiEditorControlSpec::liveExtentAxes(%this, %mode)
+{
+	switch$(%mode)
+	{
+		case "none": return "";
+		case "bar": return "y";
 	}
 	return "xy";
 }
@@ -546,6 +597,15 @@ function GuiEditorControlSpec::isFieldVisible(%this, %class, %field)
 
 		// The layout half needs renderText to actually run on this control.
 		if(%role $= "caption")
+		{
+			return false;
+		}
+
+		// A placeholder is one line by definition. It is what a drop-down draws
+		// while nothing is chosen and it stops being drawn the moment something
+		// is, so wrapping it -- or sizing the control to fit it -- describes a
+		// control that changes shape when it is used.
+		if(%role $= "placeholder" && (%field $= "textWrap" || %field $= "textExtend"))
 		{
 			return false;
 		}
@@ -621,8 +681,8 @@ function GuiEditorControlSpec::textBlockHome(%this, %class)
 // registry and are filtered and loaded with everything else. The other four are
 // two toggle icons and two segmented rows, which the block owns outright.
 //
-// overrideFontColor is in neither group: it has no row at all. The font colour
-// swatch is both fields, because picking a colour IS turning the override on.
+// overrideFontColor is in neither group: it has no row at all. The font color
+// swatch is both fields, because picking a color IS turning the override on.
 function GuiEditorControlSpec::textBlockRowFields(%this)
 {
 	return "text fontSizeAdjust fontColor";
@@ -757,7 +817,9 @@ function GuiEditorControlSpec::buildLabels(%this)
 	%this.label["useInput"] = "Accepts Input";
 	%this.label["isContainer"] = "Accepts Children";
 	%this.label["hovertime"] = "Hover Time";
+	%this.label["tooltip"] = "Tooltip";
 	%this.label["tooltipWidth"] = "Tooltip Width";
+	%this.label["class"] = "Class";
 	%this.label["langTableMod"] = "Language Table";
 	%this.label["textID"] = "Text ID";
 	%this.label["fontSizeAdjust"] = "Font Size Adjust";
