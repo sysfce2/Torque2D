@@ -350,7 +350,12 @@ function uStepAdd()
 
 	GuiEditor.brain.setCurrentAddSet($uPanel);
 
-	$uDropped = new GuiCheckBoxCtrl() { Position = "0 0"; Extent = "120 30"; Text = "Dropped"; };
+	// Position, not the point handed to the callback, is what a drop is placed
+	// from: the payload is not owned yet, so its own global position is where the
+	// cursor let go. It has to be over the canvas -- a drop that is not is a drag
+	// taken back to the palette and abandoned, and adds nothing at all. The panel
+	// this lands in sits at 10,10 inside a canvas that starts at 366,26.
+	$uDropped = new GuiCheckBoxCtrl() { Position = "400 60"; Extent = "120 30"; Text = "Dropped"; };
 	GuiEditor.brain.onControlDropped($uDropped, "50 50");
 
 	uCheck("a drop is one step, not one per thing it did", uUndoCount() == 1);

@@ -237,33 +237,16 @@ function GuiEditorControlTile::onClick(%this)
 		return;
 	}
 
+	// Centred in the container being worked in, which the brain knows because it
+	// owns both the add set and the canvas the container has to be visible on.
+	//
 	// onControlDropped reads getGlobalPosition BEFORE addNewCtrl reparents, and
 	// puts the control back there afterwards. Nothing owns the payload yet, so
 	// its Position IS its global position.
-	%payload.Position = %this.dropPosition(%payload);
+	%payload.Position = GuiEditor.brain.centredPlacement(%payload);
 
 	// Deliberately not onControlDragged first: that picks the add set by
 	// hit-testing the cursor, and a click means "the container I am already
 	// working in", not "whatever is under this point".
 	GuiEditor.brain.onControlDropped(%payload, %payload.Position);
-}
-
-// Centred in the current add set, which is the container the editor is already
-// adding to; addNewControl falls back to the root when there is none.
-function GuiEditorControlTile::dropPosition(%this, %payload)
-{
-	%target = GuiEditor.brain.getCurrentAddSet();
-	if(!isObject(%target))
-	{
-		%target = GuiEditor.rootGui;
-	}
-
-	%at = %target.getGlobalPosition();
-	%room = %target.getExtent();
-	%size = %payload.getExtent();
-
-	%x = getWord(%at, 0) + ((getWord(%room, 0) - getWord(%size, 0)) / 2);
-	%y = getWord(%at, 1) + ((getWord(%room, 1) - getWord(%size, 1)) / 2);
-
-	return mFloor(%x) SPC mFloor(%y);
 }
