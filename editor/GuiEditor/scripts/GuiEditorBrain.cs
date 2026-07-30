@@ -28,6 +28,24 @@ function GuiEditorBrain::onControlDropped(%this, %payload, %position)
    %x = getWord(%pos, 0);
    %y = getWord(%pos, 1);
 
+   %this.acceptControl(%payload);
+
+   %payload.setPositionGlobal(%x, %y);
+   %this.schedule(40, "finishControlDropped", %payload, %x, %y);
+}
+
+// Everything about a control arriving in the document except where it lands.
+//
+// A drop knows where the cursor was and so places the control in global
+// coordinates, twice, because the container it landed in may have moved it. A
+// paste has no cursor: it knows the position the control held in its old parent,
+// which is a local one, and sets it before calling this - so the properties pane
+// reads the position the control is going to keep. Everything else is the same
+// for both, and lives here rather than in each caller: the undo record, the
+// theme, the selection, and the events the Explorer tree and the panes listen
+// for.
+function GuiEditorBrain::acceptControl(%this, %payload)
+{
    // The add itself is the undo step, recorded from onAddNewCtrl below.
    %this.addNewCtrl(%payload);
 
@@ -58,11 +76,9 @@ function GuiEditorBrain::onControlDropped(%this, %payload, %position)
       %this.postEvent("Rethemed", %payload);
    }
 
-   %payload.setPositionGlobal(%x, %y);
    %this.setFirstResponder();
    %this.postEvent("AddControl", %payload);
-    %this.postEvent("Inspect", %payload);
-   %this.schedule(40, "finishControlDropped", %payload, %x, %y);
+   %this.postEvent("Inspect", %payload);
 }
 
 function GuiEditorBrain::finishControlDropped(%this, %payload, %x, %y)
@@ -218,6 +234,12 @@ function GuiEditorBrain::onAddNewCtrlSet(%this, %selection)
 }
 
 // Put the selection on the controls a replay changed, and tell everyone.
+function GuiEditorBrain::restoreSelection(%this, %list)
+{
+    %this.selectList(%list);
+}
+
+// Select exactly these controls, and say so.
 //
 // The announcement has to be made here, because addSelection makes none:
 // it is the receiving half of the bus - what this class calls, under radio
@@ -225,7 +247,7 @@ function GuiEditorBrain::onAddNewCtrlSet(%this, %selection)
 // changes the C++ selection and says nothing. Calling it on its own leaves the
 // canvas drawing handles round a control the properties pane has never heard
 // of, and the clearSelection ahead of it has already emptied the pane.
-function GuiEditorBrain::restoreSelection(%this, %list)
+function GuiEditorBrain::selectList(%this, %list)
 {
     // Already the selection, with values that changed underneath it - which is
     // the commonest undo there is: change a setting, press Ctrl+Z. Re-announcing
@@ -268,6 +290,8 @@ function GuiEditorBrain::toggleMenuItems(%this)
 {
     %count = %this.getSelected().getCount();
     EditorCore.menuBar.setMenuActive("Deselect", %count != 0);
+    EditorCore.menuBar.setMenuActive("Cut", %count != 0);
+    EditorCore.menuBar.setMenuActive("Copy", %count != 0);
     EditorCore.menuBar.setMenuActive("Nudge Up", %count != 0);
     EditorCore.menuBar.setMenuActive("Nudge Down", %count != 0);
     EditorCore.menuBar.setMenuActive("Nudge Left", %count != 0);

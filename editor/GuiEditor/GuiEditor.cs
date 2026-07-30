@@ -68,6 +68,9 @@ function GuiEditor::create( %this )
     exec("./scripts/GuiEditorUndoAction.cs");
     exec("./scripts/GuiEditorUndoRecorder.cs");
 
+    // Copy, cut and paste, which is undo's machinery plus a deep clone.
+    exec("./scripts/GuiEditorClipboard.cs");
+
 	%this.guiPage = EditorCore.RegisterEditor("Gui Editor", %this);
 
     // What the control palette can offer and what each entry looks like. Built
@@ -104,6 +107,15 @@ function GuiEditor::create( %this )
     %this.undoRecorder = new ScriptObject()
     {
         class = "GuiEditorUndoRecorder";
+        owner = %this;
+    };
+
+    // Holds copied controls for as long as the editor is open, which is longer
+    // than any one document: a copy taken from one Gui can be pasted into the
+    // next one opened.
+    %this.clipboard = new ScriptObject()
+    {
+        class = "GuiEditorClipboard";
         owner = %this;
     };
 
@@ -365,6 +377,13 @@ function GuiEditor::destroy( %this )
 		%this.undoRecorder.clear();
 		%this.undoRecorder.delete();
 	}
+
+	// The copies it holds are real controls wearing real profiles, so they go the
+	// same way and for the same reason: before the profiles do.
+	if(isObject(%this.clipboard))
+	{
+		%this.clipboard.delete();
+	}
 }
 
 function GuiEditor::open(%this, %content)
@@ -381,12 +400,13 @@ function GuiEditor::open(%this, %content)
     EditorCore.menuBar.setMenuActive("Layout", true);
     EditorCore.menuBar.setMenuActive("Select", true);
 
-    // Undo and Redo are greyed from the stacks; the other three items on the Edit
-    // menu are still stubs and must not look live.
-    EditorCore.menuBar.setMenuActive("Cut", false);
-    EditorCore.menuBar.setMenuActive("Copy", false);
-    EditorCore.menuBar.setMenuActive("Paste", false);
+    // Undo and Redo are greyed from the stacks, Cut and Copy from the selection,
+    // and Paste from whether anything has been copied. All three of the last are
+    // cached against what the menu was last told, so they are forced here: the
+    // menu looks new every time the editor is opened.
     %this.undoRecorder.forceRefreshMenu();
+    %this.clipboard.forceRefreshMenu();
+    %this.brain.toggleMenuItems();
 
     editorMode(true);
 }
@@ -699,6 +719,11 @@ function GuiEditor::detachTheme(%this, %theme, %profile)
 	// exist to move back to.
 	%this.undoRecorder.clear();
 
+	// And the clipboard holds controls whose profile fields are raw pointers to
+	// the same doomed profiles. Nothing reads them while the copy sits in the
+	// stash, but a paste would - and by then the profile is gone.
+	%this.clipboard.clear();
+
 	%this.themeApplier.detach(%this.rootGui, %theme, %profile);
 }
 
@@ -874,19 +899,40 @@ function GuiEditor::inDocument(%this, %ctrl)
     return false;
 }
 
-function GuiEditor::Cut(%this)
-{
-    
-}
+//CLIPBOARD--------------------------------------------------------------------
+//
+// The copies live on GuiEditorClipboard; these three are the Edit menu's way in.
+// Ctrl+X/C/V reach them as menu accelerators, which the canvas only consults
+// once the first responder has passed on the key (guiCanvas.cc) - so a text box
+// in the properties pane keeps Ctrl+C for its own text, and the canvas gets it
+// only when nothing else wanted it.
+//-----------------------------------------------------------------------------
 
 function GuiEditor::Copy(%this)
 {
-    
+    %this.clipboard.copy(%this.brain.getSelected());
+}
+
+// Copy, then the delete the Delete key already does: the C++ moves the selection
+// into the trash and announces it, which the recorder turns into one undo step
+// (GuiEditorBrain::onTrashSelection). Nothing is deleted for real, so a cut is
+// undoable and the controls it took are still alive in the trash - which is also
+// why a cut and paste keeps the names it had: a trashed control is not in the
+// document, so nothing there holds its name.
+function GuiEditor::Cut(%this)
+{
+    if(!%this.clipboard.copy(%this.brain.getSelected()))
+    {
+        return;
+    }
+
+    %this.brain.deleteSelection();
+    %this.brain.onDelete();
 }
 
 function GuiEditor::Paste(%this)
 {
-    
+    %this.clipboard.paste();
 }
 
 //LAYOUT-----------------------------------------------------------------------

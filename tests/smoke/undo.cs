@@ -657,7 +657,12 @@ function uStepMenu()
 
 	uCheck("the Edit menu exists", isObject(%editMenu));
 	uCheck("and is offered at last", %editMenu.Active);
-	uCheck("Cut is still a stub and is not offered", !%cutItem.Active);
+
+	// Cut belongs to the clipboard now, and it follows the selection rather than
+	// the undo stack - tests/smoke/clipboard.cs is where that is checked. Here it
+	// is only worth knowing that this suite left a selection behind, since undo
+	// moves one.
+	uCheck("Cut is offered while something is selected", %cutItem.Active);
 
 	GuiEditor.undoRecorder.clear();
 	uCheck("Undo is greyed with an empty stack", !%undoItem.Active);

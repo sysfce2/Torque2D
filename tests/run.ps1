@@ -73,8 +73,8 @@ $KeepProject = @('bitmapPathRead')
 $Order = @(
     'profileEditor', 'profileForm', 'border', 'borderPane', 'standalone',
     'headerPane', 'colorPopup', 'themeApply', 'font', 'assetPicker',
-    'tooltipProfile', 'textClick', 'undo', 'bitmapPathWrite', 'bitmapPathRead',
-    'toybox', 'planetX'
+    'tooltipProfile', 'textClick', 'undo', 'clipboard', 'bitmapPathWrite',
+    'bitmapPathRead', 'toybox', 'planetX'
 )
 
 if (-not (Test-Path $Exe)) {
