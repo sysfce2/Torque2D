@@ -257,11 +257,10 @@ SimObject* GuiTreeViewCtrl::getItemObject(TreeItem* item)
 	return item ? static_cast<SimObject*>(item->itemData) : nullptr;
 }
 
-void GuiTreeViewCtrl::reorderFromDrag()
+SimGroup* GuiTreeViewCtrl::resolveDropTarget(TreeItem* dragItem)
 {
-	TreeItem* dragItem = grabItemPtr(mDragIndex);
 	if (!dragItem)
-		return;
+		return NULL;
 
 	if (mReorderMethod == ReorderMethod::Below && dragItem->isOpen)
 	{
@@ -270,19 +269,55 @@ void GuiTreeViewCtrl::reorderFromDrag()
 
 	// The container the dragged items land in: the drag item itself when
 	// inserting into it, otherwise the drag item's parent branch. For a
-	// non-Insert drop at the root there is no parent branch, so bail.
+	// non-Insert drop at the root there is no parent branch.
 	TreeItem* targetItem = (mReorderMethod == ReorderMethod::Insert) ? dragItem : dragItem->trunk;
 	if (!targetItem)
-		return;
+		return NULL;
 
 	// The drop target must be a real SimGroup (a GuiControl hierarchy). If the
 	// item's object isn't one - or was deleted - there is nothing to reorder.
-	SimGroup* target = dynamic_cast<SimGroup*>(getItemObject(targetItem));
+	return dynamic_cast<SimGroup*>(getItemObject(targetItem));
+}
+
+bool GuiTreeViewCtrl::selectionAcceptsTarget(SimGroup* target)
+{
+	// A non-GuiControl target answers NULL here, which is the right question to
+	// ask: a control that insists on a particular kind of parent is not at home
+	// in a bare SimGroup either.
+	GuiControl* parent = dynamic_cast<GuiControl*>(target);
+
+	for (S32 i = 0; i < mItems.size(); i++)
+	{
+		TreeItem* treeItem = dynamic_cast<TreeItem*>(mItems[i]);
+		if (treeItem && treeItem->isSelected)
+		{
+			GuiControl* ctrl = dynamic_cast<GuiControl*>(getItemObject(treeItem));
+			if (ctrl && !ctrl->canBeChildOf(parent))
+				return false;
+		}
+	}
+
+	return true;
+}
+
+void GuiTreeViewCtrl::reorderFromDrag()
+{
+	TreeItem* dragItem = grabItemPtr(mDragIndex);
+	if (!dragItem)
+		return;
+
+	SimGroup* target = resolveDropTarget(dragItem);
 	if (!target)
 	{
 		Con::warnf("GuiTreeViewCtrl::reorderFromDrag - drop target is not a SimGroup; ignoring reorder");
 		return;
 	}
+
+	// The drag indicator has already refused this, so reaching it means the
+	// hover and the drop disagreed. Bail rather than move a control somewhere it
+	// said it does not belong.
+	if (!selectionAcceptsTarget(target))
+		return;
 
 	// Past every bail, so the rearrangement below is certain to happen. A drop
 	// can move any number of selected items into any number of containers, and
@@ -323,7 +358,15 @@ void GuiTreeViewCtrl::reorderFromDrag()
 			if (obj)
 			{
 				target->addObject(obj);
-				target->bringObjectToFront(obj);
+
+				// A container is allowed to turn a child away inside addObject -
+				// a tab book re-homes anything that is not a page - so the object
+				// may not be in the target at all. bringObjectToFront reads
+				// front() to build its argument, before reOrder gets the chance
+				// to notice the object is not a member, and front() on an empty
+				// list dereferences nothing at all.
+				if (target->isMember(obj))
+					target->bringObjectToFront(obj);
 			}
 		}
 	}
@@ -335,8 +378,8 @@ void GuiTreeViewCtrl::reorderFromDrag()
 			group->bringObjectToFront(obj);
 	}
 
-	// target is the same object as the container above; reorder its children.
-	GuiControl* control = dynamic_cast<GuiControl*>(getItemObject(targetItem));
+	// The container the items landed in; tell it its children moved.
+	GuiControl* control = dynamic_cast<GuiControl*>(target);
 	if (control)
 	{
 		control->childrenReordered();
@@ -589,6 +632,15 @@ S32 GuiTreeViewCtrl::getHitIndex(const GuiEvent& event)
 						mIsDragLegal = false;
 						break;
 					}
+				}
+
+				// And the controls get a say in where they are put. A drop the
+				// tree would refuse must not draw an indicator promising it -
+				// nothing happening is a great deal harder to read than no line
+				// appearing in the first place.
+				if (mIsDragLegal && !selectionAcceptsTarget(resolveDropTarget(treeItem)))
+				{
+					mIsDragLegal = false;
 				}
 
 				mDragIndex = j;

@@ -168,15 +168,43 @@ function GuiEditorBrain::acceptControl(%this, %payload)
    // The add itself is the undo step, recorded from onAddNewCtrl below.
    %this.addNewCtrl(%payload);
 
+   // Between the two, so the page is in the book before the theme walks it and
+   // after the book's own add has been recorded. A tab book with no pages is a
+   // book with nothing to put anything in, and the palette no longer offers the
+   // page that would fix that.
+   //
+   // The page is added with a plain add(), which announces nothing, so nothing
+   // records it: undo of the drop puts the book in the trash with its page
+   // inside, which is one step, which is what the user did.
+   if(%payload.isMemberOfClass("GuiTabBookCtrl") && %payload.getCount() == 0)
+   {
+      %this.newTabPage(%payload);
+   }
+
+   %this.adoptControl(%payload);
+}
+
+// The half of arriving that is the same however a control got here: the theme it
+// takes on, and the events that tell the Explorer tree and the panes about it.
+//
+// Split out because a tab page arrives by neither of the routes above. Its book
+// makes it, from the "+" tab, and it needs all of this and none of the
+// placement.
+//
+// The undo record is deliberately NOT here, because what counts as one step
+// differs by caller: a dropped control is a step of its own, and a page seeded
+// inside a book that is itself arriving is part of that book arriving.
+function GuiEditorBrain::adoptControl(%this, %ctrl)
+{
    // A control arrives wearing whatever its C++ constructor named - a
    // GuiWindowCtrl names five, from GuiWindowProfile down - so put it on the
    // Gui's theme straight away. Themed on arrival is the whole point: the drop
    // is the last time anyone should have to think about which profile a button
    // wants.
    //
-   // This has to run after addNewCtrl, because the control's parent decides
+   // This has to run after the control has a parent, because the parent decides
    // which category it takes (a control sitting directly on the root is the
-   // Gui's backdrop and gets Panel, not Label). But addNewCtrl is also what
+   // Gui's backdrop and gets Panel, not Label). But adding it is also what
    // announces the selection, so everything that inspects the control has
    // already read it wearing the constructor's profiles. Rethemed tells them to
    // look again.
@@ -189,15 +217,106 @@ function GuiEditorBrain::acceptControl(%this, %payload)
    if(isObject(%theme))
    {
       GuiEditor.undoRecorder.suspend();
-      GuiEditor.themeApplier.applyToBranch(%payload, %theme, false);
+      GuiEditor.themeApplier.applyToBranch(%ctrl, %theme, false);
       GuiEditor.undoRecorder.resume();
 
-      %this.postEvent("Rethemed", %payload);
+      %this.postEvent("Rethemed", %ctrl);
    }
 
    %this.setFirstResponder();
-   %this.postEvent("AddControl", %payload);
-   %this.postEvent("Inspect", %payload);
+   %this.postEvent("AddControl", %ctrl);
+   %this.postEvent("Inspect", %ctrl);
+}
+
+//-----------------------------------------------------------------------------
+// Tab pages.
+//
+// A GuiTabPageCtrl is the one control the palette does not offer, because it is
+// the one control that means nothing anywhere but inside a GuiTabBookCtrl. A
+// book makes its own instead: one when the book is dropped, and one for every
+// click on the "+" tab it draws at the end of its strip while the Gui is being
+// authored.
+//-----------------------------------------------------------------------------
+
+// GuiTabBookCtrl::requestNewPage, from a click on the "+" tab.
+function GuiEditorBrain::onAddTabPage(%this, %book)
+{
+    if(!isObject(%book))
+    {
+        return;
+    }
+
+    GuiEditor.undoRecorder.begin("Add Tab Page", "");
+    %page = %this.newTabPage(%book);
+    GuiEditor.undoRecorder.recordAdd(%page, "Add Tab Page");
+    %this.adoptControl(%page);
+    GuiEditor.undoRecorder.end();
+
+    // By index, never by name: captions are not identities - two pages can both
+    // read "Page 3" once one has been deleted - and selectPageName takes the
+    // first match.
+    %book.selectPage(%book.getCount() - 1);
+
+    // The add set first, because setting it clears the selection. Pointing it at
+    // the new page means the next control dropped lands in the page that was
+    // just made, which is the only reason anyone clicks "+".
+    %this.setCurrentAddSet(%page);
+    %this.selectList(%page);
+}
+
+// The one place a page is made, so that a page seeded with its book and a page
+// added later are the same object.
+function GuiEditorBrain::newTabPage(%this, %book)
+{
+    %number = %this.freePageNumber(%book);
+
+    %page = new GuiTabPageCtrl()
+    {
+        Text = "Page " @ %number;
+    };
+
+    // What C++ addNewPage names, so a book built in a project with no theme
+    // loaded still gets a page that draws like one. adoptControl writes over it
+    // a moment later wherever there IS a theme.
+    if(isObject(GuiTabPageProfile))
+    {
+        %page.setProfile(GuiTabPageProfile);
+    }
+
+    %book.add(%page);
+
+    return %page;
+}
+
+// The lowest number no tab in the book is already using. Counting the pages
+// instead would repeat one: three pages, delete "Page 2", and the next page
+// would be a second "Page 3".
+//
+// Bounded rather than open: among the numbers 1 to N+1 at least one is free of N
+// pages, so the loop always finds an answer inside it.
+function GuiEditorBrain::freePageNumber(%this, %book)
+{
+    %count = %book.getCount();
+
+    for(%n = 1; %n <= (%count + 1); %n++)
+    {
+        %taken = false;
+        for(%i = 0; %i < %count; %i++)
+        {
+            if(%book.getObject(%i).getText() $= ("Page " @ %n))
+            {
+                %taken = true;
+                break;
+            }
+        }
+
+        if(!%taken)
+        {
+            return %n;
+        }
+    }
+
+    return %count + 1;
 }
 
 function GuiEditorBrain::finishControlDropped(%this, %payload, %x, %y)

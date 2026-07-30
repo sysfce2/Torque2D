@@ -90,6 +90,25 @@ ConsoleMethodWithDocs(GuiControl, childrenReordered, ConsoleVoid, 2, 2, ())
    object->childrenReordered();
 }
 
+/*! Whether this control is allowed to become a child of the given container.
+
+    The Gui Editor asks before every reparent it performs - a drag in the Explorer
+    tree, a drag across the canvas, a paste - and leaves the control where it is
+    when the answer is false. Almost everything answers true; a GuiTabPageCtrl
+    answers true only for a GuiTabBookCtrl.
+
+    Nothing enforces this below the editor: add() will still put a control
+    anywhere. This is the question, not the gate.
+    @param parent The container being proposed.
+    @return True when the control would be at home there.
+*/
+ConsoleMethodWithDocs(GuiControl, canBeChildOf, ConsoleBool, 3, 3, (GuiControl parent))
+{
+   GuiControl* pParent = dynamic_cast<GuiControl*>(Sim::findObject(argv[2]));
+
+   return object->canBeChildOf(pParent);
+}
+
 /*! @return Returns the Id of the parent control
 */
 ConsoleMethodWithDocs( GuiControl, getParent, ConsoleInt, 2, 2, ())

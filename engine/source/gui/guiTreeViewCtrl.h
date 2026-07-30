@@ -76,6 +76,15 @@ private:
 	// wrong-typed item rather than trusting itemData is a GuiControl/SimGroup.
 	void reorderFromDrag();
 
+	// The container a drop on the given row would land in: the row itself when
+	// inserting into it, otherwise its parent branch. Both the hover, which draws
+	// the drop indicator, and the drop itself resolve it through here, so the
+	// indicator cannot promise a target the drop then refuses.
+	SimGroup* resolveDropTarget(TreeItem* dragItem);
+	// Whether every selected control would accept that container as a parent.
+	// GuiControl::canBeChildOf is the question; a tab page is what says no.
+	bool selectionAcceptsTarget(SimGroup* target);
+
 	// Keyboard navigation has to work in visible-row space. Collapsed branches
 	// stay in mItems with isVisible false and never render, so stepping raw
 	// indices - which is what the list box base class does - walks the selection

@@ -209,6 +209,16 @@ function GuiEditorClipboard::paste(%this)
 			continue;
 		}
 
+		// Not everything can live everywhere: a tab page pasted onto a panel is
+		// a page nothing will ever draw a tab for. The clipboard is left alone,
+		// so selecting a tab book and pasting again does what was meant. The
+		// clone goes, because nothing else is holding it.
+		if(!%copy.canBeChildOf(%addSet))
+		{
+			%copy.delete();
+			continue;
+		}
+
 		// Both before the control arrives, so they are part of it arriving rather
 		// than a second edit on top of it - and so that everything the arrival
 		// announces reads the name and the position the control is going to keep.

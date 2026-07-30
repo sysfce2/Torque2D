@@ -28,6 +28,11 @@
 #include "gui/guiDefaultControlRender.h"
 #include "gui/editor/guiEditCtrl.h"
 
+// Only for canBeChildOf below. The include belongs here rather than in the
+// header: guiTabBookCtrl.h includes guiTabPageCtrl.h, so the two headers cannot
+// include each other.
+#include "gui/containers/guiTabBookCtrl.h"
+
 IMPLEMENT_CONOBJECT(GuiTabPageCtrl);
 
 GuiTabPageCtrl::GuiTabPageCtrl(void)
@@ -103,6 +108,16 @@ GuiControl *GuiTabPageCtrl::findPrevTabable(GuiControl *curResponder, bool first
 
    mFirstResponder = tabCtrl;
    return tabCtrl;
+}
+
+// A page is a tab's worth of a book and nothing else: its geometry is dictated
+// by the book, its caption is what the book draws on the tab, and outside one it
+// renders as a bare panel that nothing can select a tab for. So it refuses every
+// other parent, and the Gui Editor leaves it where it is. Book to book is still
+// allowed - that is a page moving between two things that can both hold it.
+bool GuiTabPageCtrl::canBeChildOf(GuiControl* parent)
+{
+   return dynamic_cast<GuiTabBookCtrl*>(parent) != NULL;
 }
 
 void GuiTabPageCtrl::setText(const char *txt)

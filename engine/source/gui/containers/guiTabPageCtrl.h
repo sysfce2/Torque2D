@@ -42,6 +42,10 @@ class GuiTabPageCtrl : public GuiControl
 
       void selectWindow(void);               ///< Select this window
 
+      /// A page only means anything inside a GuiTabBookCtrl, so it refuses every
+      /// other parent. See GuiControl::canBeChildOf.
+      bool canBeChildOf(GuiControl* parent);
+
       virtual void setText(const char *txt = NULL); ///< Override setText function to signal parent we need to update.
 	  void onRender(Point2I offset, const RectI &updateRect);
 	  void parentResized(const Point2I& oldParentExtent, const Point2I& newParentExtent);

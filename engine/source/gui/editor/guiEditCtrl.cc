@@ -143,6 +143,22 @@ ConsoleMethod(GuiEditCtrl, setCurrentAddSet, void, 3, 3, "(GuiControl ctrl) Set 
 	object->setCurrentAddSet(addSet);
 }
 
+ConsoleMethod(GuiEditCtrl, moveSelectionToCtrl, void, 3, 3, "(GuiControl parent) Reparent every selected control into the given container.\n"
+	"What a drag across the canvas onto a container does. Controls that refuse the\n"
+	"parent - see GuiControl::canBeChildOf - and locked ones are left where they are.\n"
+	"@param parent The container to move the selection into.\n"
+	"@return No return value.")
+{
+	GuiControl* newParent;
+
+	if (!Sim::findObject(argv[2], newParent))
+	{
+		Con::printf("%s(): Invalid control: %s", argv[0], argv[2]);
+		return;
+	}
+	object->moveSelectionToCtrl(newParent);
+}
+
 ConsoleMethod(GuiEditCtrl, getCurrentAddSet, S32, 2, 2, "()\n @return Returns the set to which new controls will be added")
 {
 	const GuiControl* add = object->getCurrentAddSet();
@@ -1196,6 +1212,11 @@ void GuiEditCtrl::moveSelectionToCtrl(GuiControl* newParent)
 
 		// skip locked controls
 		if (ctrl->isLocked())
+			continue;
+
+		// skip controls that will not live there - a tab page outside a tab book
+		// is the case this exists for
+		if (!ctrl->canBeChildOf(newParent))
 			continue;
 
 		Point2I globalpos = ctrl->localToGlobalCoord(Point2I(0, 0));

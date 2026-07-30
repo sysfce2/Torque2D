@@ -32,10 +32,12 @@ function GuiEditorControlIcons::onAdd(%this)
 	%this.groupList = "Basics" TAB "Layout" TAB "Input & Data" TAB "Advanced";
 
 	// Classes the palette will not offer, whatever the engine registers. The
-	// first group is editor and engine plumbing; the last two are real controls
+	// first group is editor and engine plumbing; the last three are real controls
 	// that nobody places by hand -- GuiDragAndDropCtrl is built at runtime to
-	// carry a drag payload, and GuiMenuItemCtrl means nothing outside a menu bar.
-	%this.refusedNames = "GuiCanvas GuiDragAndDropCtrl GuiGraphCtrl GuiMenuItemCtrl GuiMessageVectorCtrl GuiParticleGraphInspector GuiSceneObjectCtrl";
+	// carry a drag payload, GuiMenuItemCtrl means nothing outside a menu bar, and
+	// a GuiTabPageCtrl is made by its book, from the + tab the book draws while
+	// the Gui is being authored.
+	%this.refusedNames = "GuiCanvas GuiDragAndDropCtrl GuiGraphCtrl GuiMenuItemCtrl GuiMessageVectorCtrl GuiParticleGraphInspector GuiSceneObjectCtrl GuiTabPageCtrl";
 	%this.refusedPrefixes = "GuiConsole GuiEdit GuiInspector";
 	%count = getWordCount(%this.refusedNames);
 	for(%i = 0; %i < %count; %i++)
@@ -96,14 +98,27 @@ function GuiEditorControlIcons::onAdd(%this)
 		{
 			%this.keyList = (%this.keyList $= "") ? %key : (%this.keyList TAB %key);
 
-			%group = %this.group[%key];
-			%held = %this.groupKeys[%group];
-			%this.groupKeys[%group] = (%held $= "") ? %key : (%held TAB %key);
-
 			// Which CLASSES the table accounts for, as opposed to which keys. The
 			// two differ for exactly one class: GuiControl is covered four times
 			// over, and by no key spelled "GuiControl".
 			%this.covered[%this.ctrlClass[%key]] = true;
+
+			// A refused class keeps its row and everything the row carries -- its
+			// frame, its label, its place in covered[] -- and only loses its
+			// group. The row has to stay: frame IS the row index, so removing one
+			// repoints every icon below it onto the wrong art. And covered[] has
+			// to stay true, or the sweep over the class registry in
+			// GuiEditorControlListWindow::addUndrawnClasses offers the class back
+			// in an "Undrawn" group with a question mark for an icon.
+			//
+			// So the group list is the palette's view, and the key list is the
+			// table's. Only the first one refuses anything.
+			if(!%this.refused[%this.ctrlClass[%key]])
+			{
+				%group = %this.group[%key];
+				%held = %this.groupKeys[%group];
+				%this.groupKeys[%group] = (%held $= "") ? %key : (%held TAB %key);
+			}
 		}
 	}
 }

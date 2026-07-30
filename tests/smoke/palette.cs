@@ -100,7 +100,27 @@ function palTableChecks()
 				%icons.groupFor(%key) $= %group);
 		}
 	}
-	palCheck("the groups account for every entry (" @ %sum @ " of " @ %total @ ")", %sum == %total);
+
+	// Every entry is either in a group or refused -- none silently dropped. A
+	// refused entry keeps its row, and so its frame and its label, because the
+	// frame IS the row index; it just isn't offered. GuiTabPageCtrl is the one
+	// that is: only a tab book makes a page, from the + tab it draws in the
+	// editor.
+	%refused = 0;
+	for(%i = 0; %i < %total; %i++)
+	{
+		%key = getField(%all, %i);
+		if(!%icons.isPlaceableClass(%icons.classFor(%key)))
+		{
+			%refused++;
+		}
+	}
+	palCheck("the table refuses one entry (" @ %refused @ ")", %refused == 1);
+	palCheck("Tab Page is the refused one", !%icons.isPlaceableClass("GuiTabPageCtrl"));
+	palCheck("a refused entry keeps its icon", %icons.isKnown("GuiTabPageCtrl"));
+	palCheck("a refused entry still counts as covered", %icons.coversClass("GuiTabPageCtrl"));
+	palCheck("every entry is either grouped or refused (" @ %sum @ " + " @ %refused @
+		" of " @ %total @ ")", (%sum + %refused) == %total);
 
 	// The fallback is reachable but never offered.
 	palCheck("the fallback is not in any group", %icons.groupFor("unknown") $= "");
@@ -176,7 +196,10 @@ function palPaletteChecks()
 			getWord(%group.getExtent(), 1) > $GuiEditorControlGroup::headerHeight);
 		%tiles += %group.tileCount;
 	}
-	palCheck("30 tiles across the groups (" @ %tiles @ ")", %tiles == 30);
+	// One fewer than the 30 table entries: Tab Page is refused, so it has a row
+	// and an icon but no tile.
+	palCheck("29 tiles across the groups (" @ %tiles @ ")", %tiles == 29);
+	palCheck("no Tab Page tile", palFindTile("GuiTabPageCtrl") == 0);
 
 	palModeChecks();
 }

@@ -684,6 +684,18 @@ public:
     /// @param   offset   the offset which is representative of the units x and y that the editor takes up on screen
     virtual bool onMouseDraggedEditor(const GuiEvent &event, const Point2I& offset) { return false; };
 
+    /// Whether this control is allowed to become a child of the given container.
+    ///
+    /// The Gui Editor asks before it reparents anything - a drag in the Explorer
+    /// tree, a drag across the canvas, a paste - and leaves the control where it
+    /// is when the answer is no. Nothing else in the engine asks: SimGroup::addObject
+    /// cannot refuse, so this is advice the editor takes, not an invariant the
+    /// object model enforces.
+    ///
+    /// A control that only means something inside one particular parent overrides
+    /// this. GuiTabPageCtrl is the one that does.
+    virtual bool canBeChildOf(GuiControl* parent) { return true; };
+
     /// @}
 
     /// @name Tabs
