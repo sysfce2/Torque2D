@@ -318,6 +318,17 @@ public:
 
    bool processArguments(S32 argc, const char **argv);
 
+protected:
+   /// Deep-clone every child into %clone.
+   ///
+   /// A group's children are its own - it is the only container in the engine
+   /// that owns what it holds - so a copy of a group is a copy of the tree under
+   /// it. A SimSet does not override this: its members belong to whatever group
+   /// holds them, and duplicating those would be inventing objects nobody asked
+   /// for.
+   virtual void deepCloneChildren(SimObject* clone);
+
+public:
    DECLARE_CONOBJECT(SimGroup);
 };
 

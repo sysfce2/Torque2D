@@ -164,6 +164,16 @@ public:
 	void setDataField(const char* tag, const U32 id, const U32 value);
 	const char* getDataField(const char* tag, const U32 id);
 
+	// Rebuild %source's frame tree here, with this control's own children in it.
+	// Public for the sake of deepCloneChildren, which is called on the source and
+	// has to reach the copy.
+	void copyFrameTreeFrom(GuiFrameSetCtrl* source);
+
+protected:
+	virtual void deepCloneChildren(SimObject* clone);
+	void copyFrame(Frame* frame, const Frame* sourceFrame, GuiFrameSetCtrl* source);
+
+public:
 	DECLARE_CONOBJECT(GuiFrameSetCtrl);
 };
 

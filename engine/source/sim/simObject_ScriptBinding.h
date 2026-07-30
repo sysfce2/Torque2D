@@ -906,6 +906,26 @@ ConsoleMethodWithDocs(SimObject, clone, ConsoleInt, 2, 3, ([copyDynamicFields = 
     return pClonedObject->getId();
 }
 
+/*! Copies the object, everything in it, and everything below it.
+    Unlike clone(), a deep clone comes back finished: every field, every dynamic
+    field, and a new copy of every child, recursively. The copy has no name and
+    belongs to no group until you add it somewhere.
+
+    No script callback runs on the copy while it is being made - not onAdd, not
+    onChildAdded - so a class that builds children of its own cannot end up with
+    two sets of them.
+    @return (newObjectID) The new object's id if successful, otherwise a 0.
+*/
+ConsoleMethodWithDocs(SimObject, deepClone, ConsoleInt, 2, 2, ())
+{
+    SimObject* pClonedObject = object->deepClone();
+
+    if ( pClonedObject == NULL )
+        return 0;
+
+    return pClonedObject->getId();
+}
+
 /*! Takes all values from one object and puts them into anther object of the same class. This includes dynamic fields.
 	@return No return value.
 */

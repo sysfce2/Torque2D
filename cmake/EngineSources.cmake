@@ -342,6 +342,7 @@ set(TORQUE_ENGINE_SOURCES
     ${TORQUE_SRC}/testing/tests/platformFileIoTests.cc
     ${TORQUE_SRC}/testing/tests/platformMemoryTests.cc
     ${TORQUE_SRC}/testing/tests/platformStringTests.cc
+    ${TORQUE_SRC}/testing/tests/simObjectCloneTests.cc
     # ---- platform ----
     ${TORQUE_SRC}/platform/CursorManager.cc
     ${TORQUE_SRC}/platform/Tickable.cc

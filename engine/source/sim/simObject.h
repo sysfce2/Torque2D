@@ -718,6 +718,24 @@ public:
     /// @param   obj Object to copy from.
     void assignFieldsFrom(SimObject *obj);
 
+    /// What copyFieldsFrom may be told to leave alone.
+    enum CopyFieldsFlags
+    {
+        CopyFields_SkipName        = BIT(0),   ///< Two objects answering to one name is a bug.
+        CopyFields_SkipParentGroup = BIT(1),   ///< Writing it ADDS the object to that group.
+        CopyFields_SkipScriptClass = BIT(2)    ///< class and superclass, which link namespaces.
+    };
+
+    /// assignFieldsFrom, with the option of leaving some fields out.
+    ///
+    /// Every persist field is a field, including the two that decide where the
+    /// object lives and what it is called - so a copy that wants to be a copy
+    /// rather than a second reference to the same place has to say so.
+    ///
+    /// @param   obj    Object to copy from; must be of the same class.
+    /// @param   flags  CopyFieldsFlags, or 0 for everything.
+    void copyFieldsFrom(SimObject *obj, const U32 flags);
+
     /// Copy dynamic fields from another object onto this one.
     ///
     /// Everything from obj will overwrite what's in this
@@ -775,6 +793,44 @@ public:
     
     SimObject* clone( const bool copyDynamicFields );
     virtual void copyTo(SimObject* object);
+
+    /// Copy this object, everything in it, and everything below it.
+    ///
+    /// Unlike clone(), which makes a shell of the right class and leaves the
+    /// fields to the caller, a deep clone is finished when it returns: fields,
+    /// dynamic fields and the whole child tree, with each child a new object of
+    /// its own. The name and the parent group are deliberately not copied - the
+    /// clone is nameless and belongs to nothing until someone adds it.
+    ///
+    /// No script lifecycle callback fires on a deep clone. See cloneInto.
+    SimObject* deepClone();
+
+protected:
+    /// The three phases of a deep clone, separated because a child has to be
+    /// added to its new parent BEFORE its fields are written: a container that
+    /// places its own children takes what it wants from a child as it arrives
+    /// (a GuiChainCtrl zeroes the position, a GuiGridCtrl forces the sizing off
+    /// center), and doing that after the values were copied would undo them.
+
+    /// A registered but empty object of this object's class.
+    virtual SimObject* allocClone();
+
+    /// Fill in a shell from allocClone: fields, then children, then the class.
+    ///
+    /// copyTo runs LAST, and that is the whole reason a deep clone is inert.
+    /// It is what sets mClassName/mSuperClassName and links the namespaces, and
+    /// until it has run the clone's script class is invisible: registerObject
+    /// fires script onAdd (simObject.cc) and GuiControl::onChildAdded fires
+    /// script onChildAdded (guiControl.cc), and neither can find a method on a
+    /// namespace that is not linked yet. So a class whose onAdd builds children
+    /// cannot build a second set of them on top of the ones being copied.
+    void cloneInto(SimObject* clone);
+
+    /// Copy this object's children into %clone. Nothing to do here; SimGroup,
+    /// which is where owned children live, does the work.
+    virtual void deepCloneChildren(SimObject* clone) {}
+
+public:
 
     template<typename T> bool isType(void) { return dynamic_cast<T>(this) != NULL; }
 

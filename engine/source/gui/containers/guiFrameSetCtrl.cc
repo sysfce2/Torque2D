@@ -618,6 +618,98 @@ void GuiFrameSetCtrl::setFrameLayout(const char* layout)
 	resize(getPosition(), getExtent());
 }
 
+//-----------------------------------------------------------------------------
+// Copying. A frame set is the one control in the engine that keeps a layout of
+// its own beside the child list, and none of it is a persist field - it is
+// written as TAML custom nodes and nothing else. So a copy of a frame set that
+// only copied fields and children would come back with four children and no
+// frames to put them in.
+//
+// This runs after the children have been copied, because a frame only takes a
+// control that is already a child (onChildAdded/assignChildToFrame fills empty
+// frames, it never makes one).
+//-----------------------------------------------------------------------------
+
+void GuiFrameSetCtrl::deepCloneChildren(SimObject* clone)
+{
+	Parent::deepCloneChildren(clone);
+
+	GuiFrameSetCtrl* pCloneFrameSet = dynamic_cast<GuiFrameSetCtrl*>(clone);
+	if (pCloneFrameSet)
+	{
+		pCloneFrameSet->copyFrameTreeFrom(this);
+	}
+}
+
+void GuiFrameSetCtrl::copyFrameTreeFrom(GuiFrameSetCtrl* source)
+{
+	if (!source)
+	{
+		return;
+	}
+
+	// Back to a single frame first, exactly as setFrameLayout does: the children
+	// arriving have already been handed whichever frames were free, and those
+	// assignments are about to be made again properly.
+	mRootFrame.deleteChildren();
+	mRootFrame.child1 = nullptr;
+	mRootFrame.child2 = nullptr;
+	mRootFrame.control = nullptr;
+
+	copyFrame(&mRootFrame, &source->mRootFrame, source);
+
+	resize(getPosition(), getExtent());
+}
+
+// The tree is copied structurally rather than through getFrameLayout, because
+// the layout text names each frame's control by id - and the copy's children are
+// new objects with new ids. What pairs them instead is position in the child
+// list: deepCloneChildren copies children in order, so the source's nth child
+// and this control's nth child are the same control.
+void GuiFrameSetCtrl::copyFrame(GuiFrameSetCtrl::Frame* frame, const GuiFrameSetCtrl::Frame* sourceFrame, GuiFrameSetCtrl* source)
+{
+	frame->id = sourceFrame->id;
+	frame->isVertical = sourceFrame->isVertical;
+	frame->extent = sourceFrame->extent;
+	frame->isAnchored = sourceFrame->isAnchored;
+	frame->control = nullptr;
+
+	// Frames split from here on must not reuse an id the copied tree holds.
+	if (sourceFrame->id > mNextFrameID)
+	{
+		mNextFrameID = sourceFrame->id;
+	}
+
+	if (sourceFrame->child1 && sourceFrame->child2)
+	{
+		// The same call buildFrameLayout makes, and for the same reason: it is
+		// what builds a pair of frames under this one. The ids it assigns are
+		// overwritten by the recursion below with the source's own.
+		splitFrame(frame, frame->isVertical ? GuiDirection::Up : GuiDirection::Left);
+
+		copyFrame(frame->child1, sourceFrame->child1, source);
+		copyFrame(frame->child2, sourceFrame->child2, source);
+		return;
+	}
+
+	if (!sourceFrame->control)
+	{
+		return;
+	}
+
+	for (U32 i = 0; i < (U32)source->size(); i++)
+	{
+		if ((*source)[i] == sourceFrame->control)
+		{
+			if (i < (U32)size())
+			{
+				frame->control = dynamic_cast<GuiControl*>((*this)[i]);
+			}
+			break;
+		}
+	}
+}
+
 void GuiFrameSetCtrl::buildFrameLayout(GuiFrameSetCtrl::Frame* frame, const U32 frameID, const Vector<U32>& values)
 {
 	S32 at = -1;
