@@ -83,6 +83,22 @@ function GuiEditorChoiceRow::build(%this)
 	}
 }
 
+// Hide a choice that does not apply to whatever is bound. The buttons are placed
+// absolutely, so this leaves a gap where the choice was rather than reflowing the
+// row -- which is the right trade for a choice that comes and goes with the
+// selection: the ones that stay do not move under the cursor.
+function GuiEditorChoiceRow::setChoiceVisible(%this, %value, %visible)
+{
+	for(%i = 0; %i < %this.choiceCount; %i++)
+	{
+		if(%this.choiceValue[%i] $= %value)
+		{
+			%this.choiceButton[%i].setVisible(%visible);
+			return;
+		}
+	}
+}
+
 //-----------------------------------------------------------------------------
 // Value.
 //-----------------------------------------------------------------------------

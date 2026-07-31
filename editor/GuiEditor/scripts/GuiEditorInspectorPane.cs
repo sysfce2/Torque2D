@@ -805,10 +805,17 @@ function GuiEditorInspectorPane::applyFilter(%this)
 	}
 
 	// A section with nothing left to show gets out of the way entirely.
-	%panels = getWordCount(%this.panelList);
-	for(%i = 0; %i < %panels; %i++)
+	//
+	// The class sections as well as the shared ones. They were left out, and a
+	// class section whose every field turned out to be hidden stayed on screen as
+	// a header that could not be opened: the grid drops hidden cells, so it
+	// measures zero high, and GuiPanelCtrl's expanded extent comes out equal to
+	// its collapsed one. Clicking it flipped the arrow and nothing else.
+	%panels = %this.panelList SPC %this.classPanels;
+	%count = getWordCount(%panels);
+	for(%i = 0; %i < %count; %i++)
 	{
-		%key = getWord(%this.panelList, %i);
+		%key = getWord(%panels, %i);
 		%this.panel[%key].setVisible(%this.anyRowVisible(%this.panelFields[%key]));
 	}
 
@@ -915,6 +922,14 @@ function GuiEditorInspectorPane::refresh(%this)
 	if(isObject(%block))
 	{
 		%block.load(%this.target);
+	}
+
+	// A menu item's fields are none of them in the registry above -- the block
+	// keeps them out of it deliberately, so the bare rule cannot hide them -- so
+	// it reloads itself. This is the path an undo comes back through.
+	if(%this.header.menuItemBlock.isVisible())
+	{
+		%this.header.menuItemBlock.bind(%this.target);
 	}
 
 	%this.refreshToggles();

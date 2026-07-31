@@ -122,4 +122,41 @@ ConsoleMethodWithDocs(GuiMenuBarCtrl, setMenuActive, ConsoleVoid, 4, 4, ("string
 	object->setMenuActive(argv[2], dAtob(argv[3]));
 }
 
+/*! Returns the bounds of the editor-only "+" as "x y width height", in global
+	coordinates.
+
+	Empty - "0 0 0 0" - unless the bar is inside the Gui being authored, which is
+	the only time the "+" is drawn. A bar with no menus at all still reports one;
+	that is what stops an emptied bar from being unrecoverable, now that the
+	control palette does not offer a GuiMenuItemCtrl.
+	@return The rectangle the "+" occupies on screen.
+*/
+ConsoleMethodWithDocs(GuiMenuBarCtrl, getAddItemRect, ConsoleString, 2, 2, ())
+{
+	RectI rect = object->getAddItemGlobalRect();
+
+	char* buffer = Con::getReturnBuffer(64);
+	dSprintf(buffer, 64, "%d %d %d %d", rect.point.x, rect.point.y, rect.extent.x, rect.extent.y);
+
+	return buffer;
+}
+
+/*! Returns the bounds of the "+" row at the foot of the open dropdown, as
+	"x y width height" in global coordinates.
+
+	Empty unless the bar is being authored AND one of its menus is selected -
+	that is what decides which dropdown is showing. A menu with no commands in it
+	at all still reports one; that row is the only way a command ever gets made.
+	@return The rectangle the dropdown's "+" occupies on screen.
+*/
+ConsoleMethodWithDocs(GuiMenuBarCtrl, getAddSubItemRect, ConsoleString, 2, 2, ())
+{
+	RectI rect = object->getAddSubItemGlobalRect();
+
+	char* buffer = Con::getReturnBuffer(64);
+	dSprintf(buffer, 64, "%d %d %d %d", rect.point.x, rect.point.y, rect.extent.x, rect.extent.y);
+
+	return buffer;
+}
+
 ConsoleMethodGroupEndWithDocs(GuiMenuBarCtrl)

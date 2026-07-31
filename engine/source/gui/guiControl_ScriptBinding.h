@@ -109,6 +109,22 @@ ConsoleMethodWithDocs(GuiControl, canBeChildOf, ConsoleBool, 3, 3, (GuiControl p
    return object->canBeChildOf(pParent);
 }
 
+/*! Whether the Gui Editor may move or resize this control.
+
+    False where the PARENT dictates the geometry and the control's own Position
+    and Extent are written over the moment anything re-lays it out - a tab page,
+    a menu item. The editor draws such a control the way it draws a locked one:
+    an outline rather than eight sizing handles.
+
+    This is the control's own nature, not the user's padlock; isLocked is that,
+    and the editor honours both.
+    @return True when the editor may change this control's geometry.
+*/
+ConsoleMethodWithDocs(GuiControl, isGeometryEditable, ConsoleBool, 2, 2, ())
+{
+   return object->isGeometryEditable();
+}
+
 /*! @return Returns the Id of the parent control
 */
 ConsoleMethodWithDocs( GuiControl, getParent, ConsoleInt, 2, 2, ())

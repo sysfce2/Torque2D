@@ -499,13 +499,36 @@ function pStep6()
 	pCheck("profile picker shows what the control wears",
 		isObject(%current) && %header.profileRow.getValue() $= %current.getName());
 
-	// A menu item has no GuiControl fields at all, so the header sheds
-	// everything but its name and its caption.
+	// A menu item has no GuiControl fields at all, so the header sheds everything
+	// generic and shows a block of its own instead - caption included, on one
+	// line, because a menu label is one line and it is also how wide the menu is.
 	$pMenuItem = new GuiMenuItemCtrl();
 	%pane = pBind($pMenuItem);
+	%block = %pane.header.menuItemBlock;
 	pCheck("menu item hides the profile row", !%pane.header.profileRow.isVisible());
 	pCheck("menu item hides geometry", !%pane.header.geometryGrid.isVisible());
-	pCheck("menu item keeps its caption", %pane.header.textGrid.isVisible());
+	pCheck("menu item shows its own block", %block.isVisible());
+	pCheck("which stands the shared text block down", !%pane.header.textBlock.isVisible());
+	pCheck("its caption is single line", %block.textRow.kind $= "text");
+	pCheck("it carries the command fields", %block.commandRow.isVisible() &&
+		%block.acceleratorRow.isVisible());
+
+	// Visible and Active are GuiControl's names, but a menu item registers them
+	// again for itself, so those two switches really do work here.
+	pCheck("menu item keeps Visible and Active", %pane.header.visibleButton.isVisible() &&
+		%pane.header.activeButton.isVisible());
+	pCheck("but not Accepts Input", !%pane.header.inputButton.isVisible());
+
+	// The section those fields used to be in is gone, so nothing is left showing
+	// a header that cannot open.
+	pCheck("no dead Menu Item section", !isObject(%pane.panel["Item"]) ||
+		!%pane.panel["Item"].isVisible());
+
+	// An ordinary control is untouched by any of it.
+	%pane = pBind($pButton);
+	pCheck("an ordinary control shows no menu item block",
+		!%pane.header.menuItemBlock.isVisible());
+	pCheck("and keeps the shared text block", %pane.header.textBlock.isVisible());
 
 	schedule(200, 0, "pStep7");
 }

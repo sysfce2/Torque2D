@@ -29,6 +29,9 @@
 
 #include "gui/editor/guiMenuBarCtrl.h"
 
+// For the editor-only "+": the colour it borrows and the handle it calls back on.
+#include "gui/editor/guiEditCtrl.h"
+
 #include "gui/editor/guiMenuBarCtrl_ScriptBinding.h"
 
 #pragma region GuiMenuBarCtrl
@@ -63,6 +66,16 @@ GuiMenuBarCtrl::GuiMenuBarCtrl()
 
 	mHoverTarget = NULL;
 	mOpenMenu = NULL;
+
+	// Empty until a layout pass in edit mode fills it in, and read by
+	// getAddItemGlobalRect - which script can ask about a bar that has never laid
+	// itself out at all.
+	mAddItemRect = RectI(0, 0, 0, 0);
+
+	VECTOR_SET_ASSOCIATION(mEditRowRects);
+	mEditOpenMenu = NULL;
+	mEditBoxRect = RectI(0, 0, 0, 0);
+	mEditAddRowRect = RectI(0, 0, 0, 0);
 
 	mUseConstantHeightThumb = false;
 	mScrollBarThickness = 12;
@@ -113,8 +126,20 @@ void GuiMenuBarCtrl::onChildAdded(GuiControl *child)
 	if (!menu)
 	{
 		Con::warnf("GuiMenuBarCtrl::onChildAdded - Only a GuiMenuItemCtrl can be added to a GuiMenuBarCtrl! Child will not be added.");
-		SimObject *simObj = reinterpret_cast<SimObject*>(child);
-		removeObject(simObj);
+
+		// Somewhere to put it, decided BEFORE taking it out of the bar. Removing
+		// it first and then finding nowhere for it - which is what this did - left
+		// the control registered with no group at all, so it was neither in the
+		// document nor deleted. A bar with no parent is the case that reaches it.
+		GuiControl *destination = getParent();
+		if (destination == NULL)
+		{
+			Con::warnf("GuiMenuBarCtrl::onChildAdded - no parent to place it on; leaving it where it is");
+			return;
+		}
+
+		removeObject(child);
+		destination->addObject(child);
 		return;
 	}
 	menu->mMenuBar = this;
@@ -132,11 +157,53 @@ void GuiMenuBarCtrl::onChildAdded(GuiControl *child)
 
 void GuiMenuBarCtrl::onChildRemoved(SimObject *child)
 {
+	// Everything the bar still remembers about the departing item. None of this
+	// mattered while a menu bar was something you built once in script and never
+	// edited; deleting an item is an ordinary action now, and each of these is a
+	// pointer something dereferences later - onKeyDown reads mOpenMenu,
+	// setHoverTarget reads mHoverTarget, and the key walk follows the sibling
+	// links.
+	GuiMenuItemCtrl *item = dynamic_cast<GuiMenuItemCtrl*>(child);
+	if (item != NULL)
+	{
+		if (item->mPrevItem != NULL)
+		{
+			item->mPrevItem->mNextItem = item->mNextItem;
+		}
+		if (item->mNextItem != NULL)
+		{
+			item->mNextItem->mPrevItem = item->mPrevItem;
+		}
+		item->mPrevItem = NULL;
+		item->mNextItem = NULL;
+
+		if (mHoverTarget == item)
+		{
+			mHoverTarget = NULL;
+		}
+		if (mOpenMenu == item)
+		{
+			mOpenMenu = NULL;
+		}
+		if (mEditOpenMenu == item)
+		{
+			mEditOpenMenu = NULL;
+			mEditBoxRect.set(Point2I(0, 0), Point2I(0, 0));
+			mEditRowRects.clear();
+			mEditAddRowRect.set(Point2I(0, 0), Point2I(0, 0));
+		}
+	}
+
 	calculateMenus();
 }
 
 void GuiMenuBarCtrl::calculateMenus()
 {
+	// Ahead of everything else: a bar that leaves edit mode must not be left
+	// holding a "+" that is no longer drawn, or getAddItemRect reports a
+	// rectangle nothing will answer a click in.
+	mAddItemRect.set(Point2I(0, 0), Point2I(0, 0));
+
 	RectI innerRect = getInnerRect();
 	iterator i;
 	S32 length = 0;
@@ -152,11 +219,486 @@ void GuiMenuBarCtrl::calculateMenus()
 			length += ctrl->getExtent().x;
 		}
 	}
+
+	// The "+" follows the last menu, square on the strip's height so it reads as
+	// an affordance rather than a menu with a one-character name. Nothing to wrap
+	// and nothing to run out of: the bar is a single row, and onRender keeps it
+	// as wide as the clip rect it is drawn into.
+	if (isEditMode())
+	{
+		mAddItemRect.set(Point2I(length, 0), Point2I(innerRect.extent.y, innerRect.extent.y));
+	}
 }
 
-GuiControl* GuiMenuBarCtrl::findHitControl(const Point2I &pt, S32 initialLayer)
+Point2I GuiMenuBarCtrl::getMenuLocalCoord(const Point2I &src)
+{
+	Point2I offset = Point2I(0, 0);
+	RectI contentRect = getInnerRect(offset);
+
+	return src - contentRect.point;
+}
+
+RectI GuiMenuBarCtrl::getAddItemGlobalRect()
+{
+	// isEditMode as well as the rectangle, because closing the editor does not
+	// re-run the layout: the bar would go on reporting the "+" it had until
+	// something else happened to resize it.
+	if (!mAddItemRect.isValidRect() || !isEditMode())
+	{
+		return RectI(0, 0, 0, 0);
+	}
+
+	Point2I offset = Point2I(0, 0);
+	RectI contentRect = getInnerRect(offset);
+
+	return RectI(localToGlobalCoord(contentRect.point) + mAddItemRect.point, mAddItemRect.extent);
+}
+
+GuiMenuItemCtrl* GuiMenuBarCtrl::findSelectedMenu()
+{
+	GuiEditCtrl* edit = GuiControl::smEditorHandle;
+	if (edit == NULL || !isEditMode())
+		return NULL;
+
+	// Walk up from each selected control. Whichever one reaches a direct child of
+	// this bar names the menu being worked in - so selecting a command keeps its
+	// menu open, and selecting the bar or anything else closes it.
+	SimSet& selected = edit->getSelectedSet();
+	for (SimSet::iterator i = selected.begin(); i != selected.end(); i++)
+	{
+		GuiControl* ctrl = dynamic_cast<GuiControl*>(*i);
+		while (ctrl != NULL)
+		{
+			if (ctrl->getParent() == this)
+			{
+				return dynamic_cast<GuiMenuItemCtrl*>(ctrl);
+			}
+			ctrl = ctrl->getParent();
+		}
+	}
+
+	return NULL;
+}
+
+void GuiMenuBarCtrl::refreshEditMenu()
+{
+	GuiMenuItemCtrl* open = findSelectedMenu();
+	if (open != mEditOpenMenu)
+	{
+		mEditOpenMenu = open;
+		setUpdate();
+	}
+
+	// Re-laid every time rather than only on a change, so renaming a command in
+	// the properties pane widens the box straight away.
+	layoutEditMenu();
+}
+
+void GuiMenuBarCtrl::onPreRender()
+{
+	refreshEditMenu();
+
+	Parent::onPreRender();
+}
+
+void GuiMenuBarCtrl::layoutEditMenu()
+{
+	mEditBoxRect.set(Point2I(0, 0), Point2I(0, 0));
+	mEditRowRects.clear();
+	mEditAddRowRect.set(Point2I(0, 0), Point2I(0, 0));
+
+	if (mEditOpenMenu == NULL || mMenuItemProfile == NULL || mMenuContentProfile == NULL)
+		return;
+
+	GFont* font = mMenuItemProfile->getFont(mFontSizeAdjust);
+	if (font == NULL)
+		return;
+
+	Point2I rowInner = Point2I(0, font->getHeight());
+	const S32 rowHeight = getOuterExtent(rowInner, NormalState, mMenuItemProfile).y;
+	if (rowHeight <= 0)
+		return;
+
+	// Wide enough for the longest label, plus the two gutters the marks live in -
+	// a bullet on the left, a submenu arrow on the right, each a row tall. Adding
+	// them rather than taking them out of the middle is what the runtime list
+	// does, and without it every label is truncated to make room for marks most
+	// of the rows do not even have.
+	S32 widest = 0;
+	for (iterator i = mEditOpenMenu->begin(); i != mEditOpenMenu->end(); i++)
+	{
+		GuiMenuItemCtrl* child = dynamic_cast<GuiMenuItemCtrl*>(*i);
+		if (child == NULL)
+			continue;
+
+		Point2I textInner = Point2I(font->getStrWidth((const UTF8*)child->getText()), 0);
+		widest = getMax(widest, getOuterExtent(textInner, NormalState, mMenuItemProfile).x);
+	}
+	widest += 2 * rowHeight;
+
+	// And never narrower than the menu it hangs from, so it reads as belonging to
+	// that menu rather than floating under it.
+	widest = getMax(widest, mEditOpenMenu->getExtent().x);
+
+	// A separator is the profile's chrome with no line of text in it, which is
+	// what makes it read as a rule between two groups rather than a blank row.
+	//
+	// In the SELECTED state, which is not a detail. Nothing else in a menu uses
+	// that state - hover is Highlight, greyed is Disabled - so a theme shapes its
+	// separators entirely through the SL fields of the three border profiles, and
+	// measuring in any other state prices the row from padding the separator does
+	// not use. GuiMenuListCtrl::updateSize measures the real thing the same way.
+	Point2I emptyInner = Point2I(0, 0);
+	const S32 spacerHeight = getOuterExtent(emptyInner, SelectedState, mMenuItemProfile).y;
+
+	// One row per command plus the "+" row - which is why an empty menu still
+	// gets a box. A menu with no children has no GuiMenuListCtrl at all (it is
+	// built lazily when the first child arrives), so the runtime machinery could
+	// not draw this case even if it were open, and it is the case that matters:
+	// a menu the "+" just made has nothing in it yet.
+	S32 rowsHeight = rowHeight;
+	for (iterator i = mEditOpenMenu->begin(); i != mEditOpenMenu->end(); i++)
+	{
+		rowsHeight += editRowHeight(dynamic_cast<GuiMenuItemCtrl*>(*i), rowHeight, spacerHeight);
+	}
+
+	Point2I boxInner = Point2I(widest, rowsHeight);
+	Point2I boxOuter = getOuterExtent(boxInner, NormalState, mMenuContentProfile);
+
+	Point2I boxPoint = Point2I(mEditOpenMenu->mBounds.point.x,
+		mEditOpenMenu->mBounds.point.y + mEditOpenMenu->mBounds.extent.y);
+	mEditBoxRect.set(boxPoint, boxOuter);
+
+	// Rows start at the box's content, not its corner.
+	Point2I boxOrigin = boxPoint;
+	RectI boxContent = getInnerRect(boxOrigin, boxOuter, NormalState, mMenuContentProfile);
+
+	// What localToGlobalCoord will add on the way up from a command: the strip's
+	// content offset, and the open menu's own contribution. Measured rather than
+	// assumed - the inset renderChild stamps on a menu is not reliably there when
+	// script asks, and being one border out is exactly the kind of wrong that
+	// looks like nothing at all until you see the outline beside the row.
+	Point2I barOrigin = Point2I(0, 0);
+	Point2I barContentInset = getInnerRect(barOrigin).point;
+	Point2I fromMenu = mEditOpenMenu->mBounds.point + mEditOpenMenu->mRenderInsetLT;
+
+	S32 y = boxContent.point.y;
+	for (iterator i = mEditOpenMenu->begin(); i != mEditOpenMenu->end(); i++)
+	{
+		S32 h = editRowHeight(dynamic_cast<GuiMenuItemCtrl*>(*i), rowHeight, spacerHeight);
+		RectI rowRect = RectI(boxContent.point.x, y, widest, h);
+		mEditRowRects.push_back(rowRect);
+
+		// Give the command the rectangle it is being drawn in, so that everything
+		// which asks a control where it is gets the answer the user can see.
+		//
+		// It is never rendered as a child, so nothing else maintains its bounds:
+		// they are either the 64x64 a GuiControl is constructed with, or a
+		// screen-space rectangle the RUNTIME dropdown stamped on it the last time
+		// one was opened. The Gui Editor draws its selection from
+		// localToGlobalCoord, so either of those puts the outline somewhere with
+		// no visible relationship to the row that was clicked.
+		//
+		// localToGlobalCoord walks mBounds.point + mRenderInsetLT and then every
+		// ancestor's, so the bounds it needs are the row less everything the walk
+		// is going to add for it. This control contributes none of its own.
+		GuiMenuItemCtrl* command = dynamic_cast<GuiMenuItemCtrl*>(*i);
+		if (command != NULL)
+		{
+			command->mRenderInsetLT = Point2I(0, 0);
+			command->mRenderInsetRB = Point2I(0, 0);
+			command->mBounds.set(rowRect.point + barContentInset - fromMenu, rowRect.extent);
+		}
+
+		y += h;
+	}
+
+	mEditAddRowRect.set(Point2I(boxContent.point.x, y), Point2I(widest, rowHeight));
+}
+
+S32 GuiMenuBarCtrl::editRowHeight(GuiMenuItemCtrl* item, S32 rowHeight, S32 spacerHeight)
+{
+	if (item != NULL && item->mDisplayType == GuiMenuItemCtrl::DisplayType::Spacer)
+	{
+		return spacerHeight;
+	}
+	return rowHeight;
+}
+
+void GuiMenuBarCtrl::renderEditMenu(const Point2I &contentOffset)
+{
+	if (!mEditBoxRect.isValidRect())
+		return;
+
+	// The clip in force here is this control's PARENT's content rect, not the
+	// bar's own bounds (GuiControl::renderChild), so the box is free to hang
+	// below the strip and is clipped to the container the bar sits in - which is
+	// exactly as far as it should reach.
+	RectI box = mEditBoxRect;
+	box.point += contentOffset;
+	renderUniversalRect(box, mMenuContentProfile, NormalState);
+
+	GuiCanvas* root = getRoot();
+	Point2I cursor = (root != NULL) ? root->getCursorPos() : Point2I(-1, -1);
+
+	S32 row = 0;
+	for (iterator i = mEditOpenMenu->begin(); i != mEditOpenMenu->end() && row < mEditRowRects.size(); i++, row++)
+	{
+		GuiMenuItemCtrl* child = dynamic_cast<GuiMenuItemCtrl*>(*i);
+		if (child == NULL)
+			continue;
+
+		RectI rowRect = mEditRowRects[row];
+		rowRect.point += contentOffset;
+
+		// A separator draws as the runtime draws one - the profile in its SELECTED
+		// state, no text and no marks - so a rule looks here like it will look in
+		// the game.
+		if (child->mDisplayType == GuiMenuItemCtrl::DisplayType::Spacer)
+		{
+			RectI spacerRect = applyMargins(rowRect.point, rowRect.extent, SelectedState, mMenuItemProfile);
+			if (spacerRect.isValidRect())
+			{
+				renderUniversalRect(spacerRect, mMenuItemProfile, SelectedState);
+			}
+			continue;
+		}
+
+		GuiControlState state = child->isActive() ? NormalState : DisabledState;
+		if (rowRect.pointInRect(cursor))
+			state = HighlightState;
+
+		// Margins first, as GuiMenuListCtrl::onRenderItem does. A theme that puts
+		// a margin on a menu item - which is how a separator is given the room
+		// that makes its two border lines read as a groove rather than as the
+		// edges of a band - would otherwise draw differently here than in the game.
+		RectI ctrlRect = applyMargins(rowRect.point, rowRect.extent, state, mMenuItemProfile);
+		if (!ctrlRect.isValidRect())
+			continue;
+
+		renderUniversalRect(ctrlRect, mMenuItemProfile, state);
+
+		// The same marks GuiMenuListCtrl::onRenderItem draws, so what a kind
+		// looks like is what it will look like: a square bullet for a toggle, a
+		// round one for a radio item, lit when it starts on, and an arrow on the
+		// right for an item that opens a submenu of its own.
+		RectI leftIcon = RectI(rowRect.point, Point2I(rowRect.extent.y, rowRect.extent.y));
+		if (child->mDisplayType == GuiMenuItemCtrl::DisplayType::Toggle ||
+			child->mDisplayType == GuiMenuItemCtrl::DisplayType::Radio)
+		{
+			ColorI markColor = child->mIsOn ? mMenuItemProfile->getFillColor(HighlightState)
+				: mMenuItemProfile->getFillColor(NormalState);
+			S32 fontHeight = mMenuItemProfile->getFont(mFontSizeAdjust)->getHeight();
+			renderColorBullet(leftIcon, markColor, getMin(fontHeight, 16),
+				child->mDisplayType == GuiMenuItemCtrl::DisplayType::Radio);
+		}
+
+		if (child->mDisplayType == GuiMenuItemCtrl::DisplayType::Menu)
+		{
+			RectI rightIcon = RectI(
+				Point2I(rowRect.point.x + rowRect.extent.x - rowRect.extent.y, rowRect.point.y),
+				leftIcon.extent);
+			rightIcon.inset(2, 0);
+			ColorI arrowColor = ColorI(getFontColor(mMenuItemProfile, state));
+			renderTriangleIcon(rightIcon, arrowColor, GuiDirection::Right,
+				mMenuItemProfile->getFont(mFontSizeAdjust)->getHeight() / 2);
+		}
+
+		// Indented past the mark column, the way the runtime rows are, so a menu
+		// of mixed kinds still reads as one column of labels.
+		dglSetBitmapModulation(getFontColor(mMenuItemProfile, state));
+		RectI textRect = RectI(rowRect.point.x + rowRect.extent.y, rowRect.point.y,
+			rowRect.extent.x - (2 * rowRect.extent.y), rowRect.extent.y);
+		renderText(textRect.point, textRect.extent, child->getText(), mMenuItemProfile);
+	}
+
+	if (mEditAddRowRect.isValidRect())
+	{
+		RectI addRow = mEditAddRowRect;
+		addRow.point += contentOffset;
+		renderAddItem(addRow);
+	}
+}
+
+RectI GuiMenuBarCtrl::getAddSubItemGlobalRect()
+{
+	// Worked out on demand rather than read back from the last frame. Which menu
+	// is open follows the selection, and the selection changes without anything
+	// being drawn - script selects a menu and asks about it in the same breath.
+	refreshEditMenu();
+
+	if (!mEditAddRowRect.isValidRect() || !isEditMode())
+	{
+		return RectI(0, 0, 0, 0);
+	}
+
+	Point2I offset = Point2I(0, 0);
+	RectI contentRect = getInnerRect(offset);
+
+	return RectI(localToGlobalCoord(contentRect.point) + mEditAddRowRect.point, mEditAddRowRect.extent);
+}
+
+GuiMenuItemCtrl* GuiMenuBarCtrl::findMenuAt(const Point2I &menuLocalPt)
+{
+	// Deliberately not findHitMenu: that one refuses an inactive menu, and a
+	// greyed-out menu is exactly the kind you open the editor to fix. Only
+	// visibility is honoured, because calculateMenus does not place a hidden item
+	// and its rectangle is therefore whatever it was last time.
+	iterator i;
+	for (i = begin(); i != end(); i++)
+	{
+		GuiMenuItemCtrl *ctrl = dynamic_cast<GuiMenuItemCtrl *>(*i);
+		if (ctrl != NULL && ctrl->isVisible() && ctrl->mBounds.pointInRect(menuLocalPt))
+		{
+			return ctrl;
+		}
+	}
+	return NULL;
+}
+
+void GuiMenuBarCtrl::renderAddItem(RectI itemRect)
+{
+	GuiEditCtrl* edit = GuiControl::smEditorHandle;
+	if (edit == NULL)
+		return;
+
+	// Ghosted, so it never passes for a menu. Brighter under the cursor, so it
+	// reads as something to click rather than the empty tail of the bar - the
+	// same treatment the tab book's "+" tab gets.
+	ColorI fill = edit->getEditorColor();
+	fill.alpha = 100;
+
+	GuiCanvas* root = getRoot();
+	if (root != NULL && itemRect.pointInRect(root->getCursorPos()))
+		fill.alpha = 200;
+
+	dglDrawRectFill(itemRect, fill);
+
+	dglSetBitmapModulation(getFontColor(edit->mProfile, NormalState));
+	F32 tempAdjust = mFontSizeAdjust;
+	mFontSizeAdjust = 1.5f;
+	renderText(itemRect.point, itemRect.extent, "+", edit->mProfile);
+	mFontSizeAdjust = tempAdjust;
+}
+
+void GuiMenuBarCtrl::requestNewMenuItem(GuiMenuItemCtrl *parent)
+{
+	// The GuiEditCtrl wears the GuiEditorBrain namespace, so this arrives at
+	// GuiEditorBrain::onAddMenuItem. A bar being edited by anything with no
+	// handler for it simply gets no item, which is the right way for this to
+	// fail.
+	GuiEditCtrl* edit = GuiControl::smEditorHandle;
+	if (edit != NULL && edit->isMethod("onAddMenuItem"))
+	{
+		Con::executef(edit, 3, "onAddMenuItem", getIdString(),
+			(parent != NULL) ? parent->getIdString() : "");
+	}
+}
+
+bool GuiMenuBarCtrl::pointInControl(const Point2I& parentCoordPoint)
+{
+	if (Parent::pointInControl(parentCoordPoint))
+		return true;
+
+	// The dropdown drawn while authoring hangs BELOW the strip, outside the bar's
+	// own bounds - and both findHitControl and the canvas walk bounds, so without
+	// this nobody ever offers the bar a click on its own "+" row. Empty outside
+	// edit mode, so this says nothing about a bar in a running game.
+	if (mEditBoxRect.isValidRect())
+	{
+		Point2I origin = Point2I(0, 0);
+		RectI contentRect = getInnerRect(origin);
+
+		RectI box = mEditBoxRect;
+		box.point += mBounds.point + contentRect.point;
+
+		if (box.pointInRect(parentCoordPoint))
+			return true;
+	}
+
+	return false;
+}
+
+bool GuiMenuBarCtrl::onMouseDownEditor(const GuiEvent &event, const Point2I& offset)
+{
+	Point2I menuLocalMouse = getMenuLocalCoord(globalToLocalCoord(event.mousePoint));
+	GuiEditCtrl* edit = GuiControl::smEditorHandle;
+
+	if (mAddItemRect.isValidRect() && mAddItemRect.pointInRect(menuLocalMouse))
+	{
+		requestNewMenuItem(NULL);
+
+		// Nothing else happens on this click. Selection follows the item the
+		// editor is about to make.
+		return true;
+	}
+
+	// The open dropdown, which is drawn over whatever is beneath it and so gets
+	// asked before it.
+	if (mEditAddRowRect.isValidRect() && mEditAddRowRect.pointInRect(menuLocalMouse))
+	{
+		requestNewMenuItem(mEditOpenMenu);
+		return true;
+	}
+
+	if (mEditOpenMenu != NULL && edit != NULL)
+	{
+		for (S32 row = 0; row < mEditRowRects.size(); row++)
+		{
+			if (mEditRowRects[row].pointInRect(menuLocalMouse) && row < mEditOpenMenu->size())
+			{
+				edit->select(dynamic_cast<GuiControl*>((*mEditOpenMenu)[row]));
+				return true;
+			}
+		}
+	}
+
+	// The bar is opaque to findHitControl, so nothing else is going to offer the
+	// menu itself as the thing that was clicked.
+	GuiMenuItemCtrl *item = findMenuAt(menuLocalMouse);
+	if (item != NULL && edit != NULL)
+	{
+		edit->select(item);
+		return true;
+	}
+
+	return Parent::onMouseDownEditor(event, offset);
+}
+
+// The bar is opaque to hit testing: it places its items itself and answers for
+// them by hand, through findHitMenu.
+//
+// This used to take two parameters where GuiControl's takes four, so it hid the
+// base rather than overriding it and never ran - every caller reaches this
+// through a GuiControl*. The base then descended into the items, and on into
+// THEIR children, whose mBounds are either the default 64x64 or a canvas-global
+// rectangle GuiMenuListCtrl stamped on them the last time a dropdown was drawn.
+// Clicking a menu on an authored bar therefore handed the Gui Editor the last
+// command inside it.
+GuiControl* GuiMenuBarCtrl::findHitControl(const Point2I &pt, S32 initialLayer, const bool ignoreUseInput, const bool ignoreEditSelected)
 {
 	return this;
+}
+
+void GuiMenuBarCtrl::setUpdate()
+{
+	Parent::setUpdate();
+
+	// A top-level menu is exactly as wide as its caption, so the strip's layout
+	// is a function of the text and has to be redone whenever the text might
+	// have moved. The properties pane writes a caption on every keystroke, and
+	// this is what makes the bar reflow under the cursor as it is typed.
+	calculateMenus();
+}
+
+void GuiMenuBarCtrl::childrenReordered()
+{
+	// The strip is packed left to right in child order, and nothing else re-runs
+	// it on a reorder - so dragging an item in the Gui Editor's tree would leave
+	// every item wearing the rectangle of whichever item used to be there.
+	calculateMenus();
+
+	Parent::childrenReordered();
 }
 
 GuiMenuItemCtrl* GuiMenuBarCtrl::findHitMenu(const Point2I &pt)
@@ -259,6 +801,20 @@ void GuiMenuBarCtrl::onRender(Point2I offset, const RectI &updateRect)
 	{
 		//Render the childen
 		renderChildControls(offset, contentRect, updateRect);
+
+		// After the menus, so it always reads as the end of the strip. Empty
+		// unless calculateMenus found itself in edit mode, which is the whole
+		// test - and on a bar with no menus at all it is the only way to get one.
+		if (mAddItemRect.isValidRect())
+		{
+			RectI addBounds = mAddItemRect;
+			addBounds.point += contentRect.point;
+			renderAddItem(addBounds);
+		}
+
+		// Last, so the open menu's box covers the strip's own "+" if the two ever
+		// overlap.
+		renderEditMenu(contentRect.point);
 	}
 }
 
@@ -617,6 +1173,10 @@ GuiMenuItemCtrl::GuiMenuItemCtrl()
 	mNextItem = NULL;
 	mOpenSubMenu = NULL;
 
+	// Only ever assigned once this item is inside a bar, or inside an item that
+	// is - and onChildAdded reads it before either has necessarily happened.
+	mMenuBar = NULL;
+
 	mScroll = NULL;
 	mList = NULL;
 }
@@ -634,7 +1194,11 @@ void GuiMenuItemCtrl::initPersistFields()
 	addField("Visible", TypeBool, Offset(mVisible, GuiMenuItemCtrl));
 	addProtectedField("IsOn", TypeBool, Offset(mIsOn, GuiMenuItemCtrl), &defaultProtectedSetFn, &defaultProtectedGetFn, &writeIsOn, "");
 	addProtectedField("Toggle", TypeBool, Offset(mToggle, GuiMenuItemCtrl), &setToggle, &defaultProtectedGetFn, &writeToggle, "");
-	addProtectedField("Radio", TypeS32, Offset(mRadio, GuiMenuItemCtrl), &setRadio, &defaultProtectedGetFn, &writeRadio, "");
+	// TypeBool, not TypeS32: mRadio is a bool, and setRadio has always written it
+	// with dAtob. Declared as an S32 the default getter read four bytes off a
+	// one-byte member and answered with whatever was next to it, so a plain
+	// command could read back as a radio item.
+	addProtectedField("Radio", TypeBool, Offset(mRadio, GuiMenuItemCtrl), &setRadio, &defaultProtectedGetFn, &writeRadio, "");
 	endGroup("MenuItem");
 
 	addGroup("Localization");
@@ -684,16 +1248,36 @@ void GuiMenuItemCtrl::onChildAdded(GuiControl *child)
 	if (!subMenu)
 	{
 		Con::warnf("GuiMenuItemCtrl::onChildAdded - Only a GuiMenuItemCtrl can be added to a GuiMenuItemCtrl! Child will not be added.");
-		SimObject *simObj = reinterpret_cast<SimObject*>(child);
-		removeObject(simObj);
+
+		// As in GuiMenuBarCtrl::onChildAdded above: find the destination first, so
+		// a refusal cannot orphan the control it refused.
+		GuiControl *destination = getParent();
+		if (destination == NULL)
+		{
+			Con::warnf("GuiMenuItemCtrl::onChildAdded - no parent to place it on; leaving it where it is");
+			return;
+		}
+
+		removeObject(child);
+		destination->addObject(child);
 		return;
 	}
 	subMenu->mMenuBar = this->mMenuBar;
-	subMenu->setControlProfile(mMenuBar->mMenuItemProfile);
+
+	// mMenuBar is NULL until this item is itself inside a bar, and an item built
+	// in script can be given children before it is added to one.
+	if (mMenuBar != NULL)
+	{
+		subMenu->setControlProfile(mMenuBar->mMenuItemProfile);
+	}
 	if (dStrcmp(subMenu->getText(), "-") == 0)
 	{
+		// The text is left as "-" rather than cleared. It is the only record that
+		// this is a separator - there is no field for it - so clearing it meant a
+		// separator did not survive being saved and read back: the reloaded item
+		// had no dash left to recognise it by. Keeping it also lets the properties
+		// pane show what it is, and lets someone type their way back out of it.
 		subMenu->mDisplayType = Spacer;
-		subMenu->setText(StringTable->EmptyString);
 	}
 	else if (subMenu->mToggle)
 	{
@@ -740,19 +1324,110 @@ void GuiMenuItemCtrl::onChildAdded(GuiControl *child)
 
 void GuiMenuItemCtrl::onChildRemoved(SimObject *child)
 {
+	// The same repair GuiMenuBarCtrl::onChildRemoved makes, for a submenu's own
+	// children: the sibling links the keyboard walk follows, and the two pointers
+	// that would otherwise name a control this item no longer holds.
+	GuiMenuItemCtrl *item = dynamic_cast<GuiMenuItemCtrl*>(child);
+	if (item != NULL)
+	{
+		if (item->mPrevItem != NULL)
+		{
+			item->mPrevItem->mNextItem = item->mNextItem;
+		}
+		if (item->mNextItem != NULL)
+		{
+			item->mNextItem->mPrevItem = item->mPrevItem;
+		}
+		item->mPrevItem = NULL;
+		item->mNextItem = NULL;
+
+		if (mOpenSubMenu == item)
+		{
+			mOpenSubMenu = NULL;
+		}
+		if (mList != NULL && mList->mHoveredItem == item)
+		{
+			mList->mHoveredItem = NULL;
+		}
+	}
+
 	if (size() <= 0)
 	{
 		if (mDisplayType == Menu)
 		{
+			// Back to a plain command, which is what an item that never had
+			// children is - so an emptied menu draws the same as a fresh one.
 			mDisplayType = TextCommand;
-			mList->deleteObject();
-			mList = NULL;
-			mScroll->deleteObject();
-			mScroll = NULL;
+
+			// The scroller and the list are KEPT, not freed. They are built with a
+			// bare new and never registered - as is every hidden helper control in
+			// this file - so deleteObject asserts on them ("Object not
+			// registered"), and registering them instead moves them into the
+			// canvas's ownership and hangs the engine on the way down if a menu is
+			// open when it quits. onChildAdded above reuses them if a child ever
+			// comes back, which in the Gui Editor it routinely does.
+			//
+			// Nothing reached any of this until a menu could be emptied one
+			// command at a time while authoring.
+			if (mIsOpen && mMenuBar != NULL)
+			{
+				closeMenu();
+			}
 		}
 	}
 
 	checkForGoodChildren();
+}
+
+// A menu item is a row in a bar or a row in a menu and nothing else: it exposes
+// none of GuiControl's geometry (initPersistFields calls SimObject's), its
+// rectangle is dictated by whatever is laying it out, and anywhere else it is a
+// control nothing will ever draw a row for. So it refuses every other parent and
+// the Gui Editor leaves it where it is.
+//
+// Two legal kinds of parent rather than the one a tab page has - moving a
+// command from one menu to another, or a menu from one bar to another, are both
+// ordinary things to want.
+bool GuiMenuItemCtrl::canBeChildOf(GuiControl* parent)
+{
+	return dynamic_cast<GuiMenuBarCtrl*>(parent) != NULL ||
+		dynamic_cast<GuiMenuItemCtrl*>(parent) != NULL;
+}
+
+void GuiMenuItemCtrl::setText(const char *txt)
+{
+	Parent::setText(txt);
+
+	// A single dash is how the documentation says you write a separator, and the
+	// text is the only record of one. Derived here rather than only when the item
+	// is added, so typing a dash into the properties pane turns the row into a
+	// separator as it is typed - and typing over the dash turns it back.
+	//
+	// Only inside a menu: a separator on the bar itself would be a gap in the
+	// strip with nothing either side of it to separate. And never over a Menu,
+	// which is what having children makes an item.
+	if (mDisplayType != Menu && dynamic_cast<GuiMenuItemCtrl*>(getParent()) != NULL)
+	{
+		if (dStrcmp(getText(), "-") == 0)
+		{
+			mDisplayType = Spacer;
+		}
+		else if (mDisplayType == Spacer)
+		{
+			mDisplayType = mToggle ? Toggle : (mRadio ? Radio : TextCommand);
+		}
+	}
+
+	// Whoever is laying this item out sized it from the text that just changed.
+	// For a top-level menu that is the bar, whose setUpdate re-runs
+	// calculateMenus; for a command inside a menu the parent is another item,
+	// whose base setUpdate does nothing - and it does not need to, because the
+	// authored dropdown is re-measured every frame in refreshEditMenu.
+	GuiControl *parent = getParent();
+	if (parent != NULL)
+	{
+		parent->setUpdate();
+	}
 }
 
 void GuiMenuItemCtrl::checkForGoodChildren()
@@ -909,7 +1584,7 @@ bool GuiMenuItemCtrl::onKeyDown(const GuiEvent &event)
 {
 	if (mOpenSubMenu != NULL && (mOpenSubMenu->mList->mHoveredItem != NULL || mOpenSubMenu->mOpenSubMenu != NULL))
 	{
-		mOpenSubMenu->onKeyDown(event);
+		return mOpenSubMenu->onKeyDown(event);
 	}
 	else if (event.keyCode == KEY_DOWN && event.modifier == 0)
 	{
@@ -1019,6 +1694,12 @@ bool GuiMenuItemCtrl::onKeyDown(const GuiEvent &event)
 		}
 		return true;
 	}
+
+	// Any other key belongs to whoever asked next - matching GuiMenuBarCtrl's own
+	// onKeyDown. Falling off the end here returned whatever happened to be in the
+	// return register, for every ordinary letter and for any of the five keys
+	// above arriving with a modifier.
+	return false;
 }
 
 void GuiMenuItemCtrl::setMenuActive(StringTableEntry name, bool isActive)

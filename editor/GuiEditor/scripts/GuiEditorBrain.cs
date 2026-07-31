@@ -55,6 +55,22 @@ function GuiEditorBrain::onControlDropped(%this, %payload, %position)
       return;
    }
 
+   %this.placeControl(%payload);
+}
+
+// A control arriving from a gesture that has no cursor to be off the canvas -
+// which is what clicking a palette tile is. The position was worked out from the
+// container being worked in and is inside it by construction, so there is
+// nothing left to police.
+//
+// It has to be a door of its own rather than the drag's, because the drag's
+// question cannot be asked of every control. A GuiMenuBarCtrl pins itself to its
+// parent's origin - resize throws away the position it is handed - so its
+// payload sits at 0,0 however it is placed, the cursor test measures a point up
+// in the editor's own chrome, and clicking Menu Bar in the palette did nothing
+// at all.
+function GuiEditorBrain::placeControl(%this, %payload)
+{
    %pos = %payload.getGlobalPosition();
    %x = getWord(%pos, 0);
    %y = getWord(%pos, 1);
@@ -181,6 +197,14 @@ function GuiEditorBrain::acceptControl(%this, %payload)
       %this.newTabPage(%payload);
    }
 
+   // And the same for a menu bar, for the same reason and more sharply: the
+   // palette has never offered a GuiMenuItemCtrl, so before the "+" there was no
+   // way whatsoever to put anything in one.
+   if(%payload.isMemberOfClass("GuiMenuBarCtrl") && %payload.getCount() == 0)
+   {
+      %this.newMenuItem(%payload);
+   }
+
    %this.adoptControl(%payload);
 }
 
@@ -304,6 +328,94 @@ function GuiEditorBrain::freePageNumber(%this, %book)
         for(%i = 0; %i < %count; %i++)
         {
             if(%book.getObject(%i).getText() $= ("Page " @ %n))
+            {
+                %taken = true;
+                break;
+            }
+        }
+
+        if(!%taken)
+        {
+            return %n;
+        }
+    }
+
+    return %count + 1;
+}
+
+//-----------------------------------------------------------------------------
+// Menu items.
+//
+// The same arrangement as tab pages above, one level deeper. A GuiMenuItemCtrl
+// is not in the palette either, and it nests: a bar holds menus, and each menu
+// holds the commands. So the bar draws a "+" after the last menu, and an open
+// menu draws a "+" at the foot of its list, and both arrive here.
+//-----------------------------------------------------------------------------
+
+// GuiMenuBarCtrl::requestNewMenuItem, from a click on either "+". %parent is the
+// menu to put it in, or empty for a top-level one.
+function GuiEditorBrain::onAddMenuItem(%this, %bar, %parent)
+{
+    if(!isObject(%bar))
+    {
+        return;
+    }
+
+    if(!isObject(%parent))
+    {
+        %parent = %bar;
+    }
+
+    GuiEditor.undoRecorder.begin("Add Menu Item", "");
+    %item = %this.newMenuItem(%parent);
+    GuiEditor.undoRecorder.recordAdd(%item, "Add Menu Item");
+    %this.adoptControl(%item);
+    GuiEditor.undoRecorder.end();
+
+    // The add set first, because setting it clears the selection. Selecting the
+    // new item is also what opens the menu it went into - the bar works out which
+    // menu to show from the selection - so a menu made by the bar's "+" is
+    // already open and waiting for its first command.
+    %this.setCurrentAddSet(%item);
+    %this.selectList(%item);
+}
+
+// The one place a menu item is made, so that an item seeded with its bar and an
+// item added later are the same object.
+function GuiEditorBrain::newMenuItem(%this, %parent)
+{
+    %number = %this.freeMenuNumber(%parent);
+
+    %item = new GuiMenuItemCtrl()
+    {
+        Text = "Menu " @ %number;
+    };
+
+    // Added to its parent before it is given anything of its own: a menu item
+    // learns which bar it belongs to from the parent it arrives in, and reads
+    // that back the moment it gains a child.
+    %parent.add(%item);
+
+    return %item;
+}
+
+// The lowest number no item in this parent is already using. Numbering is per
+// parent, so each menu's commands count from 1 rather than carrying on from the
+// bar's. Counting the children instead would repeat one: three items, delete the
+// second, and the next would be a second "Menu 3".
+//
+// Bounded rather than open: among the numbers 1 to N+1 at least one is free of N
+// items, so the loop always finds an answer inside it.
+function GuiEditorBrain::freeMenuNumber(%this, %parent)
+{
+    %count = %parent.getCount();
+
+    for(%n = 1; %n <= (%count + 1); %n++)
+    {
+        %taken = false;
+        for(%i = 0; %i < %count; %i++)
+        {
+            if(%parent.getObject(%i).getText() $= ("Menu " @ %n))
             {
                 %taken = true;
                 break;

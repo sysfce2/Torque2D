@@ -58,6 +58,7 @@ function GuiEditor::create( %this )
     exec("./scripts/GuiEditorChoiceRow.cs");
     exec("./scripts/GuiEditorAnchorPicker.cs");
     exec("./scripts/GuiEditorTextBlock.cs");
+    exec("./scripts/GuiEditorMenuItemBlock.cs");
     exec("./scripts/GuiEditorHeaderBlock.cs");
     exec("./scripts/GuiEditorDynamicFields.cs");
     exec("./scripts/GuiEditorInspectorPane.cs");

@@ -325,6 +325,37 @@ static void stampCondenserDarkBorder(GuiProfileTheme* theme, GuiBorderProfile* b
     applyBorderRecipe(border, recipe);
 }
 
+static void stampSelectedInsetBorder(GuiProfileTheme* theme, GuiBorderProfile* border)
+{
+    // A padded inset in three states and a rule in the fourth. The odd one out is
+    // SELECTED, and it is deliberate: a menu separator is drawn as the menu item
+    // profile in its selected state and nothing else in a menu ever uses that
+    // state (hover is Highlight, greyed is Disabled), so the SL fields of a menu
+    // item's borders belong to separators alone. One border therefore gives a
+    // theme both the room around a label and the groove between two groups of
+    // them, which is why this is what a generated MenuItem wears.
+    //
+    // The margin is what makes it a groove rather than a band. A separator's
+    // height is nothing but this border's margin, rim and padding
+    // (GuiMenuListCtrl::updateSize measures it with a zero-height interior), so
+    // dropping the padding to 0 and giving it 4 of margin buys 4px of the menu's
+    // own fill above and below a 2px rule.
+    BorderRecipe recipe = baseBorderRecipe(theme);
+    set4(recipe.margin, 0, 0, 4, 0);
+    set4(recipe.border, 0, 0, 1, 0);
+    set4(recipe.borderColor, theme->getColorSurface());
+    set4(recipe.padding, 10, 10, 0, 10);
+    recipe.underfill = true;
+
+    // Alone among the recipes, not scaled by the theme's border size. This rim is
+    // a rule between two groups of commands rather than the edge of a control: at
+    // borderSize 0 it would vanish and the menu would lose its grouping, and at 2
+    // or 3 it would thicken into a band.
+    recipe.borderScale = 1;
+
+    applyBorderRecipe(border, recipe);
+}
+
 //-----------------------------------------------------------------------------
 // Profile recipes. Every profile starts from the Default recipe and overrides
 // what its category needs; borders are wired to the theme's border members.
@@ -793,7 +824,12 @@ static void stampMenuItemProfile(GuiProfileTheme* theme, GuiControlProfile* prof
     STAMP_FIELD(profile, "fontColorHL", mFontColorHL, adj(text, 10));
     STAMP_FIELD(profile, "fontColorNA", mFontColorNA, alphaOf(text, 150));
     STAMP_FIELD(profile, "align", mAlignment, AlignmentType::LeftAlign);
-    stampProfileBorders(theme, profile, "Padded", NULL, NULL, NULL, NULL);
+    // Top and bottom take SelectedInset, so a new theme's menus arrive with
+    // separators that read as separators. The sides are held back from it and
+    // given the same inset with no state to it: were they to fall through, a
+    // separator would pick up the 4px margin and the rim at each end too, capping
+    // the rule with a tick rather than running it the width of the menu.
+    stampProfileBorders(theme, profile, "SelectedInset", "Padded", "Padded", NULL, NULL);
 }
 
 static void stampMenuContentProfile(GuiProfileTheme* theme, GuiControlProfile* profile)
@@ -963,6 +999,7 @@ const GuiProfileTheme::BorderCategory GuiProfileTheme::smBorderCategories[] =
     { "RimmedExpander", "RimmedExpanderBorder", stampRimmedExpanderBorder },
     { "CondenserLight", "CondenserLightBorder", stampCondenserLightBorder },
     { "CondenserDark",  "CondenserDarkBorder",  stampCondenserDarkBorder },
+    { "SelectedInset",  "SelectedInsetBorder",  stampSelectedInsetBorder },
 };
 const S32 GuiProfileTheme::smBorderCategoryCount = sizeof(smBorderCategories) / sizeof(smBorderCategories[0]);
 

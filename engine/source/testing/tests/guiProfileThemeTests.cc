@@ -913,7 +913,8 @@ TEST( GuiProfileThemeTests, ThemeGeneratesTheNamedBorderPalette )
 
     const char* names[] = { "Empty", "Rimmed", "Thick", "Light", "Dark", "Padded",
         "Highlight", "PaddedRim", "BevelLight", "BevelDark", "PaddedLight",
-        "PaddedDark", "RimmedExpander", "CondenserLight", "CondenserDark" };
+        "PaddedDark", "RimmedExpander", "CondenserLight", "CondenserDark",
+        "SelectedInset" };
     const S32 count = sizeof( names ) / sizeof( names[0] );
     ASSERT_EQ( GuiProfileTheme::getBorderCategoryCount(), count );
     for ( S32 i = 0; i < count; ++i )
@@ -992,6 +993,81 @@ TEST( GuiProfileThemeTests, SixBorderRecipesUseExpectedValues )
     ASSERT_EQ( rimmed->mBorder[0], 3 );
     ASSERT_EQ( thick->mBorder[0], 6 );
     ASSERT_EQ( padded->mPadding[0], 10 );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+//-----------------------------------------------------------------------------
+// SelectedInset: the border that gives a generated theme its menu separators.
+// Three states pad a label; the selected state - the only state a menu ever
+// draws a separator in - is a rule with room around it.
+//-----------------------------------------------------------------------------
+
+TEST( GuiProfileThemeTests, SelectedInsetBorderIsARuleInTheSelectedState )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );   // constructor borderSize == 1
+
+    GuiBorderProfile* inset = theme->getBorder( StringTable->insert( "SelectedInset" ) );
+    ASSERT_TRUE( inset != NULL );
+
+    // Normal, highlight and disabled: a plain 10px inset, no rim.
+    const S32 padStates[] = { 0, 1, 3 };
+    for ( S32 s = 0; s < 3; ++s )
+    {
+        const S32 i = padStates[s];
+        ASSERT_EQ( inset->mMargin[i], 0 );
+        ASSERT_EQ( inset->mBorder[i], 0 );
+        ASSERT_EQ( inset->mPadding[i], 10 );
+    }
+
+    // Selected: margin, rim, no padding - so a separator is exactly as tall as
+    // its own chrome, which is how GuiMenuListCtrl::updateSize measures one.
+    ASSERT_EQ( inset->mMargin[2], 4 );
+    ASSERT_EQ( inset->mBorder[2], 1 );
+    ASSERT_EQ( inset->mPadding[2], 0 );
+    ASSERT_TRUE( inset->mUnderfill );
+
+    for ( S32 i = 0; i < 4; ++i )
+        ASSERT_TRUE( inset->mBorderColor[i] == theme->getColorSurface() );
+
+    // A rule, not an edge: unlike every other recipe this one ignores borderSize,
+    // so a theme with no borders at all still separates its menus, and a heavy
+    // one does not turn the rule into a band.
+    theme->setDataField( StringTable->insert( "borderSize" ), NULL, "0" );
+    ASSERT_EQ( inset->mBorder[2], 1 );
+    theme->setDataField( StringTable->insert( "borderSize" ), NULL, "3" );
+    ASSERT_EQ( inset->mBorder[2], 1 );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, MenuItemProfileWearsSelectedInsetWithPaddedSides )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    GuiControlProfile* item = theme->getProfile( StringTable->insert( "MenuItem" ) );
+    ASSERT_TRUE( item != NULL );
+    ASSERT_EQ( item->mBorderDefault, theme->getBorder( StringTable->insert( "SelectedInset" ) ) );
+
+    // Top and bottom fall back to the default - which is what shapes a separator -
+    // while the sides carry a plain inset instead, so a rule runs the width of the
+    // menu rather than being capped at both ends.
+    GuiBorderProfile* padded = theme->getBorder( StringTable->insert( "Padded" ) );
+    ASSERT_EQ( item->getLeftProfile(), padded );
+    ASSERT_EQ( item->getRightProfile(), padded );
+    ASSERT_EQ( item->getTopProfile(), item->mBorderDefault );
+    ASSERT_EQ( item->getBottomProfile(), item->mBorderDefault );
+
+    // Resolved eagerly: render reads these cached pointers, never the lazy
+    // resolver, so a freshly stamped profile must already know its sides.
+    ASSERT_TRUE( item->getLeftBorder() != NULL );
+    ASSERT_TRUE( item->getTopBorder() != NULL );
 
     theme->deleteObject();
 

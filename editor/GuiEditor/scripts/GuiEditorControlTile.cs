@@ -248,5 +248,10 @@ function GuiEditorControlTile::onClick(%this)
 	// Deliberately not onControlDragged first: that picks the add set by
 	// hit-testing the cursor, and a click means "the container I am already
 	// working in", not "whatever is under this point".
-	GuiEditor.brain.onControlDropped(%payload, %payload.Position);
+	//
+	// And placeControl rather than onControlDropped, because the cursor test that
+	// one opens with is a drag's question. A click has no cursor, the position
+	// above is already inside the visible part of the container, and a control
+	// that pins its own position never took it anyway.
+	GuiEditor.brain.placeControl(%payload);
 }

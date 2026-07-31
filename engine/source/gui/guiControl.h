@@ -696,6 +696,18 @@ public:
     /// this. GuiTabPageCtrl is the one that does.
     virtual bool canBeChildOf(GuiControl* parent) { return true; };
 
+    /// Whether the Gui Editor may move or resize this control.
+    ///
+    /// False where the PARENT dictates the geometry and the control's own
+    /// Position and Extent are written over the moment anything re-lays it out -
+    /// a tab page, a menu item. The editor draws such a control the way it draws
+    /// a locked one: an outline rather than eight sizing handles, which would
+    /// otherwise be handles you can drag to no effect at all.
+    ///
+    /// This is the control's own nature, not the user's padlock; isLocked is
+    /// that, and the editor honours both.
+    virtual bool isGeometryEditable() { return true; };
+
     /// @}
 
     /// @name Tabs

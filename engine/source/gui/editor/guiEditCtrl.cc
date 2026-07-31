@@ -438,6 +438,17 @@ S32 GuiEditCtrl::getSizingHitKnobs(const Point2I& pt, const RectI& box)
 	return sizingNone;
 }
 
+// Whether the editor must leave this control's position and extent alone.
+//
+// Two different reasons that come to the same thing: isLocked is the padlock the
+// user turned on, and isGeometryEditable is the control saying its parent
+// dictates its geometry - a tab page, a menu item - so that dragging it would
+// change a number something else overwrites on the next layout pass.
+static inline bool editGeometryFrozen(GuiControl* ctrl)
+{
+	return ctrl == NULL || ctrl->isLocked() || !ctrl->isGeometryEditable();
+}
+
 void GuiEditCtrl::drawControlDecoration(GuiControl* ctrl, RectI& box, ColorI& outlineColor, ColorI& nutColor)
 {
 	S32 lx = box.point.x, rx = box.point.x + box.extent.x - 1;
@@ -464,8 +475,10 @@ void GuiEditCtrl::drawControlDecoration(GuiControl* ctrl, RectI& box, ColorI& ou
 			dglDrawRect(box, outlineColor);
 		}
 	}
-	else if (ctrl->isLocked())
+	else if (editGeometryFrozen(ctrl))
 	{
+		// An outline rather than eight handles, because there is nothing here to
+		// take hold of - see editGeometryFrozen.
 		box.inset(-1, -1);
 		dglDrawRect(box, strongestColor);
 		box.inset(-1,-1);
@@ -726,7 +739,10 @@ void GuiEditCtrl::getCursor(GuiCursor*& cursor, bool& showCursor, const GuiEvent
 	Point2I mousePos = globalToLocalCoord(lastGuiEvent.mousePoint);
 
 	// first see if we hit a sizing knob on the currently selected control...
-	if (mSelectedControls.size() == 1 && initCursors() == true)
+	// (a control whose geometry is not the editor's to change draws no knobs, so
+	// it must not promise a resize cursor over one either)
+	if (mSelectedControls.size() == 1 && initCursors() == true &&
+		!editGeometryFrozen(mSelectedControls.first()))
 	{
 		ctrl = mSelectedControls.first();
 		cext = ctrl->getExtent();
@@ -791,7 +807,10 @@ void GuiEditCtrl::onTouchDown(const GuiEvent& event)
 	mLastMousePos = globalToLocalCoord(event.mousePoint);
 
 	// first see if we hit a sizing knob on the currently selected control...
-	if (mSelectedControls.size() == 1)
+	// (none are drawn for a control whose geometry is not the editor's to change,
+	// so none can be hit either - otherwise the gesture starts, fires onPreEdit
+	// and records an undo step for a resize that never happens)
+	if (mSelectedControls.size() == 1 && !editGeometryFrozen(mSelectedControls.first()))
 	{
 		ctrl = mSelectedControls.first();
 		cext = ctrl->getExtent();
@@ -1041,8 +1060,8 @@ void GuiEditCtrl::onTouchDragged(const GuiEvent& event)
 
 		GuiControl* ctrl = mSelectedControls.first();
 
-		// can't resize a locked control
-		if (ctrl && ctrl->isLocked())
+		// can't resize a locked control, nor one whose parent owns its geometry
+		if (editGeometryFrozen(ctrl))
 			return;
 
 		Point2I ctrlPoint = mCurrentAddSet->globalToLocalCoord(event.mousePoint);
@@ -1114,8 +1133,8 @@ void GuiEditCtrl::onTouchDragged(const GuiEvent& event)
 
 		for (; i != mSelectedControls.end(); i++)
 		{
-			// skip locked controls
-			if ((*i)->isLocked())
+			// skip controls the editor may not move
+			if (editGeometryFrozen(*i))
 				continue;
 
 			if ((*i)->mBounds.point.x < minPos.x)
@@ -1141,8 +1160,8 @@ void GuiEditCtrl::onTouchDragged(const GuiEvent& event)
 			{
 				for (S32 i = 0; i < mSelectedControls.size(); i++)
 				{
-					// skip locked controls
-					if (mSelectedControls[i]->isLocked())
+					// skip controls the editor may not move
+					if (editGeometryFrozen(mSelectedControls[i]))
 						continue;
 
 					Point2I snapBackPoint(mSelectedControls[i]->mBounds.point.x, mDragBeginPoints[i].y);
@@ -1156,8 +1175,8 @@ void GuiEditCtrl::onTouchDragged(const GuiEvent& event)
 			{
 				for (S32 i = 0; i < mSelectedControls.size(); i++)
 				{
-					// skip locked controls
-					if (mSelectedControls[i]->isLocked())
+					// skip controls the editor may not move
+					if (editGeometryFrozen(mSelectedControls[i]))
 						continue;
 
 					Point2I snapBackPoint(mDragBeginPoints[i].x, mSelectedControls[i]->mBounds.point.y);
@@ -1279,8 +1298,8 @@ void GuiEditCtrl::moveSelection(const Point2I& delta)
 	Vector<GuiControl*>::iterator i;
 	for (i = mSelectedControls.begin(); i != mSelectedControls.end(); i++)
 	{
-		// skip locked controls
-		if ((*i)->isLocked())
+		// skip controls the editor may not move
+		if (editGeometryFrozen(*i))
 			continue;
 
 		(*i)->resize((*i)->mBounds.point + delta, (*i)->mBounds.extent);

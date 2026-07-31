@@ -44,6 +44,7 @@ function GuiEditorHeaderBlock::build(%this)
 	%this.buildToggles();
 	%this.buildGeometry();
 	%this.buildText();
+	%this.buildMenuItem();
 
 	// The value grid starts empty; bindClass fills it, because what belongs
 	// there is the one thing here that changes with the class. Pair-width cells:
@@ -355,9 +356,14 @@ function GuiEditorHeaderBlock::bindClass(%this, %ctrl, %class)
 	// class with no profile at all cannot use it either.
 	%this.categoryRow.setVisible(!%bare && %spec.categoryChoices(%class) !$= "");
 	%this.geometryGrid.setVisible(!%bare);
-	%this.visibleButton.setVisible(!%bare);
-	%this.activeButton.setVisible(!%bare);
-	%this.inputButton.setVisible(!%bare);
+
+	// Not simply !bare: a bare class has none of GuiControl's fields except the
+	// ones it turns round and registers again, and a menu item does that with
+	// Visible and Active. useInput it genuinely does not have.
+	%states = %spec.stateToggles(%class);
+	%this.visibleButton.setVisible(%spec.listHas(%states, "Visible"));
+	%this.activeButton.setVisible(%spec.listHas(%states, "Active"));
+	%this.inputButton.setVisible(%spec.listHas(%states, "useInput"));
 
 	// isContainer is dead where the control cannot draw children -- GuiControl's
 	// setIsContainerFn forces the field false for those -- so the button goes
@@ -370,8 +376,41 @@ function GuiEditorHeaderBlock::bindClass(%this, %ctrl, %class)
 	// it and binds it -- it owns both copies.
 	%this.textBlock.setVisible(%spec.textBlockHome(%class) $= "header");
 
+	// A menu item's own fields, which are the only ones it has. It brings its own
+	// caption box, so the shared text block stands down for it.
+	%menuItem = (%class $= "GuiMenuItemCtrl");
+	%this.menuItemBlock.setVisible(%menuItem);
+	if(%menuItem)
+	{
+		%this.textBlock.setVisible(false);
+		%this.menuItemBlock.bind(%ctrl);
+	}
+
 	%this.buildValueRows(%ctrl, %class);
 	%this.resizeToFit();
+}
+
+//-----------------------------------------------------------------------------
+// The menu item block. Its own file, because a menu item shares almost nothing
+// with anything else in the palette - see GuiEditorMenuItemBlock.
+//-----------------------------------------------------------------------------
+
+function GuiEditorHeaderBlock::buildMenuItem(%this)
+{
+	%this.menuItemBlock = new GuiChainCtrl()
+	{
+		class = "GuiEditorMenuItemBlock";
+		HorizSizing = "width";
+		Position = "0 0";
+		Extent = %this.blockWidth SPC 24;
+		IsVertical = true;
+		pane = %this.pane;
+		spec = %this.spec;
+		blockWidth = %this.blockWidth;
+		Visible = false;
+	};
+	%this.add(%this.menuItemBlock);
+	%this.menuItemBlock.build();
 }
 
 // The principal value: whatever the control is for. Rebuilt rather than

@@ -198,9 +198,11 @@ function GuiEditorControlSpec::buildSections(%this)
 
 	%this.addSection("GuiMenuBarCtrl", "Scrollbar", "Scroll Bar",
 		"constantThumbHeight showArrowButtons scrollBarThickness");
-	// IsOn is the header's principal value, so the section carries only the two
-	// fields that decide how the item behaves when it is picked.
-	%this.addSection("GuiMenuItemCtrl", "Item", "Menu Item", "Toggle Radio");
+	// No section for GuiMenuItemCtrl. Everything it has is in the header, in
+	// GuiEditorMenuItemBlock: a menu item has no profile, no geometry and no
+	// tooltip, so a header with a caption in it and three empty sections below
+	// was most of what the pane showed. Toggle, Radio and IsOn went with it -
+	// they are one decision, and the block draws them as one.
 
 	%this.addSection("GuiGridCtrl", "Grid", "Grid",
 		"CellSpacingX CellSpacingY MaxColCount MaxRowCount OrderMode IsExtentDynamic");
@@ -274,7 +276,10 @@ function GuiEditorControlSpec::buildHeaderValues(%this)
 	%this.headerValues["GuiFrameSetCtrl"] = "DividerThickness";
 	%this.headerValues["GuiTabBookCtrl"] = "TabPosition";
 	%this.headerValues["GuiWindowCtrl"] = "titleHeight";
-	%this.headerValues["GuiMenuItemCtrl"] = "IsOn";
+
+	// GuiMenuItemCtrl is deliberately absent too: IsOn is one of the three fields
+	// GuiEditorMenuItemBlock draws as a single choice, so it is not a value the
+	// generic header block has anything to say about.
 
 	// GuiSpriteCtrl is deliberately absent: its principal value is three
 	// mutually exclusive fields rather than a fixed list, so the pane asks
@@ -393,6 +398,23 @@ function GuiEditorControlSpec::editorToggles(%this)
 function GuiEditorControlSpec::windowToggles(%this)
 {
 	return "canMove canClose canMinimize canMaximize resizeWidth resizeHeight";
+}
+
+// Which of the header's three runtime switches a class actually has.
+//
+// Not simply "all of them unless bare". A bare class calls
+// SimObject::initPersistFields rather than GuiControl's, and may then register
+// some of GuiControl's names again for itself - which GuiMenuItemCtrl does with
+// Active and Visible (see GuiMenuItemCtrl::initPersistFields). Those two are
+// real fields on it and the switches work; useInput is not, and does not.
+function GuiEditorControlSpec::stateToggles(%this, %class)
+{
+	if(%this.hasFlag(%class, "bare"))
+	{
+		return (%class $= "GuiMenuItemCtrl") ? "Visible Active" : "";
+	}
+
+	return "Visible Active useInput";
 }
 
 // Never shown anywhere, for any class.
