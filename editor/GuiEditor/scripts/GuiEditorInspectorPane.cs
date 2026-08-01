@@ -124,6 +124,7 @@ function GuiEditorInspectorPane::build(%this)
 
 	// The shared sections, in the order the work usually goes.
 	%this.buildTextSection();
+	%this.buildItemsSection();
 
 	// isContainer and useInput are both in the header's icon row now that there
 	// is art for them, so neither has a row here.
@@ -280,6 +281,39 @@ function GuiEditorInspectorPane::buildTooltipSection(%this)
 	%chain.add(%grid);
 	%this.addFieldRow(%grid, "tooltipWidth", %this.spec.labelFor("tooltipWidth"), "number", "");
 	%this.addFieldRow(%grid, "hovertime", %this.spec.labelFor("hovertime"), "number", "");
+}
+
+// The static rows of a list box or a drop down, directly under the text section
+// because they are what the control says: a list's rows are its caption. Built
+// once and shown per class rather than rebuilt with the class sections, for the
+// reason the header comment gives -- and it stays out of panelList and out of
+// the row registry, because what it holds is not a field.
+function GuiEditorInspectorPane::buildItemsSection(%this)
+{
+	%this.itemsPanel = %this.makeSectionPanel("Items");
+	%this.add(%this.itemsPanel);
+
+	%this.itemsBlock = new GuiChainCtrl()
+	{
+		class = "GuiEditorItemsBlock";
+		HorizSizing = "width";
+		Position = "0 24";
+		Extent = %this.paneWidth SPC 4;
+		IsVertical = true;
+		ChildSpacing = 4;
+		blockWidth = %this.paneWidth;
+		pane = %this;
+	};
+	%this.itemsPanel.add(%this.itemsBlock);
+	%this.itemsBlock.build();
+}
+
+// A row was added or removed, so the section is a different height. Same shape
+// as onDynamicFieldsChanged, and for the same reason.
+function GuiEditorInspectorPane::onItemsChanged(%this)
+{
+	%this.itemsBlock.resize(0, 24, %this.paneWidth, getWord(%this.itemsBlock.getExtent(), 1));
+	%this.forceLayout();
 }
 
 function GuiEditorInspectorPane::makeTextBlock(%this, %parent, %y)
@@ -493,6 +527,7 @@ function GuiEditorInspectorPane::bind(%this, %ctrl)
 	%this.header.bindClass(%ctrl, %class);
 	%this.buildVariantsSection();
 	%this.dynamicFields.bind(%ctrl);
+	%this.itemsBlock.bind(%this.spec.hasItemList(%class) ? %ctrl : "");
 
 	%this.applyFilter();
 	%this.refresh();
@@ -824,6 +859,10 @@ function GuiEditorInspectorPane::applyFilter(%this)
 	// only way to put a field on the control.
 	%this.dynamicPanel.setVisible(isObject(%this.target));
 
+	// Same for Items, on the two classes that have any: an empty list is exactly
+	// the case the section exists to fix.
+	%this.itemsPanel.setVisible(isObject(%this.target) && %spec.hasItemList(%class));
+
 	%this.header.applyGeometryMode(%spec.geometryModeOf(%this.target));
 }
 
@@ -930,6 +969,14 @@ function GuiEditorInspectorPane::refresh(%this)
 	if(%this.header.menuItemBlock.isVisible())
 	{
 		%this.header.menuItemBlock.bind(%this.target);
+	}
+
+	// The static rows, for the same reason: they are not fields, so nothing above
+	// reaches them, and a replayed step can put back a caption, a switch or the
+	// whole order.
+	if(%this.itemsPanel.isVisible())
+	{
+		%this.itemsBlock.refresh();
 	}
 
 	%this.refreshToggles();

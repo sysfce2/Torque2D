@@ -428,4 +428,30 @@ ConsoleMethodWithDocs(GuiListBoxCtrl, sortByID, ConsoleVoid, 2, 3, "([bool ascen
 	object->sortByID(direction);
 }
 
+/*! Gets the whole list as text: every row, with its ID, color and state. Opaque
+    - hand it back to setItemList unchanged.
+
+    A list is saved as TAML custom nodes rather than as fields, so anything that
+    needs to keep one and put it back - the Gui Editor's Items pane, and its undo
+    - reads it through here rather than a row at a time.
+	@return The list, as a string.
+*/
+ConsoleMethodWithDocs(GuiListBoxCtrl, getItemList, ConsoleString, 2, 2, ())
+{
+	return object->getItemList();
+}
+
+/*! Replaces every row in the list with the ones described by text taken earlier
+    by getItemList.
+
+    A record may stop short: a caption on its own is a row, and every field left
+    off keeps its default. So "Easy\nNormal\nHard" is three plain rows.
+	@param itemList A string from getItemList.
+	@return No return value.
+*/
+ConsoleMethodWithDocs(GuiListBoxCtrl, setItemList, ConsoleVoid, 3, 3, (itemList))
+{
+	object->setItemList(argv[2]);
+}
+
 ConsoleMethodGroupEndWithDocs(GuiListBoxCtrl)

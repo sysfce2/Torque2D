@@ -101,7 +101,32 @@ public:
    
 
    // Persistence
-   static void       initPersistFields();   
+   static void       initPersistFields();
+
+   /// @name Static rows
+   ///
+   /// The rows a list is authored with, as opposed to the ones a script fills in
+   /// at runtime. An item is neither a field nor a child object, so it is
+   /// written as TAML custom nodes - the arrangement GuiFrameSetCtrl already
+   /// uses for its frame tree, with the same two consequences: the legacy .gui
+   /// script writer cannot carry them, and a deep clone has to copy them itself.
+   /// @{
+
+   virtual void      onTamlCustomWrite( TamlCustomNodes& customNodes );
+   virtual void      onTamlCustomRead( const TamlCustomNodes& customNodes );
+
+   /// The whole list as one opaque string: one record per item, TAB-separated
+   /// fields in a fixed order. Not the file format - it is what the Gui Editor
+   /// reads and writes in a single call, and what its undo stack records, in the
+   /// same way getFrameLayout/setFrameLayout serve a frame set.
+   const char*       getItemList();
+   void              setItemList( const char* itemList );
+
+   /// Whether the rows this control holds are its own to save. A GuiTreeViewCtrl
+   /// generates its items from a root object, so a written-out set of them would
+   /// be stale the moment the tree next builds itself.
+   virtual bool      writesItems() { return true; }
+   /// @}
 
    // Item Accessors
    S32               getItemCount();
@@ -175,6 +200,15 @@ public:
 
 protected:
 	GuiControl		*caller;
+
+	/// Items are not children and not fields, so a deep clone would otherwise
+	/// come back with an empty list. This is the phase GuiFrameSetCtrl uses for
+	/// the same reason.
+	virtual void	 deepCloneChildren(SimObject* clone);
+
+	/// Add an item without any of the noise addSelection/insertItem make: no
+	/// onSelect callback, no scroll, no resize per row. For loading a list in.
+	LBItem*			 appendItemInternal(StringTableEntry text);
 };
 
 #endif

@@ -61,6 +61,8 @@ function GuiEditor::create( %this )
     exec("./scripts/GuiEditorMenuItemBlock.cs");
     exec("./scripts/GuiEditorHeaderBlock.cs");
     exec("./scripts/GuiEditorDynamicFields.cs");
+    exec("./scripts/GuiEditorItemRow.cs");
+    exec("./scripts/GuiEditorItemsBlock.cs");
     exec("./scripts/GuiEditorInspectorPane.cs");
 
     // Undo. The engine has owned the machinery all along - GuiEditCtrl holds an
@@ -764,6 +766,91 @@ function GuiEditor::closeProfileEditor(%this)
 	}
 }
 
+//-----------------------------------------------------------------------------
+// What the legacy .gui script format cannot carry.
+//
+// FileObject::writeObject walks a control's fields and its child objects, and
+// that is the whole of it. Two things in the engine are neither: a list box or
+// drop down's static rows, and a frame set's layout. Both are written as TAML
+// custom nodes, so saving as .gui drops them silently - which the frame set has
+// done since it was written, and which is worth saying out loud now that
+// something people use every day is in the same boat.
+//
+// Returns a sentence naming what would go, or "" when there is nothing to say.
+//-----------------------------------------------------------------------------
+
+function GuiEditor::tamlOnlyStateSummary(%this)
+{
+    %this.tamlOnlyRows = 0;
+    %this.tamlOnlyLists = 0;
+    %this.tamlOnlyFrameSets = 0;
+    %this.countTamlOnlyState(%this.rootGui);
+
+    if(%this.tamlOnlyRows == 0 && %this.tamlOnlyFrameSets == 0)
+    {
+        return "";
+    }
+
+    // Only what the document actually holds gets named, in the heading and in
+    // the tally both: telling someone their frame layouts are at risk when there
+    // is not a frame set in the Gui is how a warning gets ignored.
+    %kinds = "";
+    %parts = "";
+
+    if(%this.tamlOnlyRows > 0)
+    {
+        %kinds = "list rows";
+        %parts = %this.tamlOnlyRows SPC
+            ((%this.tamlOnlyRows == 1) ? "row" : "rows") SPC "on" SPC
+            %this.tamlOnlyLists SPC ((%this.tamlOnlyLists == 1) ? "list" : "lists");
+    }
+
+    if(%this.tamlOnlyFrameSets > 0)
+    {
+        %kinds = (%kinds $= "") ? "frame layouts" : (%kinds @ " or frame layouts");
+
+        %frames = %this.tamlOnlyFrameSets SPC
+            ((%this.tamlOnlyFrameSets == 1) ? "frame layout" : "frame layouts");
+        %parts = (%parts $= "") ? %frames : (%parts @ " and " @ %frames);
+    }
+
+    return "This format cannot save" SPC %kinds @ ":" SPC %parts SPC
+        "would be lost. Save as TAML to keep them.";
+}
+
+function GuiEditor::countTamlOnlyState(%this, %ctrl)
+{
+    if(!isObject(%ctrl))
+    {
+        return;
+    }
+
+    // A tree's rows are generated from a root object and are never written, so
+    // it is not a list for this purpose however much it derives from one.
+    if((%ctrl.isMemberOfClass("GuiListBoxCtrl") || %ctrl.isMemberOfClass("GuiDropDownCtrl")) &&
+        !%ctrl.isMemberOfClass("GuiTreeViewCtrl"))
+    {
+        %rows = %ctrl.getItemCount();
+        if(%rows > 0)
+        {
+            %this.tamlOnlyRows += %rows;
+            %this.tamlOnlyLists++;
+        }
+    }
+
+    // An unsplit frame set has a layout of one frame holding one control, which
+    // is what it would be rebuilt as anyway. Eight numbers is one frame.
+    if(%ctrl.isMemberOfClass("GuiFrameSetCtrl") && getWordCount(%ctrl.getFrameLayout()) > 8)
+    {
+        %this.tamlOnlyFrameSets++;
+    }
+
+    for(%i = 0; %i < %ctrl.getCount(); %i++)
+    {
+        %this.countTamlOnlyState(%ctrl.getObject(%i));
+    }
+}
+
 function GuiEditor::SaveCore(%this, %filePath, %formatIndex, %folder, %module)
 {
     // Record the theme on whichever object is about to be written, so reopening
@@ -778,6 +865,15 @@ function GuiEditor::SaveCore(%this, %filePath, %formatIndex, %folder, %module)
 
     if(%formatIndex == 0)
     {
+        // The save dialog says this in its feedback line, but a re-save never
+        // opens one: Ctrl+S goes straight here with the format the Gui was
+        // last written in.
+        %warning = %this.tamlOnlyStateSummary();
+        if(%warning !$= "")
+        {
+            warn("Gui Editor: " @ %warning);
+        }
+
         %fo = new FileObject();
         %fo.openForWrite(%filePath);
         %fo.writeLine("//--- Created with the GuiEditor ---//");

@@ -22,6 +22,9 @@
 //            control owns and never empties, so a deleted control is still a
 //            live object with a home, and undoing a delete is the same
 //            operation as undoing anything else that moved.
+//   items    a list box or drop down's whole set of static rows, before and
+//            after. Whole for the same reason an order op is: every gesture the
+//            Items pane offers can shift the rows around the one it touched.
 //   order    one parent's whole list of children, before and after. Restoring
 //            a list is order-independent and cannot be got subtly wrong, which
 //            a pile of per-control indices can: every index a move op restores
@@ -121,6 +124,19 @@ function GuiEditorUndoAction::addOrderOp(%this, %parent, %before, %after)
 	%this.opCount = %i + 1;
 }
 
+// %before and %after are whole item lists, from GuiListBoxCtrl::getItemList.
+// Like an order op it names no field, so it holds the same two slots a field op
+// does and findOp matches it on the object alone.
+function GuiEditorUndoAction::addItemsOp(%this, %ctrl, %before, %after)
+{
+	%i = %this.opCount;
+	%this.opType[%i] = "items";
+	%this.opCtrl[%i] = %ctrl;
+	%this.opBefore[%i] = %before;
+	%this.opAfter[%i] = %after;
+	%this.opCount = %i + 1;
+}
+
 function GuiEditorUndoAction::isEmpty(%this)
 {
 	return %this.opCount <= 0;
@@ -160,6 +176,10 @@ function GuiEditorUndoAction::mergeFrom(%this, %other)
 			{
 				%this.addOrderOp(%other.opCtrl[%i], %other.opBefore[%i], %other.opAfter[%i]);
 			}
+			else if(%other.opType[%i] $= "items")
+			{
+				%this.addItemsOp(%other.opCtrl[%i], %other.opBefore[%i], %other.opAfter[%i]);
+			}
 			else
 			{
 				%this.addFieldOp(%other.opCtrl[%i], %other.opField[%i], %other.opBefore[%i],
@@ -193,9 +213,10 @@ function GuiEditorUndoAction::findOp(%this, %type, %ctrl, %field)
 			continue;
 		}
 
-		// A move or an order op names no field, so matching the object - the
-		// control for one, the parent for the other - is the whole test.
-		if(%type $= "move" || %type $= "order" || %this.opField[%i] $= %field)
+		// A move, an order or an items op names no field, so matching the object
+		// - the control for one, the parent for the other - is the whole test.
+		if(%type $= "move" || %type $= "order" || %type $= "items" ||
+			%this.opField[%i] $= %field)
 		{
 			return %i;
 		}
@@ -394,6 +415,15 @@ function GuiEditorUndoAction::applyOp(%this, %i, %forward)
 			%ctrl.add(%child);
 			%ctrl.pushToBack(%child);
 		}
+		return;
+	}
+
+	// A list box or drop down's static rows, whole. setItemList replaces the lot
+	// and resizes the control, which is the same thing the pane's every gesture
+	// does, so a replay needs nothing else.
+	if(%type $= "items")
+	{
+		%ctrl.setItemList(%forward ? %this.opAfter[%i] : %this.opBefore[%i]);
 		return;
 	}
 

@@ -461,4 +461,26 @@ ConsoleMethodWithDocs(GuiDropDownCtrl, sortByID, ConsoleVoid, 2, 3, "([bool asce
 	object->getList()->sortByID(direction);
 }
 
+/*! Gets the whole list as text: every row, with its ID, color and state. Opaque
+    - hand it back to setItemList unchanged.
+	@return The list, as a string.
+*/
+ConsoleMethodWithDocs(GuiDropDownCtrl, getItemList, ConsoleString, 2, 2, ())
+{
+	return object->getItemList();
+}
+
+/*! Replaces every row in the list with the ones described by text taken earlier
+    by getItemList.
+
+    A record may stop short: a caption on its own is a row, and every field left
+    off keeps its default. So "Easy\nNormal\nHard" is three plain rows.
+	@param itemList A string from getItemList.
+	@return No return value.
+*/
+ConsoleMethodWithDocs(GuiDropDownCtrl, setItemList, ConsoleVoid, 3, 3, (itemList))
+{
+	object->setItemList(argv[2]);
+}
+
 ConsoleMethodGroupEndWithDocs(GuiDropDownCtrl)

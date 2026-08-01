@@ -197,6 +197,39 @@ function GuiEditorUndoRecorder::writeDynamicField(%this, %ctrl, %field, %value)
 	%this.recordField(%ctrl, %field, %before, %ctrl.getFieldValue(%field), true);
 }
 
+// A list box or drop down's static rows. Not a field write, because the rows are
+// not a field: they are TAML custom nodes, and getItemList/setItemList is the
+// only handle script has on all of them at once - the same arrangement a frame
+// set's layout has.
+//
+// The whole list at each end rather than the one row that changed. Every gesture
+// the Items pane offers - add, remove, move up, move down, retype a caption -
+// can shift what is around it, so a per-row record would have to know which of
+// them it was. A list is short, and restoring one cannot be got subtly wrong.
+function GuiEditorUndoRecorder::writeItems(%this, %ctrl, %list)
+{
+	if(!isObject(%ctrl))
+	{
+		return;
+	}
+
+	%before = %ctrl.getItemList();
+	%ctrl.setItemList(%list);
+	%after = %ctrl.getItemList();
+
+	if(%this.suspended || strcmp(%before, %after) == 0)
+	{
+		return;
+	}
+
+	%owned = %this.autoBegin("Change Items");
+	if(isObject(%this.pending))
+	{
+		%this.pending.addItemsOp(%ctrl, %before, %after);
+	}
+	%this.autoEnd(%owned);
+}
+
 // What the field holds, in the form an undo should write back.
 //
 // A profile slot is read as an id, never the name the field reads back: the

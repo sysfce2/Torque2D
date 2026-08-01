@@ -1590,16 +1590,30 @@ const char* GuiFrameSetCtrl::getDataField(const char* tag, const U32 id)
 	return SimObject::getDataField(tagFieldName, idBuffer);
 }
 
-static StringTableEntry frameNodeSectionName		= StringTable->insert("Frames", true);
-static StringTableEntry frameNodeName				= StringTable->insert("Frame", true);
-static StringTableEntry frameIDName					= StringTable->insert("ID", true);
-static StringTableEntry frameChild1Name				= StringTable->insert("Child1ID", true);
-static StringTableEntry frameChild2Name				= StringTable->insert("Child2ID", true);
-static StringTableEntry frameIsVerticalName			= StringTable->insert("IsVertical", true);
-static StringTableEntry frameExtentXName			= StringTable->insert("ExtentX", true);
-static StringTableEntry frameExtentYName			= StringTable->insert("ExtentY", true);
-static StringTableEntry frameIsAnchoredName			= StringTable->insert("IsAnchored", true);
-static StringTableEntry frameChildMapName			= StringTable->insert("ChildMap", true);
+// Interned case-INSENSITIVELY, which is what all of these are compared against:
+// TamlCustomNodes::findNode and the XML parser both intern with the default, so
+// a name interned the case-sensitive way is a different pointer and matches
+// nothing.
+//
+// It is not theoretical. StringTable hands back the first spelling of a name it
+// was ever given, so a case-sensitive "ID" here could write itself out as "Id" -
+// whichever spelling reached the table first, from anywhere in the engine - and
+// then fail to recognise its own output on the way back in, dropping the field
+// with nothing but a warnf. Which spelling wins depends on static-initialisation
+// order across translation units, so it can change from one build to the next.
+// GuiListBoxCtrl's Items nodes had exactly that happen to them.
+//
+// It also means a hand-edited Gui may spell these however it likes.
+static StringTableEntry frameNodeSectionName		= StringTable->insert("Frames");
+static StringTableEntry frameNodeName				= StringTable->insert("Frame");
+static StringTableEntry frameIDName					= StringTable->insert("ID");
+static StringTableEntry frameChild1Name				= StringTable->insert("Child1ID");
+static StringTableEntry frameChild2Name				= StringTable->insert("Child2ID");
+static StringTableEntry frameIsVerticalName			= StringTable->insert("IsVertical");
+static StringTableEntry frameExtentXName			= StringTable->insert("ExtentX");
+static StringTableEntry frameExtentYName			= StringTable->insert("ExtentY");
+static StringTableEntry frameIsAnchoredName			= StringTable->insert("IsAnchored");
+static StringTableEntry frameChildMapName			= StringTable->insert("ChildMap");
 
 void GuiFrameSetCtrl::onTamlCustomWrite(TamlCustomNodes& customNodes)
 {

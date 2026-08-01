@@ -254,6 +254,20 @@ function GuiEditorControlSpec::sectionFields(%this, %class, %key)
 	return %this.sectionFieldsFor[%class, %key];
 }
 
+// Whether the class gets the Items section: the static rows a list is authored
+// with, saved with the Gui as TAML custom nodes.
+//
+// A function rather than a fifth column in the table above, because two classes
+// out of thirty do not earn one; and a list of two rather than an ancestry test,
+// because GuiTreeViewCtrl derives from GuiListBoxCtrl and must NOT have it. A
+// tree's rows are generated from a root object, so anything typed into them
+// would be gone the moment the tree next built itself - which is why
+// GuiTreeViewCtrl::writesItems returns false on the engine side too.
+function GuiEditorControlSpec::hasItemList(%this, %class)
+{
+	return %class $= "GuiListBoxCtrl" || %class $= "GuiDropDownCtrl";
+}
+
 //-----------------------------------------------------------------------------
 // The principal value: the one or two fields that are the whole point of the
 // control, promoted out of their section and into the always-visible header.

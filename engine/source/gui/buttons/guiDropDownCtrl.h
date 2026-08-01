@@ -91,6 +91,19 @@ public:
    GuiDropDownCtrl();
    static void initPersistFields();
 
+   /// @name Static rows
+   ///
+   /// A drop down's rows live in mListBox, which is built in the constructor and
+   /// added to no set anything walks - so none of GuiListBoxCtrl's persistence
+   /// reaches it on its own. Each of these is the list box's, forwarded, the way
+   /// the ~30 item methods in guiDropDownCtrl_ScriptBinding.h already are.
+   /// @{
+   virtual void onTamlCustomWrite(TamlCustomNodes& customNodes);
+   virtual void onTamlCustomRead(const TamlCustomNodes& customNodes);
+   const char* getItemList();
+   void setItemList(const char* itemList);
+   /// @}
+
    virtual void onTouchUp(const GuiEvent &event);
    GuiControlState getCurrentState();
    void onRender(Point2I offset, const RectI &updateRect);
@@ -121,6 +134,11 @@ public:
    static bool writeScrollBarThicknessFn(void* obj, StringTableEntry pFieldName) { return static_cast<GuiDropDownCtrl*>(obj)->mScrollBarThickness != DEFAULT_THICKNESS; }
 
    DECLARE_CONOBJECT(GuiDropDownCtrl);
+
+protected:
+   /// The rows again: a deep clone copies fields and children, and the list box
+   /// holding them is neither.
+   virtual void deepCloneChildren(SimObject* clone);
 };
 
 #endif

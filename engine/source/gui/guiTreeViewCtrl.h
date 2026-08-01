@@ -100,6 +100,13 @@ private:
 	bool itemHasBranches(S32 index);
 
 public:
+	/// A tree's rows are not its own to save. Every TreeItem is generated from
+	/// mRootObject - inspectObject builds the lot and rebuilds them whenever the
+	/// object under them changes - so a set written into the .gui.taml would be
+	/// stale the moment the tree next built itself, and would then be thrown away
+	/// unread. The list box's static rows stop here.
+	virtual bool writesItems() { return false; }
+
 	// GuiControl
 	//bool onWake();
 	//void onSleep();
