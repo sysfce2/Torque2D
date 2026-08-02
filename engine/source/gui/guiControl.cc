@@ -2448,6 +2448,41 @@ void GuiControl::renderLineList(const Point2I& offset, const Point2I& extent, co
 	}
 }
 
+// Split on newlines by hand rather than with getline, which cannot tell an
+// empty string from no string: it fails immediately on "", so an empty control
+// produced NO lines at all. A line block is what draws a GuiTextEditCtrl's
+// caret, which is why an empty multi-line box had no cursor in it. getline also
+// drops the empty paragraph a trailing newline creates, so pressing return at
+// the end of the text left the caret with no line to sit on.
+//
+// The newline stays on the end of its paragraph, for the same reason the
+// wrapping in getLineList re-appends the space it consumed: GuiTextEditCtrl
+// finds the character offset of a line by summing the lengths of the lines
+// above it (renderLineList), so a character dropped here moves the caret.
+// Nothing draws or measures it -- dglDrawText and GFont::getStrWidth both skip
+// a line break, which GFont::isValidChar answers false for.
+//
+// Kept apart from the wrapping below because it needs no font: measuring text
+// loads one, and a font registers a texture, which cannot be done in the C++
+// unit tests -- they run with no canvas. See guiTextEditTests.cc.
+vector<string> GuiControl::splitParagraphs(const char* text)
+{
+    vector<string> paragraphList = vector<string>();
+    string paragraphBuffer;
+    for (const char* c = text; *c != '\0'; c++)
+    {
+        paragraphBuffer += *c;
+        if (*c == '\n')
+        {
+            paragraphList.push_back(paragraphBuffer);
+            paragraphBuffer.clear();
+        }
+    }
+    paragraphList.push_back(paragraphBuffer);
+
+    return paragraphList;
+}
+
 vector<string> GuiControl::getLineList(const char* text, GuiControlProfile* profile, S32 totalWidth)
 {
     GFont* font = profile->getFont(mFontSizeAdjust);
@@ -2459,32 +2494,7 @@ vector<string> GuiControl::getLineList(const char* text, GuiControlProfile* prof
     }
     else
     {
-        // Split on newlines by hand rather than with getline, which cannot tell
-        // an empty string from no string: it fails immediately on "", so an
-        // empty control produced NO lines at all. A line block is what draws a
-        // GuiTextEditCtrl's caret, which is why an empty multi-line box had no
-        // cursor in it. getline also drops the empty paragraph a trailing
-        // newline creates, so pressing return at the end of the text left the
-        // caret with no line to sit on.
-        //
-        // The newline stays on the end of its paragraph, for the same reason the
-        // wrapping below re-appends the space it consumed: GuiTextEditCtrl finds
-        // the character offset of a line by summing the lengths of the lines
-        // above it (renderLineList), so a character dropped here moves the
-        // caret. Nothing draws or measures it -- both dglDrawText and
-        // GFont::getStrWidth skip a character the font has no glyph for.
-        vector<string> paragraphList = vector<string>();
-        string paragraphBuffer;
-        for (const char* c = text; *c != '\0'; c++)
-        {
-            paragraphBuffer += *c;
-            if (*c == '\n')
-            {
-                paragraphList.push_back(paragraphBuffer);
-                paragraphBuffer.clear();
-            }
-        }
-        paragraphList.push_back(paragraphBuffer);
+        vector<string> paragraphList = splitParagraphs(text);
 
         for (string& paragraph : paragraphList)
         {

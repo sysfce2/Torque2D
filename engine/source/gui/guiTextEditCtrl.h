@@ -62,7 +62,8 @@ public:
 	void selectTo(const U32 target);
 	inline bool hasSelection() { return mBlockEnd > mBlockStart; }
 	void onPreRender(const U32 time);
-	bool renderIbeam(const Point2I& startPoint, const Point2I& extent, const string line, const U32 start, const U32 end, GuiControlProfile* profile, GFont* font);
+	bool isIbeamOnLine(const U32 start, const U32 end, const bool isLastLine) const;
+	bool renderIbeam(const Point2I& startPoint, const Point2I& extent, const string line, const U32 start, const U32 end, const bool isLastLine, GuiControlProfile* profile, GFont* font);
 	inline string getSelection(const string& fullText) { return hasSelection() ? fullText.substr(mBlockStart, mBlockEnd - mBlockStart) : string(); }
 	void eraseSelection(string& fullText);
 	void stepCursorForward();
@@ -85,7 +86,7 @@ public:
 	inline const U32 getStartValue() const { return mLineStartIbeamValue; }
 	inline RectI getGlobalBounds() const { return mGlobalBounds; }
 	inline Point2I getGlobalTextStart() { return Point2I(mGlobalBounds.point.x + mTextOffsetX - mTextScrollX, mGlobalBounds.point.y); }
-	void render(const RectI& bounds, string line, U32 ibeamStartValue, GuiControlProfile* profile, GuiControlState currentState, GuiTextEditSelection& selector, AlignmentType align, GFont* font, bool overrideFontColor = false);
+	void render(const RectI& bounds, string line, U32 ibeamStartValue, GuiControlProfile* profile, GuiControlState currentState, GuiTextEditSelection& selector, AlignmentType align, GFont* font, bool isLastLine, bool overrideFontColor = false);
 	U32 renderTextSection(const Point2I& startPoint, const U32 subStrStart, const U32 subStrLen, GuiControlProfile* profile, const GuiControlState currentState, GFont* font, bool isSelectedText = false, bool overrideFontColor = false);
 	void performScrollJumpX(const S32 targetX, const S32 areaStart, const S32 areaEnd);
 	U32 calculateIbeamPositionInLine(const S32 targetX, GFont* font);
