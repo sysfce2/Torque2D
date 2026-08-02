@@ -232,7 +232,7 @@ function GuiEditorTextBlock::makeChoiceRow(%this, %grid, %field, %label, %choice
 		class = "GuiEditorChoiceRow";
 		Position = "0 0";
 		labelText = %label;
-		labelWidth = 20;
+		labelWidth = 24;
 		fieldName = %field;
 		owner = %this;
 	};

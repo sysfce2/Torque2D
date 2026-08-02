@@ -65,13 +65,13 @@ function GuiEditorAnchorPicker::build(%this)
 	%this.hLabel = %this.makeLabel(96, 22, 20, "H:", "right");
 	%this.hFill = %this.makeChip(118, 20, 56, "h", "fill", "Fill",
 		"Fill the parent horizontally");
-	%this.hRel = %this.makeChip(178, 20, 72, "h", "scale", "Scale",
+	%this.hRel = %this.makeChip(178, 20, 80, "h", "scale", "Scale",
 		"Scale both edges with the parent's width");
 
 	%this.vLabel = %this.makeLabel(96, 62, 20, "V:", "right");
 	%this.vFill = %this.makeChip(118, 60, 56, "v", "fill", "Fill",
 		"Fill the parent vertically");
-	%this.vRel = %this.makeChip(178, 60, 72, "v", "scale", "Scale",
+	%this.vRel = %this.makeChip(178, 60, 80, "v", "scale", "Scale",
 		"Scale both edges with the parent's height");
 
 	// The resolved pair, along the bottom where it reads as the answer rather
@@ -125,12 +125,12 @@ function GuiEditorAnchorPicker::makeChip(%this, %x, %y, %w, %axis, %mode, %text,
 	%chip = new GuiCheckBoxCtrl()
 	{
 		Position = %x SPC %y;
-		Extent = %w SPC 20;
+		Extent = %w SPC 22;
 		Text = %text;
 		boxOffset = "0 1";
 		boxExtent = "16 16";
 		textOffset = "19 1";
-		textExtent = (%w - 19) SPC 16;
+		textExtent = (%w - 19) SPC 21;
 		Tooltip = %tip;
 		Command = %this.getID() @ ".onChipClicked(\"" @ %axis @ "\",\"" @ %mode @ "\");";
 	};
