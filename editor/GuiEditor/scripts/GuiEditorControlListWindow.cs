@@ -43,11 +43,19 @@ function GuiEditorControlListWindow::onAdd(%this)
 	%this.add(%this.scroller);
 	%this.fitScroller();
 
+	// Fill across, and nothing about widths anywhere below.
+	//
+	// The scroller's horizontal bar is alwaysOff, so across is an axis that does
+	// not scroll: the room is bounded and the engine knows exactly what it is --
+	// the inner rect, less the vertical bar when that is showing. Fill asks for
+	// precisely that, and keeps asking as the frame is dragged and as the bar
+	// comes and goes. Down is left alone; that axis scrolls, so the chain is as
+	// tall as its groups and GuiScrollCtrl refuses fill there.
 	%this.groupChain = new GuiChainCtrl()
 	{
-		HorizSizing = "width";
+		HorizSizing = "fill";
 		Position = "0 0";
-		Extent = "242 4";
+		Extent = "228 4";
 		IsVertical = true;
 		ChildSpacing = 2;
 	};
@@ -126,8 +134,8 @@ function GuiEditorControlListWindow::buildModeRow(%this)
 	};
 	%this.add(%this.modeRow);
 
-	%this.modeRow.addChoice("grid", $EditorIcon::grid_2x2, "Show controls as a grid of icons");
-	%this.modeRow.addChoice("rows", $EditorIcon::list_bullets, "Show controls as rows with names");
+	%this.modeRow.addChoice("grid", $EditorIcon::grid_2x2, "Show controls as a grid of large icons");
+	%this.modeRow.addChoice("rows", $EditorIcon::list_bullets, "Show controls as a compact list");
 	%this.modeRow.build();
 	%this.modeRow.setValue(%this.mode);
 }
@@ -153,6 +161,15 @@ function GuiEditorControlListWindow::setMode(%this, %mode)
 // children changed height. Neither happens on its own: a chain positions its
 // children without resizing them, and a panel only learns its height from a
 // parentResized it would otherwise never receive.
+//
+// No widths here. The chain fills the scroller, and the groups follow the chain,
+// so how much room the vertical bar leaves is the engine's answer to give -- see
+// GuiScrollCtrl::getInnerRect and preventUnsizedModes. This used to measure that
+// room in script and hand it out, which held only until the frame was next
+// dragged: "width" sizing adds the parent's CHANGE to a child's own width, so an
+// authored number is offset forever and never replaced. tests/smoke/palette.cs
+// sweeps the window across 31 widths rather than checking one, because a single
+// static check is exactly what all three script attempts passed.
 function GuiEditorControlListWindow::relayout(%this)
 {
 	for(%i = 0; %i < %this.groupCount; %i++)
@@ -207,6 +224,13 @@ function GuiEditorControlListWindow::addGroup(%this, %title)
 	%group = new GuiPanelCtrl()
 	{
 		class = "GuiEditorControlGroup";
+
+		// Width, NOT fill, however much a group is meant to be exactly as wide as
+		// the chain. A GuiPanelCtrl sizes itself to its children --
+		// GuiExpandCtrl::parentResized ends by writing mExpandedExtent straight
+		// into mBounds.extent -- and a direct write like that goes around resize,
+		// which is the only thing that honours fill. Asked to fill, a panel is
+		// clamped and then immediately overwrites the clamp with its own answer.
 		HorizSizing = "width";
 		Position = "0 0";
 		Extent = "242" SPC $GuiEditorControlGroup::headerHeight;

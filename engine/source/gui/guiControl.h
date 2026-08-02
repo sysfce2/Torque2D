@@ -491,6 +491,17 @@ public:
 
 	/// Removes the resize mode of center and changes it to right or bottom
 	void preventResizeModeCenter();
+
+	/// The same, one axis at a time.
+	///
+	/// A container that can only offer a child a fixed size in ONE direction --
+	/// a scroll control, whose other axis is as long as its content wants to be
+	/// -- has to be able to refuse fill across without refusing it down. See
+	/// GuiScrollCtrl::preventUnsizedModes.
+	void preventHorizResizeModeFill();
+	void preventVertResizeModeFill();
+	void preventHorizResizeModeCenter();
+	void preventVertResizeModeCenter();
 	/// @}
 
     /// @name Rendering

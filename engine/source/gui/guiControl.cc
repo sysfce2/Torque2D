@@ -669,22 +669,42 @@ void GuiControl::parentResized(const Point2I &oldParentExtent, const Point2I &ne
 
 void GuiControl::preventResizeModeFill()
 {
+	preventHorizResizeModeFill();
+	preventVertResizeModeFill();
+}
+
+void GuiControl::preventResizeModeCenter()
+{
+	preventHorizResizeModeCenter();
+	preventVertResizeModeCenter();
+}
+
+void GuiControl::preventHorizResizeModeFill()
+{
 	if (getHorizSizing() == horizResizeFill)
 	{
 		setHorizSizing(horizResizeRight);
 	}
+}
+
+void GuiControl::preventVertResizeModeFill()
+{
 	if (getVertSizing() == vertResizeFill)
 	{
 		setVertSizing(vertResizeBottom);
 	}
 }
 
-void GuiControl::preventResizeModeCenter()
+void GuiControl::preventHorizResizeModeCenter()
 {
 	if (getHorizSizing() == horizResizeCenter)
 	{
 		setHorizSizing(horizResizeRight);
 	}
+}
+
+void GuiControl::preventVertResizeModeCenter()
+{
 	if (getVertSizing() == vertResizeCenter)
 	{
 		setVertSizing(vertResizeBottom);

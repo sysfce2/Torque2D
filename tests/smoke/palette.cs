@@ -201,7 +201,95 @@ function palPaletteChecks()
 	palCheck("29 tiles across the groups (" @ %tiles @ ")", %tiles == 29);
 	palCheck("no Tab Page tile", palFindTile("GuiTabPageCtrl") == 0);
 
+	palWidthChecks();
+	palResizeChecks();
 	palModeChecks();
+}
+
+//-----------------------------------------------------------------------------
+// Dragging the frame.
+//
+// The static case passing means nothing on its own: a width handed out once is
+// right once. The palette was fixed in script that way and it held only until
+// the frame was next dragged, because "width" sizing adds the parent's CHANGE to
+// a child's own width and never re-reads anything.
+//
+// So sweep the window across a range of widths, the way a person dragging its
+// edge does, and check the invariant at every stop. Nothing calls relayout here
+// on purpose -- dragging a frame does not, and if the layout only survives a
+// nudge from script then it has not survived.
+//-----------------------------------------------------------------------------
+
+function palResizeChecks()
+{
+	%window = GuiEditor.ctrlListWindow;
+	%bar = %window.scroller.scrollBarThickness;
+	%pos = %window.getPosition();
+	%was = %window.getExtent();
+	%height = getWord(%was, 1);
+
+	%worst = "";
+	%worstOver = 0;
+
+	for(%w = 250; %w <= 430; %w += 6)
+	{
+		%window.resize(getWord(%pos, 0), getWord(%pos, 1), %w, %height);
+
+		%scrollerW = getWord(%window.scroller.getExtent(), 0);
+		for(%g = 0; %g < %window.groupCount; %g++)
+		{
+			%over = (getWord(%window.group[%g].getExtent(), 0) + %bar) - %scrollerW;
+			if(%over > %worstOver)
+			{
+				%worstOver = %over;
+				%worst = "window " @ %w @ ", group " @ %g @ ": " @
+					getWord(%window.group[%g].getExtent(), 0) @ " + " @ %bar @
+					" is " @ %over @ " past " @ %scrollerW;
+			}
+		}
+	}
+
+	%window.resize(getWord(%pos, 0), getWord(%pos, 1), getWord(%was, 0), %height);
+
+	palCheck("no width leaves a group under the scroll bar (" @
+		(%worstOver > 0 ? %worst : "31 widths clear") @ ")", %worstOver <= 0);
+}
+
+//-----------------------------------------------------------------------------
+// Room for the scroll bar.
+//
+// A GuiScrollCtrl subtracts its bar when it CLIPS -- applyScrollBarSpacing feeds
+// renderChildControls a narrowed rect -- but never when it lays out: the content
+// child keeps its full extent and is simply drawn cut off. A group that took the
+// scroller's whole width therefore ran one column under the bar, and the grid,
+// sizing itself from that width, fitted a column that could not be seen.
+//
+// The palette takes the bar off itself. These checks are what says so.
+//-----------------------------------------------------------------------------
+
+function palWidthChecks()
+{
+	%window = GuiEditor.ctrlListWindow;
+	%bar = %window.scroller.scrollBarThickness;
+	%scroller = getWord(%window.scroller.getExtent(), 0);
+
+	for(%g = 0; %g < %window.groupCount; %g++)
+	{
+		%group = %window.group[%g];
+		%width = getWord(%group.getExtent(), 0);
+
+		// The scroller's own borders are on top of this, so a group that merely
+		// fits inside the outer extent is still too wide. Leaving a whole bar
+		// spare is the part that cannot happen by accident.
+		palCheck("group " @ %g @ " leaves room for the bar (" @ %width @ " + " @
+			%bar @ " within " @ %scroller @ ")", (%width + %bar) <= %scroller);
+	}
+
+	// The grid is the thing that actually reflows, and it is sized from the
+	// group, so this is the assertion that the columns are countable.
+	%group = %window.group[0];
+	palCheck("the grid is no wider than its group",
+		getWord(%group.grid.getExtent(), 0) <= getWord(%group.getExtent(), 0));
 }
 
 //-----------------------------------------------------------------------------
