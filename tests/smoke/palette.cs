@@ -245,7 +245,87 @@ function palModeChecks()
 	palCheck("a tile survives its group being collapsed", %tile.isVisible());
 	palCheck("the group reopened", %group.getExpanded());
 
+	palThemeChecks();
+}
+
+//-----------------------------------------------------------------------------
+// The editor theme.
+//
+// Every picture in this window is greyscale art that means nothing until it is
+// modulated: on a light theme an untinted icon is a white smear on a pale
+// panel. So the tint has to be set when the control is built AND set again when
+// the theme changes -- and the second half is the one that goes missing,
+// because it looks as though ThemeManager already does it. It does not: it
+// swaps the profile OBJECT on every control that registered one, which repaints
+// backgrounds and text on its own, and cannot reach a color that script has
+// already copied onto a sprite.
+//
+// Checked against the default theme and the light one, because the default's
+// text color is white -- the same color an untinted sprite draws in -- so a
+// tile that is never tinted at all still looks right there and only breaks when
+// someone switches.
+//-----------------------------------------------------------------------------
+
+function palThemeChecks()
+{
+	%was = ThemeManager.curTheme;
+
+	palThemeTints("as built");
+
+	// Lab Coat is the light theme: its text color is near-black where the
+	// default's is white. Assert they differ, or every check below could pass
+	// without a single sprite being touched.
+	%before = ThemeManager.activeTheme.itemSelectProfile.fontColor;
+	ThemeManager.setTheme(1);
+	%after = ThemeManager.activeTheme.itemSelectProfile.fontColor;
+	palCheck("the two themes really do differ (" @ %before @ " / " @ %after @ ")",
+		!palSameColor(%before, %after));
+
+	palThemeTints("after a theme change");
+
+	ThemeManager.setTheme(%was);
+	palThemeTints("after changing back");
+
 	palDropChecks();
+}
+
+function palThemeTints(%when)
+{
+	%window = GuiEditor.ctrlListWindow;
+	%theme = ThemeManager.activeTheme;
+	%tile = %window.group[0].tile[0];
+
+	// The tile is drawn on its own profile, so that is where its picture takes
+	// its color from -- not from the caption's label profile, which happens to
+	// name the same color in every theme that ships.
+	palCheck("a tile tints its icon " @ %when @ " (" @ %tile.icon.getImageColor() @ ")",
+		palSameColor(%tile.icon.getImageColor(), %theme.itemSelectProfile.fontColor));
+
+	// The mode row is a radio group: one button is down and one is up, and the
+	// two take different colors out of the same profile. Checking both is what
+	// catches a refresh that only ever runs for one state.
+	%on = %window.modeRow.choiceButton[0];
+	%off = %window.modeRow.choiceButton[1];
+	palCheck("the chosen mode button tints its icon " @ %when @ " (" @
+		%on.icon.getImageColor() @ ")",
+		palSameColor(%on.icon.getImageColor(), %theme.iconButtonProfile.fontColorHL));
+	palCheck("the other mode button tints its icon " @ %when @ " (" @
+		%off.icon.getImageColor() @ ")",
+		palSameColor(%off.icon.getImageColor(), %theme.iconButtonProfile.fontColor));
+}
+
+// TypeColorI reads back as a stock color NAME whenever the components match one,
+// so a white profile color answers "White" while the sprite that was set from it
+// answers "255 255 255 255". Comparing the two as strings fails on exactly the
+// colors a theme is most likely to use.
+function palSameColor(%a, %b)
+{
+	return palColorI(%a) $= palColorI(%b);
+}
+
+function palColorI(%color)
+{
+	return isStockColor(%color) ? getStockColorI(%color) : %color;
 }
 
 //-----------------------------------------------------------------------------

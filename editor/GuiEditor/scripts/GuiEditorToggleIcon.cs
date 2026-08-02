@@ -65,7 +65,20 @@ function GuiEditorToggleIcon::onAdd(%this)
 	ThemeManager.setProfile(%this.icon, "spriteProfile");
 	%this.add(%this.icon);
 
+	// ThemeManager repaints what it was given a profile for, and the icon's tint
+	// is not that: refresh() COPIES a color off the profile onto the sprite, so
+	// swapping the profile underneath leaves the copy behind. Without this the
+	// button's background changed theme and the picture on it did not, until
+	// something happened to call refresh() again -- which for a segmented row
+	// meant the icons corrected themselves the moment you clicked one.
+	%this.startListening(ThemeManager);
+
 	%this.Command = %this.getID() @ ".onToggled();";
+	%this.refresh();
+}
+
+function GuiEditorToggleIcon::onThemeChange(%this, %theme)
+{
 	%this.refresh();
 }
 

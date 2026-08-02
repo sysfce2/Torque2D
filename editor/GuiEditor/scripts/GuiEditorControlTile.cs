@@ -68,6 +68,39 @@ function GuiEditorControlTile::onAdd(%this)
 	%this.add(%this.caption);
 
 	ThemeManager.setProfile(%this, "tipProfile", "TooltipProfile");
+
+	%this.startListening(ThemeManager);
+	%this.refreshTint();
+}
+
+//-----------------------------------------------------------------------------
+// Color.
+//
+// The sheets are greyscale, drawn to be modulated rather than to be shown as
+// they are -- so the tint is not decoration, it is what makes the picture
+// legible. Left alone a GuiSpriteCtrl blends with opaque white, which is why
+// this was invisible on the theme the editor starts in: that one draws its text
+// white too, so an icon nobody had tinted looked exactly right. On the light
+// theme the same untinted art is a white smear on a pale panel.
+//
+// The color comes from the tile's OWN profile rather than from the caption's,
+// because the icon is drawn on the tile. The two name the same color in every
+// theme that ships, and the profile a thing is drawn on is the one that should
+// decide when they stop agreeing.
+//
+// It has to be re-read on a theme change: ThemeManager swaps the profile object
+// on everything that registered one, which is enough for backgrounds and text,
+// but a color copied onto a sprite is a copy and stays behind.
+//-----------------------------------------------------------------------------
+
+function GuiEditorControlTile::refreshTint(%this)
+{
+	%this.icon.setImageColor(ThemeManager.activeTheme.itemSelectProfile.fontColor);
+}
+
+function GuiEditorControlTile::onThemeChange(%this, %theme)
+{
+	%this.refreshTint();
 }
 
 //-----------------------------------------------------------------------------
