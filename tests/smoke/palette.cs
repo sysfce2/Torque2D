@@ -214,10 +214,35 @@ function palModeChecks()
 	%group = %window.group[0];
 	%tile = %group.tile[0];
 
-	palCheck("grid mode hides the caption", !%tile.caption.isVisible());
-	palCheck("grid mode draws 80px art (" @ getWord(%tile.icon.getExtent(), 0) @ ")",
+	palCheck("grid mode shows the caption", %tile.caption.isVisible());
+	palCheck("grid mode names the control, not the class",
+		%tile.caption.getText() $= GuiEditor.controlIcons.labelFor(%tile.key));
+	palCheck("grid mode centers the caption and sits it on the floor",
+		%tile.caption.align $= "center" && %tile.caption.vAlign $= "bottom");
+	palCheck("grid mode wraps a long name onto a second line", %tile.caption.textWrap);
+
+	// The caption fills the tile's INNER rect -- that is both how the text finds
+	// the floor and how the tile measures a border it cannot ask the theme for.
+	// So it starts at the origin and is strictly smaller than the outer extent.
+	palCheck("the grid caption fills the tile", %tile.caption.getPosition() $= "0 0");
+	%innerH = getWord(%tile.caption.getExtent(), 1);
+	palCheck("the caption measures the inner rect, not the outer (" @ %innerH @
+		" inside " @ getWord(%tile.getExtent(), 1) @ ")",
+		%innerH < getWord(%tile.getExtent(), 1));
+
+	// The picture has to leave the band clear, or the second line of a long name
+	// draws over it. This is the assertion the cell height exists to satisfy.
+	%iconBottom = getWord(%tile.icon.getPosition(), 1) + getWord(%tile.icon.getExtent(), 1);
+	palCheck("the icon clears the caption band (" @ %iconBottom @ " vs " @
+		(%innerH - $GuiEditorControlTile::gridCaption) @ ")",
+		%iconBottom <= (%innerH - $GuiEditorControlTile::gridCaption));
+	palCheck("the icon is not pushed off the top of the tile",
+		getWord(%tile.icon.getPosition(), 1) >= 0);
+	palCheck("grid mode draws 56px art (" @ getWord(%tile.icon.getExtent(), 0) @ ")",
 		getWord(%tile.icon.getExtent(), 0) == $GuiEditorControlTile::gridArt);
-	palCheck("grid mode takes the 128 sheet", %tile.icon.Image $= "GuiEditor:controlIcons128");
+	palCheck("grid mode takes the 64 sheet", %tile.icon.Image $= "GuiEditor:controlIcons64");
+	palCheck("the grid cell is tall enough for the picture and the band",
+		%group.grid.CellSizeY == $GuiEditorControlGroup::gridCellHeight);
 
 	%window.setMode("rows");
 	palCheck("row mode shows the caption", %tile.caption.isVisible());
@@ -225,6 +250,12 @@ function palModeChecks()
 		%tile.caption.getText() $= GuiEditor.controlIcons.labelFor(%tile.key));
 	palCheck("the tooltip still names the class",
 		%tile.tooltip $= GuiEditor.controlIcons.classFor(%tile.key));
+
+	// The two modes share one caption, so each has to put back what the other
+	// wrote. This is the half that would rot silently.
+	palCheck("row mode puts the caption back beside the icon",
+		%tile.caption.align $= "left" && %tile.caption.vAlign $= "middle");
+	palCheck("row mode stops wrapping", !%tile.caption.textWrap);
 	palCheck("row mode draws 32px art (" @ getWord(%tile.icon.getExtent(), 0) @ ")",
 		getWord(%tile.icon.getExtent(), 0) == $GuiEditorControlTile::rowArt);
 	palCheck("row mode takes the 64 sheet", %tile.icon.Image $= "GuiEditor:controlIcons64");
@@ -234,7 +265,9 @@ function palModeChecks()
 	%window.setMode("grid");
 	palCheck("switching back restores the grid cell",
 		%group.grid.CellSizeX == $GuiEditorControlGroup::gridCell);
-	palCheck("switching back hides the caption again", !%tile.caption.isVisible());
+	palCheck("switching back centers the caption again",
+		%tile.caption.isVisible() && %tile.caption.align $= "center" &&
+		%tile.caption.vAlign $= "bottom" && %tile.caption.textWrap);
 
 	// Collapsing force-writes mVisible on the panel's direct children. The tiles
 	// are grandchildren, so they must come back.

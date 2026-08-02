@@ -13,17 +13,32 @@
 // carry sizing flags that keep them placed, so dragging the frame narrower
 // reflows the grid and the tiles follow without script.
 //
-//   grid   an 80px picture centred in the cell, no caption, name in the tooltip
+//   grid   a 56px picture with the name under it, wrapping to two lines
 //   rows   a 32px picture at the left with the name beside it
 //
 // The creator sets key and owner inline, then calls setMode.
 //-----------------------------------------------------------------------------
 
-// Grid mode wants the 128 sheet (sheetFor shrinks it, which stays sharp); rows
-// mode is under the small sheet's own resolution and takes it 1:1.
-$GuiEditorControlTile::gridArt = 80;
+// Both sizes come off the 64 sheet -- sheetFor only reaches for the 128 one
+// above 64. Rows mode is at that sheet's own resolution and takes it 1:1; grid
+// mode shrinks it by an eighth, which is a gentler downscale than 128 to 56
+// would be and holds the thin strokes better.
+$GuiEditorControlTile::gridArt = 56;
 $GuiEditorControlTile::rowArt = 32;
 $GuiEditorControlTile::rowTextLeft = 40;
+
+// How much of a grid tile is kept clear for the name: two lines of the largest
+// label font any shipped theme uses -- Torque Suit's fontSize - 2, which is 20
+// -- plus the two pixels labelProfile pads above and below.
+//
+// This is a budget the icon is placed against, not a box the text is put in.
+// The caption itself fills the tile and bottom-aligns, so a third line would
+// grow UP into the picture rather than off the bottom. Nothing in the table can
+// reach three: the longest label wraps to two at this width, and the only other
+// source of names is the Undrawn sweep, whose entries are raw class names -- one
+// unbreakable word, kept to a single line and clipped across, with the full name
+// in the tooltip either way.
+$GuiEditorControlTile::gridCaption = 44;
 
 // How far the pointer must travel before a press counts as a drag rather than a
 // click. Without it a shaky click starts a drag, and the two gestures do
@@ -39,8 +54,8 @@ function GuiEditorControlTile::onAdd(%this)
 
 	// The label reads "Check Box"; the tooltip says GuiCheckBoxCtrl. The class
 	// name is what someone types in script, so it should not disappear from the
-	// palette just because the tile is showing a friendlier one -- and in grid
-	// mode, where there is no caption at all, the tooltip is the only name.
+	// palette just because the tile is showing a friendlier one. Both modes show
+	// the label, so the tooltip is the only place the class name appears.
 	%this.tooltip = %icons.classFor(%this.key);
 
 	%this.icon = new GuiSpriteCtrl()
@@ -113,6 +128,9 @@ function GuiEditorControlTile::setMode(%this, %mode)
 	%w = getWord(%this.getExtent(), 0);
 	%h = getWord(%this.getExtent(), 1);
 
+	// One caption serves both modes, so each branch sets every property the other
+	// one touches. Leaving a mode to inherit what the last one happened to write
+	// is how a switch back stops being a switch back.
 	if(%mode $= "rows")
 	{
 		%art = $GuiEditorControlTile::rowArt;
@@ -129,18 +147,52 @@ function GuiEditorControlTile::setMode(%this, %mode)
 		%this.caption.VertSizing = "center";
 		%this.caption.setExtent(%w - %left - 4, %art);
 		%this.caption.setPosition(%left, (%h - %art) / 2);
+		%this.caption.align = "left";
+		%this.caption.vAlign = "middle";
+
+		// A row is one line tall, so wrapping there would only ever hide the
+		// tail of a name the row has the width to show.
+		%this.caption.textWrap = false;
 		%this.caption.setVisible(true);
 	}
 	else
 	{
 		%art = $GuiEditorControlTile::gridArt;
+		%band = $GuiEditorControlTile::gridCaption;
 
+		// The caption takes the whole inner rect and bottom-aligns its text
+		// inside it, so the ENGINE decides where the floor of the tile is.
+		// Nothing here has to know what the tile's own profile insets, which is
+		// a per-theme number -- 3 pixels a side on the base theme, 4 on Torque
+		// Suit -- that script has no way to ask for. Positioning a short band
+		// against the outer extent instead would hang it below the inner rect
+		// and renderChild would clip the last line's descenders off.
+		//
+		// Bottom alignment is also what makes a row read level: a one-line name
+		// like "Check Box" sits on the same line as the second line of "Radio
+		// Button" beside it, rather than floating half a line higher.
+		%this.caption.HorizSizing = "fill";
+		%this.caption.VertSizing = "fill";
+		%this.caption.align = "center";
+		%this.caption.vAlign = "bottom";
+		%this.caption.textWrap = true;
+		%this.caption.setVisible(true);
+		%this.caption.applySizing();
+
+		// And that fill is how the inset gets measured. What the caption now
+		// reports IS the inner rect, so the picture can be centered in the room
+		// left above the band whatever a theme's border costs, instead of
+		// sitting at a fixed offset a fatter border would push into the text.
+		%innerH = getWord(%this.caption.getExtent(), 1);
+
+		// "center" is resolved against the inner rect too, so the picture and
+		// the name below it share one center line. Doing this arithmetically
+		// off %w would put the icon half a border to the right of its label.
 		%this.icon.HorizSizing = "center";
-		%this.icon.VertSizing = "center";
+		%this.icon.VertSizing = "anchorTop";
 		%this.icon.setExtent(%art, %art);
-		%this.icon.setPosition((%w - %art) / 2, (%h - %art) / 2);
-
-		%this.caption.setVisible(false);
+		%this.icon.setPosition(0, (%innerH - %band - %art) / 2);
+		%this.icon.applySizing();
 	}
 
 	// The sheet is picked from the size the art is DRAWN at, not from the mode,

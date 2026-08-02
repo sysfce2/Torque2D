@@ -1,13 +1,16 @@
-// Visual harness for the Gui Editor's control palette. Three shots:
+// Visual harness for the Gui Editor's control palette. Four shots:
 //
-//   0  grid mode, every group open -- the default view
-//   1  row mode, every group open  -- icon plus human-readable name
+//   0  grid mode, every group open -- a picture over its name, the default view
+//   1  row mode, every group open  -- a small picture with the name beside it
 //   2  grid mode with two groups collapsed
+//   3  grid mode scrolled to the two-line names
 //
-// The third is not decoration. GuiExpandCtrl force-writes mVisible on every
-// direct child of a panel whenever it expands or collapses, which is why the
-// tiles live in an inner grid; collapsing and reopening is what proves the tiles
-// survived it.
+// Neither of the last two is decoration. GuiExpandCtrl force-writes mVisible on
+// every direct child of a panel whenever it expands or collapses, which is why
+// the tiles live in an inner grid; collapsing and reopening is what proves the
+// tiles survived it. And every name in Basics fits on one line, so only the
+// fourth shot shows what the caption band is sized for -- a name that wraps,
+// stacking upward off the floor of the tile without reaching the picture.
 //
 // Run: tests/run.ps1 -Shots controlPalette ; look in shots/.
 
@@ -75,11 +78,36 @@ function pFinish()
 {
 	pGrab(2);
 
-	// Reopen what was closed, so the last thing the shot proves is that a tile
-	// survives a collapse rather than being left hidden by the expand control.
+	// Reopen what was closed, so the shot has proved that a tile survives a
+	// collapse rather than being left hidden by the expand control.
 	%window = GuiEditor.ctrlListWindow;
 	%window.group[0].setExpanded(true);
 	%window.group[2].setExpanded(true);
+	%window.relayout();
+
+	schedule(800, 0, "pWrapShot");
+}
+
+// The long names live in Input & Data -- "Radio Button", "Image Button" -- which
+// is the third group and so below the fold. Shutting the two above it is what
+// brings it to the top; scrolling would depend on how tall the window happens to
+// be on the machine running this.
+function pWrapShot()
+{
+	%window = GuiEditor.ctrlListWindow;
+	%window.group[0].setExpanded(false);
+	%window.group[1].setExpanded(false);
+	%window.relayout();
+	schedule(800, 0, "pWrapGrab");
+}
+
+function pWrapGrab()
+{
+	pGrab(3);
+
+	%window = GuiEditor.ctrlListWindow;
+	%window.group[0].setExpanded(true);
+	%window.group[1].setExpanded(true);
 	%window.relayout();
 
 	echo("SHOTS DONE");

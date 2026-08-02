@@ -25,7 +25,19 @@
 // to this panel, so deleting the panel frees the lot.
 //-----------------------------------------------------------------------------
 
+// Width and height are separate numbers because they mean different things: the
+// width is the NARROWEST a column may be and the reflow shares out the rest,
+// while the height is exactly what a tile gets.
+//
+// A grid tile needs 108 of INNER height -- 56 of picture, a 44-pixel band for
+// the name under it and 8 of air between and above. The 8 on top of that is the
+// tile's own border: itemSelectProfile insets 3 pixels a side on the base theme
+// and 4 on Torque Suit, and a cell sized to the interior would leave the fatter
+// of the two clipping the bottom line of every name. The tile centers its
+// picture in whatever room the inset actually leaves, so a theme that spends
+// less than 4 gets slightly more air rather than a layout that drifts.
 $GuiEditorControlGroup::gridCell = 100;
+$GuiEditorControlGroup::gridCellHeight = 116;
 $GuiEditorControlGroup::rowHeight = 40;
 $GuiEditorControlGroup::headerHeight = 24;
 
@@ -41,11 +53,11 @@ function GuiEditorControlGroup::onAdd(%this)
 		// Variable across, absolute down. Variable is what makes CellSizeX a
 		// minimum -- as many columns as fit, remainder shared -- and that is the
 		// whole reflow. Vertically it would instead size each row to its tallest
-		// child, which in row mode means a 100-pixel tile in a 40-pixel row.
+		// child, which in row mode means a 116-pixel tile in a 40-pixel row.
 		CellModeX = "variable";
 		CellModeY = "absolute";
 		CellSizeX = $GuiEditorControlGroup::gridCell;
-		CellSizeY = $GuiEditorControlGroup::gridCell;
+		CellSizeY = $GuiEditorControlGroup::gridCellHeight;
 		CellSpacingX = 4;
 		CellSpacingY = 4;
 		MaxColCount = 0;
@@ -69,7 +81,7 @@ function GuiEditorControlGroup::addTile(%this, %key)
 		HorizSizing = "width";
 		VertSizing = "height";
 		Position = "0 0";
-		Extent = $GuiEditorControlGroup::gridCell SPC $GuiEditorControlGroup::gridCell;
+		Extent = $GuiEditorControlGroup::gridCell SPC $GuiEditorControlGroup::gridCellHeight;
 		Text = "";
 		key = %key;
 		owner = %this;
@@ -101,7 +113,7 @@ function GuiEditorControlGroup::setMode(%this, %mode)
 	else
 	{
 		%this.grid.CellSizeX = $GuiEditorControlGroup::gridCell;
-		%this.grid.CellSizeY = $GuiEditorControlGroup::gridCell;
+		%this.grid.CellSizeY = $GuiEditorControlGroup::gridCellHeight;
 	}
 
 	// The grid lays out on resize, so nudge it before the tiles read their own
