@@ -130,8 +130,6 @@ class GuiEditCtrl : public GuiControl
    void justifySelection( Justification j);
    void moveSelection(const Point2I &delta);
    void moveAndSnapSelection(const Point2I &delta);
-   void saveSelection(const char *filename);
-   void loadSelection(const char *filename);
    void addSelection(S32 id);
    void removeSelection(S32 id);
    void deleteSelection();

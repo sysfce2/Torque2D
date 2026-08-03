@@ -209,18 +209,6 @@ ConsoleMethod(GuiEditCtrl, moveSelection, void, 4, 4, "(int deltax, int deltay) 
 	}
 }
 
-ConsoleMethod(GuiEditCtrl, saveSelection, void, 3, 3, "(string fileName) Saves the current selection to given filename\n"
-	"@return No return value.")
-{
-	object->saveSelection(argv[2]);
-}
-
-ConsoleMethod(GuiEditCtrl, loadSelection, void, 3, 3, "(string fileName) Loads from given filename\n"
-	"@return No return value.")
-{
-	object->loadSelection(argv[2]);
-}
-
 ConsoleMethod(GuiEditCtrl, selectAll, void, 2, 2, "() Selects all controls\n"
 	"@return No return value.")
 {
@@ -1422,56 +1410,6 @@ void GuiEditCtrl::deleteSelection(void)
 		mTrash.addObject(*i);
 	}
 	mSelectedControls.clear();
-}
-
-void GuiEditCtrl::loadSelection(const char* filename)
-{
-	if (!mCurrentAddSet)
-		mCurrentAddSet = mEditorRoot;
-
-	Con::executef(2, "exec", filename);
-	SimSet* set;
-	if (!Sim::findObject("guiClipboard", set))
-		return;
-
-	if (set->size())
-	{
-		Con::executef(this, 1, "onClearSelected");
-		mSelectedControls.clear();
-		for (U32 i = 0; i < (U32)set->size(); i++)
-		{
-			GuiControl* ctrl = dynamic_cast<GuiControl*>((*set)[i]);
-			if (ctrl)
-			{
-				mCurrentAddSet->addObject(ctrl);
-				mSelectedControls.push_back(ctrl);
-				Con::executef(this, 2, "onAddSelected", Con::getIntArg(ctrl->getId()));
-			}
-		}
-		Con::executef(this, 2, "onAddNewCtrlSet", Con::getIntArg(getSelectedSet().getId()));
-	}
-	set->deleteObject();
-}
-
-void GuiEditCtrl::saveSelection(const char* filename)
-{
-	// if there are no selected objects, then don't save
-	if (mSelectedControls.size() == 0)
-		return;
-
-	FileStream stream;
-	if (!ResourceManager->openFileForWrite(stream, filename))
-		return;
-	SimSet* clipboardSet = new SimSet;
-	clipboardSet->registerObject();
-	Sim::getRootGroup()->addObject(clipboardSet, "guiClipboard");
-
-	Vector<GuiControl*>::iterator i;
-	for (i = mSelectedControls.begin(); i != mSelectedControls.end(); i++)
-		clipboardSet->addObject(*i);
-
-	clipboardSet->write(stream, 0);
-	clipboardSet->deleteObject();
 }
 
 void GuiEditCtrl::selectAll()

@@ -590,17 +590,6 @@ function GuiEditorBrain::onAddNewCtrl(%this, %ctrl)
     GuiEditor.undoRecorder.recordAdd(%ctrl, "");
 }
 
-// The same for a whole set of them, which is how a loaded selection arrives.
-function GuiEditorBrain::onAddNewCtrlSet(%this, %selection)
-{
-    GuiEditor.undoRecorder.begin("Add Controls", "");
-    for(%i = 0; %i < %selection.getCount(); %i++)
-    {
-        GuiEditor.undoRecorder.recordAdd(%selection.getObject(%i), "");
-    }
-    GuiEditor.undoRecorder.end();
-}
-
 // Put the selection on the controls a replay changed, and tell everyone.
 function GuiEditorBrain::restoreSelection(%this, %list)
 {
