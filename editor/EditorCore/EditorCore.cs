@@ -87,14 +87,22 @@ function EditorCore::initGui(%this)
 				Command = "EditorCore.close();";
 			};
 
+			// Both go through the Gui Editor's guard, because both throw away a
+			// Gui that is being authored and neither is undoable. GuiEditor is
+			// named directly, as it is by every item in the File, Edit, Layout
+			// and Select menus below; the isObject test is what keeps quitting
+			// working if the Gui Editor module ever fails to load.
+			//
+			// The window's own X cannot be guarded this way. It posts the quit
+			// from the window procedure with no script in between.
 			new GuiMenuItemCtrl() {
 				Text = "Close Project";
-				Command = "restartInstance();";
+				Command = "EditorCore.guardedCommand(\"restartInstance();\");";
 			};
 
 			new GuiMenuItemCtrl() {
 				Text = "Exit";
-				Command = "quit();";
+				Command = "EditorCore.guardedCommand(\"quit();\");";
 			};
 		};
 		new GuiMenuItemCtrl() {
@@ -121,6 +129,16 @@ function EditorCore::initGui(%this)
 				Text = "Save Gui As...";
 				Command = "GuiEditor.SaveGuiAs();";
 				Accelerator = "Ctrl-Shift S";
+			};
+			new GuiMenuItemCtrl() { Text = "-"; };
+			// Offered only once the Gui has a file to go back to; GuiEditor
+			// keeps that up to date in refreshFileMenu. No accelerator - it
+			// throws away everything since the last save, and that is not a
+			// thing to have a shortcut for.
+			new GuiMenuItemCtrl() {
+				Text = "Revert";
+				Command = "GuiEditor.Revert();";
+				Active = "0";
 			};
 		};
 		new GuiMenuItemCtrl() {
@@ -416,6 +434,24 @@ function EditorCore::close(%this)
 	{
 		Canvas.setCursor(defaultCursor);
 	}
+}
+
+// Run %command, unless there is a Gui being authored with changes in it - in
+// which case the Gui Editor asks about those first and runs it afterwards, or
+// not at all. Used by Close Project and Exit, which are the two commands in this
+// menu that discard a document without being able to give it back.
+//
+// The Gui Editor is the only editor with a document to lose. If another ever
+// grows one, this is where it joins in.
+function EditorCore::guardedCommand(%this, %command)
+{
+	if(isObject(GuiEditor))
+	{
+		GuiEditor.guardDocument(%command);
+		return;
+	}
+
+	eval(%command);
 }
 
 function EditorCore::RegisterEditor(%this, %name, %editor)

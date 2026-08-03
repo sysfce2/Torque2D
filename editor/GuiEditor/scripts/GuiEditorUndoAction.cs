@@ -284,9 +284,11 @@ function GuiEditorUndoAction::replay(%this, %forward)
 	// The recorder that built this action, handed over when it did. It outlives
 	// the stack it filled, but check anyway: an action can still be replayed
 	// while the editor is being torn down around it.
+	// With the direction, because the recorder tracks which state the document is
+	// in and that is the only thing that says which way it just moved.
 	if(isObject(%this.recorder))
 	{
-		%this.recorder.noteReplay(%this);
+		%this.recorder.noteReplay(%this, %forward);
 	}
 
 	if(%forward)

@@ -58,6 +58,11 @@ function expTreeOpenEditor()
 function expTreeClear()
 {
     GuiEditor.NewGui();
+
+    // As in tests/smoke/explorerGutter.cs: usually nothing to answer, but a
+    // prompt left standing would be what the shot was of.
+    discardUnsavedPrompt();
+
     schedule(500, 0, "expTreeSetup");
 }
 

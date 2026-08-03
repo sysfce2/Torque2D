@@ -31,6 +31,7 @@ function GuiEditor::create( %this )
 	exec("./scripts/GuiEditorExplorerWindow.cs");
     exec("./scripts/GuiEditorExplorerTree.cs");
     exec("./scripts/GuiEditorSaveGuiDialog.cs");
+    exec("./scripts/GuiEditorConfirmSaveDialog.cs");
     exec("./scripts/GuiEditorGridSizeDialog.cs");
     exec("./scripts/GuiEditorToolsWindow.cs");
     exec("./scripts/GuiProfileEditorDialog.cs");
@@ -386,6 +387,12 @@ function GuiEditor::open(%this, %content)
     %this.undoRecorder.forceRefreshMenu();
     %this.clipboard.forceRefreshMenu();
     %this.brain.toggleMenuItems();
+    %this.refreshFileMenu();
+
+    // The window title is the other thing that looks new every time: the tools
+    // window was built with a placeholder and has not been told about the
+    // document since.
+    %this.refreshDocumentTitle();
 
     editorMode(true);
 }
@@ -400,7 +407,18 @@ function GuiEditor::close(%this)
 }
 
 //MENU FUNCTIONS---------------------------------------------------------------
+//
+// The two that replace the document ask first and then do it. The asking half is
+// what the menu calls; the doing half is what the guard runs once there is
+// nothing left to lose.
+//-----------------------------------------------------------------------------
+
 function GuiEditor::NewGui(%this)
+{
+    %this.guardDocument("GuiEditor.newGuiNow();");
+}
+
+function GuiEditor::newGuiNow(%this)
 {
     %this.rootGui.clear();
     %this.fileName = "";
@@ -418,9 +436,20 @@ function GuiEditor::NewGui(%this)
     // dropped into it is already themed.
     %theme = %this.defaultTheme();
     %this.themeName = isObject(%theme) ? %theme.getName() : "";
+
+    // Last, and after the clear above: emptying the stack leaves the recorder
+    // somewhere no replay can reach, which is right for a document that lost its
+    // records and wrong for this one, which has nothing in it to save.
+    %this.undoRecorder.markClean();
+    %this.refreshFileMenu();
 }
 
 function GuiEditor::OpenGui(%this)
+{
+    %this.guardDocument("GuiEditor.openGuiNow();");
+}
+
+function GuiEditor::openGuiNow(%this)
 {
     %path = pathConcat(getMainDotCsDir(), ProjectManager.getProjectFolder());
 	%dialog = new OpenFileDialog()
@@ -436,39 +465,66 @@ function GuiEditor::OpenGui(%this)
 
 	if ( %result )
 	{
-        if(fileExt(%dialog.fileName) $= ".taml")
-        {
-            %guiContent = TAMLRead(%dialog.fileName);
-            %includesSimulatedCanvas = (%guiContent.class $= "SimulatedCanvas");
-        }
-        else 
-        {
-            exec(%dialog.fileName);
-        }
-        if(%includesSimulatedCanvas $= "")
-        {
-            %includesSimulatedCanvas = true;
-        }
-        if(isObject(%guiContent))
-        {
-            %this.fileName = fileName(%dialog.fileName);
-            %this.filePath = %dialog.fileName;
-            %this.formatIndex = 0;
-            if(getSubStr(%dialog.fileName, strlen(%dialog.fileName) - 5, 5) $= ".taml")
-            {
-                %this.formatIndex = 1;
-            }
-            %this.folder = makeRelativePath(filePath(%dialog.fileName), getMainDotCsDir());
-            %this.module = EditorCore.findModuleOfPath(%dialog.fileName);
-            %this.DisplayGuiContent(%guiContent, %includesSimulatedCanvas);
-        }
-        else 
-        {
-            EditorCore.alert("Something went wrong while opening the Gui File. Gui Files should be structures with the root object assigned to %guiContent. If this file was made outside of the editor, you can change it manually and then open it in the Gui Editor.");
-        }
+        %this.loadGuiFile(%dialog.fileName);
     }
 	// Cleanup
 	%dialog.delete();
+}
+
+// Read a Gui file and make it the document. Everything about opening except
+// choosing the file, so that Revert - which has already chosen - reads exactly
+// what Open reads and the two cannot drift apart.
+function GuiEditor::loadGuiFile(%this, %path)
+{
+    if(fileExt(%path) $= ".taml")
+    {
+        %guiContent = TAMLRead(%path);
+        %includesSimulatedCanvas = (%guiContent.class $= "SimulatedCanvas");
+    }
+    else
+    {
+        exec(%path);
+    }
+    if(%includesSimulatedCanvas $= "")
+    {
+        %includesSimulatedCanvas = true;
+    }
+    if(isObject(%guiContent))
+    {
+        %this.fileName = fileName(%path);
+        %this.filePath = %path;
+        %this.formatIndex = 0;
+        if(getSubStr(%path, strlen(%path) - 5, 5) $= ".taml")
+        {
+            %this.formatIndex = 1;
+        }
+        %this.folder = makeRelativePath(filePath(%path), getMainDotCsDir());
+        %this.module = EditorCore.findModuleOfPath(%path);
+        %this.DisplayGuiContent(%guiContent, %includesSimulatedCanvas);
+        %this.refreshFileMenu();
+    }
+    else
+    {
+        EditorCore.alert("Something went wrong while opening the Gui File. Gui Files should be structures with the root object assigned to %guiContent. If this file was made outside of the editor, you can change it manually and then open it in the Gui Editor.");
+    }
+}
+
+// Throw away everything done since the last save by reading the file again.
+// Guarded like the rest: it is the most deliberate discard there is, and it
+// should still say what it is about to lose.
+function GuiEditor::Revert(%this)
+{
+    if(%this.filePath $= "")
+    {
+        return;
+    }
+
+    %this.guardDocument("GuiEditor.revertNow();");
+}
+
+function GuiEditor::revertNow(%this)
+{
+    %this.loadGuiFile(%this.filePath);
 }
 
 function GuiEditor::DisplayGuiContent(%this, %content, %includesSimulatedCanvas)
@@ -506,6 +562,12 @@ function GuiEditor::DisplayGuiContent(%this, %content, %includesSimulatedCanvas)
     }
 
     %this.adoptTheme(%recordedTheme);
+
+    // What was just put on the canvas is what is on disk. The clear above left
+    // the recorder unreachable by any replay, which is the right answer for a
+    // document whose records were thrown away and the wrong one for a document
+    // that has only this moment been read in.
+    %this.undoRecorder.markClean();
 }
 
 function GuiEditor::SaveGui(%this)
@@ -566,6 +628,117 @@ function GuiEditor::openProfileEditor(%this)
 	%this.profileEditorDialog = %dialog;
 
 	Canvas.pushDialog(%dialog);
+}
+
+//THE DOCUMENT-----------------------------------------------------------------
+//
+// What is being edited and whether it has changes that are not on disk. The
+// answer to the second lives on the undo recorder, which is already the one
+// funnel every change goes through, so there is no second flag here to fall out
+// of step with it.
+//-----------------------------------------------------------------------------
+
+// A Gui that has never been saved has no name to show, so it is given one. It is
+// what the file will be called if the user accepts the Save dialog's default,
+// which is where the same string comes from.
+function GuiEditor::documentName(%this)
+{
+	return (%this.fileName $= "") ? "untitled.gui" : %this.fileName;
+}
+
+// Called by the recorder every time the document moves, and by the three places
+// that change its file name. Guarded because the recorder is built before the
+// window is (see create), so a record made in between would arrive early.
+function GuiEditor::refreshDocumentTitle(%this)
+{
+	if(isObject(%this.guiToolsWindow))
+	{
+		%this.guiToolsWindow.showDocument(%this.documentName(),
+			%this.undoRecorder.isModified());
+	}
+}
+
+// Revert is the only File item whose offer changes, and what it turns on is
+// whether the document has a file to go back to.
+//
+// Deliberately NOT called from refreshDocumentTitle, which runs on every edit:
+// setMenuActive walks the whole menu tree by item text and re-applies every
+// item's profile, which is the cost GuiEditorUndoRecorder::refreshMenu keeps a
+// cache to avoid paying per keystroke. Whether the document has a file changes
+// far more rarely than the document does - on a save, a new one and an open -
+// so this is called from those three and from open(), where the menu is
+// rebuilt-looking.
+function GuiEditor::refreshFileMenu(%this)
+{
+	EditorCore.menuBar.setMenuActive("Revert", %this.filePath !$= "");
+}
+
+//-----------------------------------------------------------------------------
+// The guard.
+//
+// Four commands throw the document away: New, Open, Revert, and - from the
+// Torque2D menu - Close Project and Exit. Each of them hands what it was about
+// to do to guardDocument instead of doing it, and gets it back either at once or
+// once the user has answered for it.
+//
+// A command string rather than a method name, because a menu item in this
+// codebase IS a command string: the caller passes exactly what it would have
+// run, and quit() and restartInstance() - which belong to nobody - go through
+// unchanged.
+//
+// Not guarded, and it cannot be: the window's own close button. quit() posts the
+// quit message the moment it is called, and the X posts it straight from the
+// window procedure with no script in between, so there is no moment at which to
+// ask. onPreExit runs inside shutdown, long past it.
+//-----------------------------------------------------------------------------
+
+function GuiEditor::guardDocument(%this, %command)
+{
+	if(!%this.undoRecorder.isModified())
+	{
+		eval(%command);
+		return;
+	}
+
+	%this.pendingCommand = %command;
+
+	%width = 460;
+	%height = 150;
+	%dialog = new GuiControl()
+	{
+		class = "GuiEditorConfirmSaveDialog";
+		superclass = "EditorDialog";
+		dialogSize = (%width + 8) SPC (%height + 8);
+		dialogCanClose = true;
+		dialogText = "Unsaved Changes";
+		message = "\"" @ %this.documentName() @
+			"\" has changes that have not been saved.";
+	};
+	%dialog.init(%width, %height);
+
+	Canvas.pushDialog(%dialog);
+}
+
+// Go through with whatever was interrupted. Called from exactly two places: the
+// Discard button, and the end of a save that really did write a file.
+function GuiEditor::runPendingCommand(%this)
+{
+	%command = %this.pendingCommand;
+	%this.pendingCommand = "";
+
+	if(%command !$= "")
+	{
+		eval(%command);
+	}
+}
+
+// And the other end: nothing was saved and nothing else is going to happen.
+// Cancel on the prompt, and Cancel on the Save As dialog it can lead to - which
+// is the one that matters, because a save that was called off has to call off
+// what it was saving for.
+function GuiEditor::dropPendingCommand(%this)
+{
+	%this.pendingCommand = "";
 }
 
 //THEMES-----------------------------------------------------------------------
@@ -886,6 +1059,17 @@ function GuiEditor::SaveCore(%this, %filePath, %formatIndex, %folder, %module)
     %this.formatIndex = %formatIndex;
     %this.folder = %folder;
     %this.module = %module;
+
+    // After the name is set, not before: marking clean refreshes the title, and
+    // the title is the name that was just written.
+    %this.undoRecorder.markClean();
+
+    // The file is on disk, so whatever was waiting on it can go ahead. This is
+    // one of only two places that releases it, and the only one reached by a
+    // save - which is what makes a cancelled Save As call the whole thing off
+    // rather than quietly continuing without a file.
+    %this.refreshFileMenu();
+    %this.runPendingCommand();
 }
 
 //UNDO-------------------------------------------------------------------------

@@ -84,6 +84,13 @@ function gutOpenEditor()
 function gutClear()
 {
     GuiEditor.NewGui();
+
+    // In case PlanetX's Gui arrived by a route that counts as an edit. It does
+    // not today, and a clean document is taken away without asking, so this is
+    // usually a no-op -- but an unanswered prompt would leave the tree showing
+    // the Gui this step exists to clear.
+    discardUnsavedPrompt();
+
     schedule(500, 0, "gutRun");
 }
 

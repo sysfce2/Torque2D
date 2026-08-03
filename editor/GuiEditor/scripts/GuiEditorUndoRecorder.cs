@@ -44,6 +44,13 @@ function GuiEditorUndoRecorder::onAdd(%this)
 	%this.snapCount = 0;
 	%this.gestCount = 0;
 	%this.inGesture = false;
+
+	// Both zero: a recorder that has recorded nothing is sitting on a document
+	// nobody has changed. See the serials section below.
+	%this.serialCounter = 0;
+	%this.editSerial = 0;
+	%this.savedSerial = 0;
+
 	%this.hierCount = 0;
 	%this.hierCtrlCount = 0;
 	%this.watchCount = 0;
@@ -140,6 +147,12 @@ function GuiEditorUndoRecorder::end(%this)
 	{
 		%this.lastAction.mergeFrom(%action);
 		%action.delete();
+
+		// The surviving action now ends somewhere new, so it needs a serial that
+		// has never been seen. Its priorSerial is left alone: undoing it still
+		// takes the document back to before the whole run.
+		%this.lastAction.serial = %this.nextSerial();
+		%this.moveTo(%this.lastAction.serial);
 		return;
 	}
 
@@ -147,9 +160,15 @@ function GuiEditorUndoRecorder::end(%this)
 	// looking like.
 	%this.emitFrameFixes(%action);
 
+	// Both ends recorded before the document is said to have moved: priorSerial
+	// is where it was standing, serial is where this action puts it.
+	%action.priorSerial = %this.editSerial;
+	%action.serial = %this.nextSerial();
+
 	%action.addToManager(%this.manager());
 	%this.lastAction = %action;
 	%this.lastKind = %this.pendingKind;
+	%this.moveTo(%action.serial);
 	%this.refreshMenu();
 }
 
@@ -170,6 +189,75 @@ function GuiEditorUndoRecorder::canCoalesce(%this, %action)
 	}
 
 	return %this.lastAction.touched() $= %action.touched();
+}
+
+//-----------------------------------------------------------------------------
+// Serials: whether the document has changed since it was last saved.
+//
+// The recorder answers this because it is already the one thing every change
+// goes through, so an edit that is not recorded is an edit that did not happen.
+//
+// It cannot be answered by counting. UndoManager offers getUndoCount,
+// getRedoCount and the two name lookups and nothing else -- there is no way to
+// ask which action is on top -- and a count is not an identity anyway: save at a
+// depth of five, undo once, make a DIFFERENT edit, and the depth is five again
+// with a different document underneath it. A flag built on depth reads clean
+// there, which is the one direction it must never be wrong in.
+//
+// So every action carries two numbers instead. serial is where the document
+// stands once that action has been applied; priorSerial is where it stood
+// before. Both come from a counter that never repeats, so a value identifies a
+// state rather than a position:
+//
+//     undo of A  -> the document is at A.priorSerial
+//     redo of A  -> the document is at A.serial
+//
+// and editSerial is wherever the document is now. markClean records it,
+// isModified compares against it. Undo back to the state that was saved and the
+// two match again; branch off differently and they cannot, because the new
+// action's serial has never existed before.
+//
+// Nothing here mirrors the C++ stack, so nothing can drift out of step with it.
+// An action trimmed off the bottom of the manager's stack simply never replays,
+// so its serial never comes back -- the safe direction.
+//
+// clear() taking a fresh serial is what keeps GuiEditor::detachTheme honest: it
+// empties the stack because every record names a profile about to be freed, and
+// the controls are exactly as edited afterwards as they were before.
+//-----------------------------------------------------------------------------
+
+function GuiEditorUndoRecorder::nextSerial(%this)
+{
+	%this.serialCounter++;
+	return %this.serialCounter;
+}
+
+// Say where the document now stands, and tell whoever is showing that.
+function GuiEditorUndoRecorder::moveTo(%this, %serial)
+{
+	%this.editSerial = %serial;
+
+	if(isObject(%this.owner))
+	{
+		%this.owner.refreshDocumentTitle();
+	}
+}
+
+// This is the document as it now stands on disk. Called after a save, and after
+// a new or freshly opened document, which are clean by definition.
+function GuiEditorUndoRecorder::markClean(%this)
+{
+	%this.savedSerial = %this.editSerial;
+
+	if(isObject(%this.owner))
+	{
+		%this.owner.refreshDocumentTitle();
+	}
+}
+
+function GuiEditorUndoRecorder::isModified(%this)
+{
+	return %this.editSerial != %this.savedSerial;
 }
 
 //-----------------------------------------------------------------------------
@@ -866,14 +954,17 @@ function GuiEditorUndoRecorder::resume(%this)
 	%this.suspended = false;
 }
 
-// Called by the action as it replays, both ways. Two jobs: hand GuiEditor the
-// controls to re-select afterwards, and drop the coalescing state - the action
-// on top of the undo stack is no longer the one a merge would be aiming at.
-function GuiEditorUndoRecorder::noteReplay(%this, %action)
+// Called by the action as it replays, both ways. Three jobs: hand GuiEditor the
+// controls to re-select afterwards, drop the coalescing state - the action on
+// top of the undo stack is no longer the one a merge would be aiming at - and
+// move the document to whichever end of this action the replay is heading for.
+function GuiEditorUndoRecorder::noteReplay(%this, %action, %forward)
 {
 	%this.replayTouched = %action.touched();
 	%this.lastAction = 0;
 	%this.lastKind = "";
+
+	%this.moveTo(%forward ? %action.serial : %action.priorSerial);
 }
 
 function GuiEditorUndoRecorder::clear(%this)
@@ -900,6 +991,13 @@ function GuiEditorUndoRecorder::clear(%this)
 	// swallowing every move made after it.
 	%this.gestCount = 0;
 	%this.inGesture = false;
+
+	// A state nothing can replay its way back to. Losing the records does not
+	// un-edit the controls, and the actions that could have carried the document
+	// home have just been freed - so from here the only route back to clean is a
+	// save. The callers that DO leave a clean document (a new one, a freshly
+	// opened one) say so themselves by calling markClean afterwards.
+	%this.moveTo(%this.nextSerial());
 
 	%this.replayTouched = "";
 	%this.refreshMenu();

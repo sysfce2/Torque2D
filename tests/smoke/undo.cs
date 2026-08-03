@@ -793,7 +793,12 @@ function uStepStale()
 		uUndoCount() == 0 && uRedoCount() == 1);
 
 	// A new document. Every id on the stack has just been freed.
+	//
+	// Through the prompt, because a document with edits in it is no longer thrown
+	// away without a word - and this one is nothing but edits. What the prompt
+	// itself does is tests/smoke/unsaved.cs; here it is only the way to the New.
 	GuiEditor.NewGui();
+	uCheck("New Gui on a modified document asks first", discardUnsavedPrompt());
 	uCheck("New Gui empties both stacks", uUndoCount() == 0 && uRedoCount() == 0);
 
 	schedule(300, 0, "uStepChain");

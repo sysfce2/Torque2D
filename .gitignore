@@ -113,6 +113,7 @@ engine/compilers/android-studio/app/.cxx/
 /profileFormShotProject/
 /profileFormSmokeProject/
 /smokeThemeProject/
+/unsavedSmokeProject/
 # GuiDefaultProfile.fontDirectory is the unexpanded string "^EditorCore/gui/fonts"
 # (guiProfiles.cs), and anything that bakes a font-cache miss recorded against it
 # writes to a folder of that literal name. Nothing in the suite does, but it has

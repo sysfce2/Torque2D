@@ -200,6 +200,23 @@ function GuiEditorSaveGuiDialog::onSave(%this)
 	}
 }
 
+// The Cancel button and the window X both land here, and so does onSave once the
+// file is written. Only the first two mean anything was called off, and by the
+// time the third arrives SaveCore has already released what it was holding - so
+// dropping it here is a no-op on that path and the answer on the other two.
+//
+// This is the far end of the unsaved-changes prompt's Save button: the user said
+// save-then-carry-on, changed their mind about the file name, and must not find
+// the editor carrying on anyway with nothing written.
+function GuiEditorSaveGuiDialog::onClose(%this)
+{
+	GuiEditor.dropPendingCommand();
+
+	Canvas.popDialog(%this);
+	EditorCore.dialog = %this;
+	EditorCore.schedule(100, "deleteDialog");
+}
+
 function GuiEditorSaveGuiDialog::onFolderOpened(%this, %textBox)
 {
 	%this.Validate();
