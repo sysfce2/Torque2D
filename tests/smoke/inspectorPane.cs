@@ -442,10 +442,26 @@ function pStep6()
 	// setBoxExtent document one argument and read two, so a single "0 0" left
 	// the box at (0,32) -- drawn entirely below the control.
 	pCheck("toggle box covers the whole control",
-		%header.lockedButton.getBoxOffset() $= "0 0" &&
-		%header.lockedButton.getBoxExtent() $= %header.lockedButton.getExtent());
+		%header.visibleButton.getBoxOffset() $= "0 0" &&
+		%header.visibleButton.getBoxExtent() $= %header.visibleButton.getExtent());
 
-	// All six state flags are icon toggles now that the sheet has art for them.
+	// The four runtime state flags are icon toggles now that the sheet has art
+	// for them. hidden and locked are not among them any more -- they are editor
+	// working state and moved out to the Explorer tree's columns.
+	pCheck("the pane no longer offers hidden", !isObject(%header.hiddenButton));
+	pCheck("the pane no longer offers locked", !isObject(%header.lockedButton));
+
+	// And they must not come back through the side door. Both are real persist
+	// fields on SimObject, and buildOtherSection sweeps up every field no section
+	// claimed -- so unless editorToggles() keeps naming them, removing the two
+	// buttons does not remove the two controls from the pane. It turns them into
+	// a pair of generic checkboxes in "Other", which is worse than where they
+	// started: same working state, now filed under the leftovers.
+	pCheck("hidden did not reappear as a generic row", !pRowBuilt(%pane, "hidden"));
+	pCheck("locked did not reappear as a generic row", !pRowBuilt(%pane, "locked"));
+	pCheck("the spec still claims both",
+		%pane.spec.editorToggles() $= "hidden locked");
+
 	pCheck("visible toggle reflects the control",
 		%header.visibleButton.getValue() == $pButton.Visible);
 
@@ -472,24 +488,27 @@ function pStep6()
 	pCheck("accepts-children shown where it is live",
 		%header.containerButton.isVisible());
 
-	// hidden and locked are toggle icons -- checkboxes wearing an icon -- so
-	// they hold their own state. performClick drives the real path: the
-	// checkbox flips itself and its Command tells the pane what it became.
-	%header.lockedButton.performClick();
-	pCheck("locked toggle reached the control", $pButton.locked);
-	pCheck("locked icon shows the on frame",
-		%header.lockedButton.icon.getImageFrame() == %header.lockedButton.frameOn);
-	%header.lockedButton.performClick();
-	pCheck("locked toggle flips back", !$pButton.locked);
+	// A toggle icon is a checkbox wearing an icon, so it holds its own state.
+	// performClick drives the real path: the checkbox flips itself and its
+	// Command tells the pane what it became. activeButton has a true on/off pair,
+	// so it is the one that can prove the icon follows the value.
+	%header.activeButton.performClick();
+	pCheck("active toggle reached the control", !$pButton.Active);
+	pCheck("active icon shows the off frame",
+		%header.activeButton.icon.getImageFrame() == %header.activeButton.frameOff);
+	%header.activeButton.performClick();
+	pCheck("active toggle flips back", $pButton.Active);
+	pCheck("active icon shows the on frame",
+		%header.activeButton.icon.getImageFrame() == %header.activeButton.frameOn);
 
 	// A disabled toggle must not act. The engine hands touch events to inactive
 	// controls -- findHitControl checks mVisible and mUseInput, never mActive --
 	// so this is the checkbox's own guard doing the work.
-	%header.lockedButton.setActive(false);
-	%header.lockedButton.performClick();
-	pCheck("a disabled toggle does not change the control", !$pButton.locked);
-	pCheck("a disabled toggle keeps its own state off", !%header.lockedButton.getValue());
-	%header.lockedButton.setActive(true);
+	%header.activeButton.setActive(false);
+	%header.activeButton.performClick();
+	pCheck("a disabled toggle does not change the control", $pButton.Active);
+	pCheck("a disabled toggle keeps its own state on", %header.activeButton.getValue());
+	%header.activeButton.setActive(true);
 
 	// The profile picker offers the theme's members for the control's category,
 	// not every profile in the sim.

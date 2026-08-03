@@ -1167,9 +1167,8 @@ function GuiEditorInspectorPane::refreshToggles(%this)
 {
 	%header = %this.header;
 
-	%header.hiddenButton.setValue(%this.target.hidden);
-	%header.lockedButton.setValue(%this.target.locked);
-
+	// hidden and locked are not here. They are editor working state, never
+	// written to the document, and they live in the Explorer tree's two columns.
 	%header.visibleButton.setValue(%this.target.Visible);
 	%header.activeButton.setValue(%this.target.Active);
 	%header.inputButton.setValue(%this.target.useInput);

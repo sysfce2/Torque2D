@@ -22,12 +22,16 @@
 // the pane stays the only thing that writes to the control. The creator sets
 // pane, spec and blockWidth inline, then calls build() once after adding it.
 //
-// The toggle row is split on purpose. hidden and locked are icon buttons, which
-// is what they want to be and what the icon sheet has art for (an open and a
-// closed padlock). Visible, Active and Accepts Input stay labelled checkboxes:
-// the sheet has an eye, but nothing that reads as "active" or "accepts input"
-// without a caption -- and a row of icons that each need a tooltip to be
-// understood is worse than three short words.
+// The toggle row is four flags that change the Gui a player will run: whether a
+// control draws, whether it responds, whether events reach it, and whether the
+// editor may drop things into it.
+//
+// It used to be six. hidden and locked sat at the front, and they are not that
+// kind of flag at all -- neither is ever written to a file, because both are
+// working state rather than part of the document. Standing them next to the four
+// that ARE the document read as a promise that they were too. They are the
+// Explorer tree's two columns now, where a whole branch's state can be read at a
+// glance and nothing suggests it will be saved.
 //-----------------------------------------------------------------------------
 
 function GuiEditorHeaderBlock::onAdd(%this)
@@ -94,44 +98,32 @@ function GuiEditorHeaderBlock::buildToggles(%this)
 	%this.add(%row);
 	%this.toggleRow = %row;
 
-	// Toggles rather than buttons: these hold a value, so they are checkboxes
-	// wearing an icon (GuiEditorToggleIcon). frameOn is the icon for the "on"
-	// reading -- a closed padlock against an open one, and an x in a circle
-	// against a tick. The x/tick pair is still a placeholder: an eye and a
-	// struck-through eye is what "hidden" actually wants, and the sheet now
-	// carries both ($EditorIcon::eye and ::invisible_light). Left alone here
-	// because hidden is moving out to its own Explorer tree column, and that is
-	// the change that should pick the icon.
-	%this.hiddenButton = %this.makeIconToggle(%row, 4, "hidden", "Hidden",
-		$EditorIcon::round_delete, $EditorIcon::round_checkmark,
-		"Hidden while you work. The control still draws when the game runs -- this only takes it out of the way on the canvas, so you can reach what is behind it. It is not saved with the Gui.",
-		"Drawn on the canvas as it will be in the game.");
-	%this.lockedButton = %this.makeIconToggle(%row, 32, "locked", "Locked",
-		$EditorIcon::padlock_closed, $EditorIcon::padlock_open,
-		"Cannot be picked or dragged on the canvas. Use this to stop a backdrop swallowing every click meant for what sits on top of it. It is not saved with the Gui.",
-		"Can be picked and dragged on the canvas.");
-
 	// The four runtime flags, now that the sheet has art for them. They were
 	// captioned checkboxes, which cost so much width that only two fitted and
-	// useInput had to live in the Command section instead. Six icons fit where
-	// two captions did.
+	// useInput had to live in the Command section instead. Four icons fit in
+	// less than two captions did.
 	//
 	// Two of the four have a genuine pair (an eye against a struck-through one,
 	// on against off) and two do not, so those reuse one icon and let the
 	// pressed state carry the reading -- the same thing the anchor pins do.
-	%this.visibleButton = %this.makeIconToggle(%row, 68, "Visible", "Visible",
+	//
+	// They start at 4 now. There used to be a gap here, between these and the two
+	// editor-only toggles that ran in front of them; the gap was the boundary
+	// between "changes the game" and "changes your view of it", and with hidden
+	// and locked gone to the Explorer tree there is no boundary left to mark.
+	%this.visibleButton = %this.makeIconToggle(%row, 4, "Visible", "Visible",
 		$EditorIcon::eye, $EditorIcon::invisible_light,
 		"Draws when the game runs. Its children draw with it -- hiding a control hides everything inside it.",
 		"Does not draw when the game runs, and neither do its children. A layout container skips a hidden control entirely, so hiding one can move its siblings.");
-	%this.activeButton = %this.makeIconToggle(%row, 96, "Active", "Active",
+	%this.activeButton = %this.makeIconToggle(%row, 32, "Active", "Active",
 		$EditorIcon::on, $EditorIcon::off,
 		"Responds when the game runs: it takes clicks and keys and draws in its ordinary colors.",
 		"Inert when the game runs. It still draws, in the profile's disabled colors, but ignores every click and key.");
-	%this.inputButton = %this.makeIconToggle(%row, 124, "useInput", "Accepts Input",
+	%this.inputButton = %this.makeIconToggle(%row, 60, "useInput", "Accepts Input",
 		$EditorIcon::cursor_arrow, $EditorIcon::cursor_arrow,
 		"Touch and key events reach this control.",
 		"Touch and key events pass straight through to whatever is behind it. Turn this off on a backdrop or a label so it cannot swallow clicks meant for something else.");
-	%this.containerButton = %this.makeIconToggle(%row, 152, "isContainer", "Accepts Children",
+	%this.containerButton = %this.makeIconToggle(%row, 88, "isContainer", "Accepts Children",
 		$EditorIcon::folder_open, $EditorIcon::folder,
 		"The editor drops controls into this one when you draw them over it.",
 		"The editor never drops controls into this one. They land in its parent instead, on top of it.");

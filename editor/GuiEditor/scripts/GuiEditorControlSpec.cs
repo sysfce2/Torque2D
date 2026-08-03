@@ -398,14 +398,21 @@ function GuiEditorControlSpec::easingFields(%this)
 	return "easeFillColorHL easeTimeFillColorHL easeFillColorSL easeTimeFillColorSL";
 }
 
-// The toggles the header draws as icons instead of rows. Visible, Active and
-// useInput are what the control does when the game runs; hidden and locked are
-// what the editor does with it.
+// The toggles the header draws as icons instead of rows: what the control does
+// when the game runs.
 function GuiEditorControlSpec::runtimeToggles(%this)
 {
 	return "Visible Active useInput";
 }
 
+// The two fields the pane deliberately does not offer AT ALL. They are editor
+// working state -- neither is ever written to a file -- and they live in the
+// Explorer tree's two columns, where a whole branch can be read at once.
+//
+// This still has to name them. buildOtherSection sweeps up every persist field
+// no section claimed, so dropping them from here would not remove them from the
+// pane: it would move them into "Other" as two generic checkboxes, which is the
+// exact thing moving them out was meant to stop.
 function GuiEditorControlSpec::editorToggles(%this)
 {
 	return "hidden locked";
