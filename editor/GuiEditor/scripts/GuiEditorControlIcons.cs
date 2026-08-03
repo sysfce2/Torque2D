@@ -1,11 +1,11 @@
 //-----------------------------------------------------------------------------
 // The control palette's entries and their icons. GENERATED - do not hand-edit.
 //
-// GuiEditor:controlIcons64 and controlIcons128 are the same 31 drawings at two
-// sizes in the same 8x4 grid, so one index names the same icon in both and a
-// tile can change size without changing its Frame. The two sizes are source
-// resolution, not tile size: the grid view draws from the 128 sheet and the row
-// view from the 64.
+// GuiEditor:controlIcons16, controlIcons64 and controlIcons128 are the same 31
+// drawings at three sizes in the same 8x4 grid, so one index names the same icon
+// in all of them and a tile can change size without changing its Frame. The
+// sizes are source resolution, not tile size: the palette's grid view draws from
+// the 128 sheet, its row view from the 64, and the Explorer tree from the 16.
 //
 // An entry is not always a class. A bare GuiControl is the wrapper, the backdrop,
 // the line of text and the modal scrim, so it holds four entries that share a
@@ -229,11 +229,19 @@ function GuiEditorControlIcons::coversClass(%this, %name)
 	return %this.covered[%name] !$= "";
 }
 
-// The sheet to draw from at a given tile size. The threshold is the SMALL
-// sheet's own resolution, not the midpoint between the two: above 64 the small
-// sheet would have to be enlarged, and enlarging is what looks soft. Taking the
-// 128 and shrinking it costs nothing and stays sharp.
+// The sheet to draw from at a given tile size. Each threshold is that sheet's
+// own resolution, not a midpoint: past it the sheet would have to be enlarged,
+// and enlarging is what looks soft. Taking the next one up and shrinking it
+// costs nothing and stays sharp.
 function GuiEditorControlIcons::sheetFor(%this, %tileSize)
 {
-	return (%tileSize > 64) ? "GuiEditor:controlIcons128" : "GuiEditor:controlIcons64";
+	if(%tileSize > 64)
+	{
+		return "GuiEditor:controlIcons128";
+	}
+	if(%tileSize > 16)
+	{
+		return "GuiEditor:controlIcons64";
+	}
+	return "GuiEditor:controlIcons16";
 }

@@ -13,7 +13,16 @@
 // shot shows, and nothing else would.
 //
 // Page 0 is the 128 sheet at 96px, which is what the grid view will draw. Page 1
-// is the 64 sheet at 48px, which is the row view.
+// is the 64 sheet at 48px, which is the row view. Page 2 is the 16 sheet, which
+// the Explorer tree draws.
+//
+// The tiles keep constrainProportions, so page 2 draws at 16px rather than being
+// stretched to fill -- which is the point of it. Whether an icon still reads once
+// one pixel stands for four design units is the question, and the answer has to
+// be looked at at the size it will really be. Seeing all 31 at once is also the
+// only thing that catches the new asset failing to register: a missing image
+// renders as nothing rather than throwing, so that failure is a page of labels
+// with blank space above them.
 setLogMode(2);
 setScriptExecEcho(false);
 trace(false);
@@ -26,7 +35,7 @@ testExec("editor/main.cs");
 schedule(2500, 0, "controlIconsShot");
 
 $controlIcons::page = 0;
-$controlIcons::pages = 2;
+$controlIcons::pages = 3;
 
 function controlIconsShot()
 {
@@ -45,8 +54,9 @@ function controlIconsShot()
 
 	%big = ($controlIcons::page == 0);
 	%tile = %big ? 96 : 48;
-	%sheet = %icons.sheetFor(%tile);
-	%cell = %big ? 128 : 64;
+	// Page 2 asks sheetFor for the 16 sheet and then draws it four times up.
+	%sheet = %icons.sheetFor(($controlIcons::page == 2) ? 16 : %tile);
+	%cell = %big ? 128 : (($controlIcons::page == 2) ? 16 : 64);
 
 	%page = new GuiControl() { Position = "0 0"; Extent = "1024 768"; };
 	ThemeManager.setProfile(%page, "panelProfile");

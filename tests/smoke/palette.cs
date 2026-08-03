@@ -143,11 +143,31 @@ function palTableChecks()
 	palCheck("an ordinary class asks for no category", %icons.categoryFor("GuiButtonCtrl") $= "");
 	palCheck("a class key builds its own class", %icons.classFor("GuiSliderCtrl") $= "GuiSliderCtrl");
 
-	// The sheet threshold is the small sheet's own resolution: above 64 the big
-	// sheet is shrunk rather than the small one enlarged.
+	// Each threshold is that sheet's own resolution: past it the next sheet up is
+	// shrunk rather than this one enlarged. Both boundaries are checked from
+	// either side, because an off-by-one here reads as "the icons went soft"
+	// rather than as a failure.
 	palCheck("64px art takes the 64 sheet", %icons.sheetFor(64) $= "GuiEditor:controlIcons64");
 	palCheck("80px art takes the 128 sheet", %icons.sheetFor(80) $= "GuiEditor:controlIcons128");
 	palCheck("32px art takes the 64 sheet", %icons.sheetFor(32) $= "GuiEditor:controlIcons64");
+	palCheck("17px art takes the 64 sheet", %icons.sheetFor(17) $= "GuiEditor:controlIcons64");
+	palCheck("16px art takes the 16 sheet", %icons.sheetFor(16) $= "GuiEditor:controlIcons16");
+
+	// And every sheet it can name has to exist. A missing image renders as
+	// nothing rather than throwing, so an unregistered asset would show up as
+	// blank space in the tree and nowhere else at all.
+	for(%i = 0; %i < 3; %i++)
+	{
+		%size = getWord("16 64 128", %i);
+		%sheet = %icons.sheetFor(%size);
+		%asset = AssetDatabase.acquireAsset(%sheet);
+		palCheck(%sheet @ " is a declared asset", isObject(%asset));
+		if(isObject(%asset))
+		{
+			palCheck(%sheet @ " carries all 32 cells", %asset.getFrameCount() == 32);
+			AssetDatabase.releaseAsset(%sheet);
+		}
+	}
 
 	palPaletteChecks();
 }
