@@ -171,6 +171,27 @@ function EditorCore::initGui(%this)
 				Command = "GuiEditor.Paste();";
 				Accelerator = "Ctrl V";
 			};
+			new GuiMenuItemCtrl() {
+				Text = "Duplicate";
+				Command = "GuiEditor.Duplicate();";
+				Accelerator = "Ctrl D";
+			};
+			new GuiMenuItemCtrl() { Text = "-"; };
+			// DeleteSelection, not Delete: delete is a console method on every
+			// SimObject, so GuiEditor.Delete() would quietly destroy the editor
+			// rather than the selection.
+			//
+			// The accelerator cannot double-fire with the Delete key the canvas
+			// and the Explorer tree already handle themselves. The canvas
+			// consults accelerators only once the first responder has passed on
+			// the key -- the same thing that lets a text box in the properties
+			// pane keep Ctrl+C. What it adds is Delete working while focus is in
+			// a tool window.
+			new GuiMenuItemCtrl() {
+				Text = "Delete";
+				Command = "GuiEditor.DeleteSelection();";
+				Accelerator = "Delete";
+			};
 		};
 		new GuiMenuItemCtrl() {
 			Text = "Layout";
@@ -286,10 +307,13 @@ function EditorCore::initGui(%this)
 				Command = "GuiEditor.brain.SelectAll();";
 				Accelerator = "Ctrl A";
 			};
+			// Ctrl-Shift A rather than Ctrl D, which Duplicate has: this is what
+			// deselect is bound to nearly everywhere else, and it pairs with
+			// Ctrl A above.
 			new GuiMenuItemCtrl() {
 				Text = "Deselect";
 				Command = "GuiEditor.brain.clearSelection();";
-				Accelerator = "Ctrl D";
+				Accelerator = "Ctrl-Shift A";
 			};
 		};
 		new GuiMenuItemCtrl() {

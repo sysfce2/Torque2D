@@ -649,6 +649,8 @@ function GuiEditorBrain::toggleMenuItems(%this)
     EditorCore.menuBar.setMenuActive("Deselect", %count != 0);
     EditorCore.menuBar.setMenuActive("Cut", %count != 0);
     EditorCore.menuBar.setMenuActive("Copy", %count != 0);
+    EditorCore.menuBar.setMenuActive("Duplicate", %count != 0);
+    EditorCore.menuBar.setMenuActive("Delete", %count != 0);
     EditorCore.menuBar.setMenuActive("Nudge Up", %count != 0);
     EditorCore.menuBar.setMenuActive("Nudge Down", %count != 0);
     EditorCore.menuBar.setMenuActive("Nudge Left", %count != 0);

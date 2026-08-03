@@ -713,6 +713,119 @@ function cStepChainRun()
 	GuiEditor.Undo();
 	cCheck("undo took it back out", $cChain.getCount() == 3);
 
+	schedule(300, 0, "cStepDuplicate");
+}
+
+//-----------------------------------------------------------------------------
+// Duplicate, which is a copy that never touches the clipboard: it lands in the
+// control's OWN parent, one grid step off, whatever container is currently being
+// worked in and whatever is on the clipboard at the time.
+//-----------------------------------------------------------------------------
+
+function cStepDuplicate()
+{
+	GuiEditor.undoRecorder.clear();
+	%grid = GuiEditor.brain.getGridSize();
+
+	%before = $cPanel.getCount();
+	%at = $cA.getPosition();
+
+	cSelect($cA);
+	GuiEditor.Duplicate();
+
+	%copy = cPasted(0);
+	cCheck("duplicate made one control", cPastedCount() == 1);
+	cCheck("in the same parent as the original", %copy.getParent() == $cPanel);
+	cCheck("which now holds one more", $cPanel.getCount() == %before + 1);
+	cCheck("the original is still there", $cA.getParent() == $cPanel);
+
+	cCheck("the copy is one grid step across",
+		getWord(%copy.getPosition(), 0) == getWord(%at, 0) + %grid);
+	cCheck("and one down",
+		getWord(%copy.getPosition(), 1) == getWord(%at, 1) + %grid);
+
+	cCheck("the copy counted on from the original's name",
+		%copy.getName() $= "clipA2");
+	cCheck("and kept its caption", %copy.Text $= $cA.Text);
+
+	cCheck("duplicate is one step", cUndoCount() == 1);
+	GuiEditor.Undo();
+	cCheck("undo took the copy back out", $cPanel.getCount() == %before);
+
+	schedule(300, 0, "cStepDuplicateClipboard");
+}
+
+// The whole reason it is not Ctrl+C, Ctrl+V: what is on the clipboard is still
+// on the clipboard afterwards.
+function cStepDuplicateClipboard()
+{
+	GuiEditor.undoRecorder.clear();
+
+	cSelect($cB);
+	GuiEditor.Copy();
+
+	cSelect($cA);
+	GuiEditor.Duplicate();
+
+	cCheck("the clipboard still holds something", !GuiEditor.clipboard.isEmpty());
+
+	GuiEditor.brain.setCurrentAddSet($cOther);
+	GuiEditor.Paste();
+
+	%pasted = cPasted(0);
+	cCheck("and what it holds is what was copied, not what was duplicated",
+		%pasted.Text $= $cB.Text);
+
+	schedule(300, 0, "cStepDuplicateNested");
+}
+
+// A panel and a button inside it: the reduction that stops the button being
+// duplicated twice is the same one copy uses.
+function cStepDuplicateNested()
+{
+	GuiEditor.undoRecorder.clear();
+
+	%before = GuiEditor.rootGui.getCount();
+
+	GuiEditor.brain.clearSelection();
+	GuiEditor.brain.addSelection($cPanel);
+	GuiEditor.brain.addSelection($cA);
+
+	GuiEditor.Duplicate();
+
+	cCheck("the panel was duplicated once", cPastedCount() == 1);
+	cCheck("into the root", GuiEditor.rootGui.getCount() == %before + 1);
+
+	%copy = cPasted(0);
+	cCheck("and the button came with it rather than separately",
+		%copy.getCount() == $cPanel.getCount());
+
+	cCheck("still one step", cUndoCount() == 1);
+	GuiEditor.Undo();
+	cCheck("undo removed the whole thing", GuiEditor.rootGui.getCount() == %before);
+
+	schedule(300, 0, "cStepMenuGreying");
+}
+
+// Both new items follow the selection, the way Cut and Copy beside them do.
+// There is nothing to duplicate or delete when nothing is selected, and an item
+// that stays lit is an item that lies about it.
+function cStepMenuGreying()
+{
+	%duplicate = cMenuItem(EditorCore.menuBar, "Duplicate");
+	%delete = cMenuItem(EditorCore.menuBar, "Delete");
+
+	cCheck("the Duplicate item exists", isObject(%duplicate));
+	cCheck("the Delete item exists", isObject(%delete));
+
+	GuiEditor.brain.clearSelection();
+	cCheck("Duplicate is greyed with nothing selected", !%duplicate.Active);
+	cCheck("Delete is greyed with nothing selected", !%delete.Active);
+
+	cSelect($cA);
+	cCheck("Duplicate is offered once something is", %duplicate.Active);
+	cCheck("Delete is offered once something is", %delete.Active);
+
 	schedule(300, 0, "cDone");
 }
 

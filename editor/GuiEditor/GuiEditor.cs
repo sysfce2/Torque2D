@@ -1170,12 +1170,8 @@ function GuiEditor::Copy(%this)
     %this.clipboard.copy(%this.brain.getSelected());
 }
 
-// Copy, then the delete the Delete key already does: the C++ moves the selection
-// into the trash and announces it, which the recorder turns into one undo step
-// (GuiEditorBrain::onTrashSelection). Nothing is deleted for real, so a cut is
-// undoable and the controls it took are still alive in the trash - which is also
-// why a cut and paste keeps the names it had: a trashed control is not in the
-// document, so nothing there holds its name.
+// Copy, then delete. Cut is those two things and has no third thing of its own,
+// so it says so rather than keeping a second copy of what deleting means.
 function GuiEditor::Cut(%this)
 {
     if(!%this.clipboard.copy(%this.brain.getSelected()))
@@ -1183,6 +1179,21 @@ function GuiEditor::Cut(%this)
         return;
     }
 
+    %this.DeleteSelection();
+}
+
+// What the Delete key already does, reachable from the Edit menu - which is the
+// only place that says the command exists at all. The C++ moves the selection
+// into the trash and announces it, and the recorder turns that into one undo
+// step (GuiEditorBrain::onTrashSelection). Nothing is deleted for real, so this
+// is undoable and the controls are still alive in the trash - which is also why
+// a cut and paste keeps the names it had: a trashed control is not in the
+// document, so nothing there holds its name.
+//
+// DeleteSelection rather than Delete, and it has to be: delete is a console
+// method on every SimObject, so GuiEditor.Delete() would destroy the editor.
+function GuiEditor::DeleteSelection(%this)
+{
     %this.brain.deleteSelection();
     %this.brain.onDelete();
 }
@@ -1190,6 +1201,13 @@ function GuiEditor::Cut(%this)
 function GuiEditor::Paste(%this)
 {
     %this.clipboard.paste();
+}
+
+// A copy that goes straight back into the parent it came from, leaving whatever
+// is on the clipboard where it is.
+function GuiEditor::Duplicate(%this)
+{
+    %this.clipboard.duplicate(%this.brain.getSelected());
 }
 
 //LAYOUT-----------------------------------------------------------------------

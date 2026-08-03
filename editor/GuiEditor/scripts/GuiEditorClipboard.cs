@@ -3,6 +3,10 @@
 // The Gui Editor's clipboard. Owned by GuiEditor; the only thing that holds a
 // copied control, and the only thing that puts one back.
 //
+// Copying controls is the subject rather than the stash in particular, which is
+// why Duplicate lives here too: it is a copy that goes straight back where it
+// came from without ever being held.
+//
 // A copy is a real copy, made at the moment Ctrl+C is pressed: the selection is
 // deep-cloned into a SimGroup of this object's own, outside the document. That
 // is what makes the clipboard a snapshot rather than a reference - editing or
@@ -403,6 +407,100 @@ function GuiEditorClipboard::nameTakenBelow(%this, %parent, %name)
 	}
 
 	return false;
+}
+
+//-----------------------------------------------------------------------------
+// Duplicating.
+//
+// A copy that never lands in the stash: it goes straight back into the parent
+// the original is in, one grid step off, and whatever is on the clipboard at the
+// time is still on it afterwards. That is the whole reason it is not Ctrl+C
+// followed by Ctrl+V.
+//
+// It is here rather than somewhere of its own because four of the five things it
+// needs are already in this file and are exactly right - the reduction that
+// stops a control being copied twice, the name carrying, the uniquifying, and
+// the counting-on from a trailing number.
+//
+// Two things paste has to do that this does not. There is no canBeChildOf test,
+// because the original is already a legal child of that parent. And there is no
+// per-container step count: a duplicate is always one step from its own
+// original, so there is nothing to remember between calls.
+//-----------------------------------------------------------------------------
+
+function GuiEditorClipboard::duplicate(%this, %selection)
+{
+	if(!isObject(%selection) || %selection.getCount() == 0)
+	{
+		return false;
+	}
+
+	%roots = %this.topLevel(%selection);
+	if(%roots $= "")
+	{
+		return false;
+	}
+
+	%grid = %this.owner.brain.getGridSize();
+	if(%grid <= 0)
+	{
+		%grid = 10;
+	}
+
+	%made = "";
+
+	// However many controls it copies, a duplicate is one thing the user did.
+	// The adds inside record themselves into this transaction, the same way a
+	// paste's do.
+	%this.owner.undoRecorder.begin("Duplicate", "");
+
+	for(%i = 0; %i < getWordCount(%roots); %i++)
+	{
+		%ctrl = getWord(%roots, %i);
+
+		%parent = %ctrl.getParent();
+		if(!isObject(%parent))
+		{
+			continue;
+		}
+
+		%copy = %ctrl.deepClone();
+		if(!isObject(%copy))
+		{
+			continue;
+		}
+
+		// Names first, and both halves, because deepClone leaves them behind on
+		// purpose. The copy is not in the document yet, so it cannot collide with
+		// itself while a free name is being looked for.
+		%this.stampNames(%ctrl, %copy);
+		%this.applyNames(%copy);
+
+		%at = %ctrl.getPosition();
+		%copy.Position = (getWord(%at, 0) + %grid) SPC (getWord(%at, 1) + %grid);
+
+		// addNewControl puts the control in the add set (guiEditCtrl.cc), so the
+		// add set is what decides where a duplicate lands. Setting it also clears
+		// the selection, which is why the copies are selected at the end rather
+		// than as they arrive.
+		%this.owner.brain.setCurrentAddSet(%parent);
+
+		// The same door a paste and a palette click go through: theming on
+		// arrival, the undo record, and the events the Explorer tree and the panes
+		// listen for.
+		%this.owner.brain.acceptControl(%copy);
+
+		%made = (%made $= "") ? %copy : (%made SPC %copy);
+	}
+
+	%this.owner.undoRecorder.end();
+
+	if(%made !$= "")
+	{
+		%this.owner.brain.selectList(%made);
+	}
+
+	return %made !$= "";
 }
 
 //-----------------------------------------------------------------------------

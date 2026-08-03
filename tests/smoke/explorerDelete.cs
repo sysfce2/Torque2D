@@ -140,6 +140,32 @@ function edTreeKey()
 	edCheck("undo brought the control back", %ctrl.getGroup() == GuiEditor.rootGui);
 	edCheck("and the tree lists it again", %tree.findItemID(%ctrl) != -1);
 
+	schedule(100, 0, "edMenu");
+}
+
+//-----------------------------------------------------------------------------
+// The Edit menu's Delete, which is the route that does not need the right thing
+// to hold first responder first -- and the only one that says out loud that the
+// command exists.
+//
+// DeleteSelection, NOT Delete: delete is a console method on every SimObject, so
+// GuiEditor.Delete() destroys the editor. It does it quietly, too -- the object
+// goes, and the next line to touch GuiEditor is the one that reports an error.
+//-----------------------------------------------------------------------------
+
+function edMenu()
+{
+	%tree = GuiEditor.explorerWindow.tree;
+	%ctrl = edPlace();
+	%items = %tree.getItemCount();
+
+	GuiEditor.DeleteSelection();
+	edGone("menu Delete", %ctrl, %items);
+
+	// Cut is this with a copy in front of it, and says so by calling it.
+	GuiEditor.Undo();
+	edCheck("undo brought it back once more", %ctrl.getGroup() == GuiEditor.rootGui);
+
 	echo("EDEL DONE  " @ $Pass @ " passed, " @ $Fail @ " failed");
 	quit();
 }
