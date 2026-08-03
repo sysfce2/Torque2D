@@ -100,9 +100,11 @@ function GuiEditorSaveGuiDialog::init(%this, %width, %height)
 	%this.validate();
 }
 
+// Grey the Save button until the form can be saved, and say why in the feedback
+// line either way. Every return below is a reason not to.
 function GuiEditorSaveGuiDialog::Validate(%this)
 {
-	%this.createButton.active = false;
+	%this.saveButton.setActive(false);
 
 	%folderPath = %this.getFolderPath();
 	%guiName = %this.guiNameBox.getText();
@@ -156,13 +158,13 @@ function GuiEditorSaveGuiDialog::Validate(%this)
 	}
 	if(isFile(%filePath))
 	{
-		%this.createButton.active = true;
+		%this.saveButton.setActive(true);
 		%this.feedback.setText(%this.withFormatWarning(
 			"A file by this name already exists. It will be overwritten."));
 		return true;
 	}
 
-	%this.createButton.active = true;
+	%this.saveButton.setActive(true);
 	%this.feedback.setText(%this.withFormatWarning("A new Gui file will be created!"));
 	return true;
 }

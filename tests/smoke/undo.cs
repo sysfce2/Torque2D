@@ -624,6 +624,84 @@ function uStepReparent()
 	GuiEditor.Undo();
 	uCheck("undo restored the order", $uPanel.getObject(0) == %first);
 
+	schedule(300, 0, "uStepCanvasDrag");
+}
+
+//-----------------------------------------------------------------------------
+// Dragging on the canvas, which the C++ brackets with onPreEdit and onPostEdit.
+//
+// The gesture is performed here the way guiEditCtrl.cc performs it, because two
+// things happen inside it that no callback announces. onTouchDragged moves the
+// selection once per mouse-move event - each of those brackets itself with the
+// nudge pair - and then looks at what is under the cursor and reparents into it
+// (moveSelectionToCtrl), rewriting the control's position so it stays under the
+// pointer. So a drag that crosses a container boundary changes parent AND
+// changes position a second time, silently, in the middle of the gesture.
+//-----------------------------------------------------------------------------
+
+function uStepCanvasDrag()
+{
+	// A drag that stays where it is. The ordinary case, and the one the reparent
+	// record must not disturb.
+	GuiEditor.undoRecorder.clear();
+	uSelect($uA);
+
+	%wasPos = $uA.getPosition();
+
+	GuiEditor.brain.onPreEdit(GuiEditor.brain.getSelected());
+	GuiEditor.brain.moveSelection(0, 20);
+	GuiEditor.brain.moveSelection(0, 20);
+	GuiEditor.brain.onPostEdit(GuiEditor.brain.getSelected());
+
+	%droppedPos = $uA.getPosition();
+	uCheck("a canvas drag is one step", uUndoCount() == 1);
+	uCheck("and the control moved", %droppedPos !$= %wasPos);
+
+	GuiEditor.Undo();
+	uCheck("undo takes the whole drag back", $uA.getPosition() $= %wasPos);
+	GuiEditor.Redo();
+	uCheck("redo replays the whole drag", $uA.getPosition() $= %droppedPos);
+	GuiEditor.Undo();
+
+	schedule(300, 0, "uStepCanvasDragReparent");
+}
+
+function uStepCanvasDragReparent()
+{
+	GuiEditor.undoRecorder.clear();
+	uSelect($uA);
+
+	%wasParent = $uA.getParent();
+	%wasIndex = uIndexOf($uPanel, $uA);
+	%wasPos = $uA.getPosition();
+
+	GuiEditor.brain.onPreEdit(GuiEditor.brain.getSelected());
+	GuiEditor.brain.moveSelection(0, 20);
+	GuiEditor.brain.moveSelection(0, 20);
+	GuiEditor.brain.moveSelectionToCtrl($uOther);
+	GuiEditor.brain.onPostEdit(GuiEditor.brain.getSelected());
+
+	%droppedPos = $uA.getPosition();
+	uCheck("a drag into another container is one step", uUndoCount() == 1);
+	uCheck("and the control changed parent", $uA.getParent() == $uOther);
+
+	GuiEditor.Undo();
+	uCheck("undo returned it to its old parent", $uA.getParent() == %wasParent);
+	uCheck("at its old index", uIndexOf($uPanel, $uA) == %wasIndex);
+
+	// The position matters as much as the parent: the reparent rewrote it to a
+	// number that means something only inside the container it moved to, so a
+	// replay that puts one back without the other lands the control somewhere it
+	// has never been.
+	uCheck("and its old position", $uA.getPosition() $= %wasPos);
+
+	GuiEditor.Redo();
+	uCheck("redo dragged it across again", $uA.getParent() == $uOther);
+	uCheck("to where the drag left it", $uA.getPosition() $= %droppedPos);
+
+	GuiEditor.Undo();
+	uCheck("and it came home", $uA.getParent() == %wasParent);
+
 	schedule(300, 0, "uStepMenu");
 }
 

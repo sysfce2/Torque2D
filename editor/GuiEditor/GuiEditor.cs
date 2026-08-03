@@ -32,7 +32,6 @@ function GuiEditor::create( %this )
     exec("./scripts/GuiEditorExplorerTree.cs");
     exec("./scripts/GuiEditorSaveGuiDialog.cs");
     exec("./scripts/GuiEditorGridSizeDialog.cs");
-    exec("./scripts/GuiEditorColorWindow.cs");
     exec("./scripts/GuiEditorToolsWindow.cs");
     exec("./scripts/GuiProfileEditorDialog.cs");
     exec("./scripts/GuiProfileEditorColorPopup.cs");
@@ -269,29 +268,6 @@ function GuiEditor::create( %this )
     %this.brain.setRoot(%this.rootGui);
     %this.brain.root = %this.rootGui;
     %this.explorerWindow.inspect(%this.rootGui);
-
-    /* %this.colorWindow = new GuiWindowCtrl()
-    {
-        Class = "GuiEditorColorWindow";
-        HorizSizing = "right";
-        VertSizing = "bottom";
-        Position = "610 0";
-        Extent = "400  380";
-        MinExtent = "100 100";
-        text = "Color Test";
-        canMove = true;
-        canClose = false;
-        canMinimize = true;
-        canMaximize = false;
-        resizeWidth = true;
-        resizeHeight = true;
-    };
-    ThemeManager.setProfile(%this.colorWindow, "windowProfile");
-    ThemeManager.setProfile(%this.colorWindow, "windowContentProfile", "ContentProfile");
-    ThemeManager.setProfile(%this.colorWindow, "windowButtonProfile", "CloseButtonProfile");
-    ThemeManager.setProfile(%this.colorWindow, "windowButtonProfile", "MinButtonProfile");
-    ThemeManager.setProfile(%this.colorWindow, "windowButtonProfile", "MaxButtonProfile");
-    %this.guiPage.add(%this.colorWindow); */
 
     EditorCore.FinishRegistration(%this.guiPage);
 }
@@ -1113,13 +1089,20 @@ function GuiEditor::SetGridSize(%this)
 	Canvas.pushDialog(%dialog);
 }
 
+// The Layout menu's Snap to Grid toggle, which says whether to use the grid and
+// nothing about how big it is. Turning it back on asks the brain what the grid
+// was rather than naming a number: setSnapToGrid(0) clears the flag and leaves
+// the spacing alone precisely so that it can be picked back up here, and a size
+// the user chose in Set Grid Size should not be thrown away by a switch that was
+// never about the size. There is always an answer to pick up - the brain sets a
+// grid of 10 in onAdd, and 0 only ever means "off".
 function GuiEditor::SnapToGrid(%this, %gridOn)
 {
     if(%gridOn)
     {
-        %this.brain.setSnapToGrid(10);
+        %this.brain.setSnapToGrid(%this.brain.getGridSize());
     }
-    else 
+    else
     {
         %this.brain.setSnapToGrid(0);
     }

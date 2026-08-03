@@ -5,17 +5,23 @@
 // GuiEditorUndoAction.
 //
 // Everything that changes the Gui being authored comes through here, by one of
-// two routes:
+// three routes:
 //
 //   writeField / writeDynamicField    a field write. The recorder does the
 //                                     writing, so a write that is not recorded
 //                                     is a write that did not happen.
-//   snapshot + commitGeometry         a gesture whose result is only known
-//                                     when it ends - a drag, a run of nudges.
-//                                     The C++ edit control brackets both with
-//                                     callbacks (onPreEdit/onPostEdit,
-//                                     onPreSelectionNudged/...) which is what
-//                                     they were always for.
+//   beginGesture / endGesture         a gesture with the mouse on the canvas: a
+//                                     drag-move or a handle-resize, which the
+//                                     C++ brackets with onPreEdit/onPostEdit
+//                                     and which can reparent as well as move.
+//   snapshot + commitGeometry         everything else whose result is only
+//                                     known once it is over - a run of arrow
+//                                     key nudges (bracketed in turn by
+//                                     onPreSelectionNudged/...), an align, a
+//                                     resize from the Layout menu.
+//
+// The C++ edit control has always made all of those callbacks; they are what
+// they were always for.
 //
 // A transaction groups whatever happens between begin() and end() into one
 // action, so that a gesture the user made once is one Ctrl+Z. Transactions
@@ -36,6 +42,8 @@ function GuiEditorUndoRecorder::onAdd(%this)
 	%this.lastAction = 0;
 	%this.lastKind = "";
 	%this.snapCount = 0;
+	%this.gestCount = 0;
+	%this.inGesture = false;
 	%this.hierCount = 0;
 	%this.hierCtrlCount = 0;
 	%this.watchCount = 0;
@@ -536,7 +544,11 @@ function GuiEditorUndoRecorder::autoEnd(%this, %owned)
 function GuiEditorUndoRecorder::snapshot(%this, %selection)
 {
 	%this.snapCount = 0;
-	if(%this.suspended || !isObject(%selection))
+
+	// Nothing to do while a canvas gesture is running: the moves inside one are
+	// the engine's way of dragging, not edits of their own, and the gesture keeps
+	// its own snapshot of where everything started. See beginGesture.
+	if(%this.suspended || %this.inGesture || !isObject(%selection))
 	{
 		return;
 	}
@@ -556,7 +568,7 @@ function GuiEditorUndoRecorder::snapshot(%this, %selection)
 // that selected without dragging, or a nudge into a wall, records nothing.
 function GuiEditorUndoRecorder::commitGeometry(%this, %name, %kind)
 {
-	if(%this.suspended || %this.snapCount <= 0)
+	if(%this.suspended || %this.inGesture || %this.snapCount <= 0)
 	{
 		return;
 	}
@@ -593,6 +605,124 @@ function GuiEditorUndoRecorder::commitGeometry(%this, %name, %kind)
 	%this.end();
 
 	%this.snapCount = 0;
+}
+
+//-----------------------------------------------------------------------------
+// A canvas gesture: a drag-move or a handle-resize, which the C++ brackets with
+// onPreEdit and onPostEdit.
+//
+// The whole gesture is one action taken from one snapshot -- where each selected
+// control stood when the mouse went down, and where it stands when the mouse
+// comes up. The nudge callbacks that arrive in between are ignored for the
+// duration: guiEditCtrl.cc drags by calling moveSelection once per mouse-move
+// event, and each of those brackets itself with the nudge pair, so left to
+// themselves they record a hundred small moves that then have to coalesce back
+// into the one move the user made.
+//
+// Ignoring them is also what makes a drag across a container boundary come out
+// right. Halfway through the gesture the C++ reparents the selection into
+// whatever container is under the cursor and rewrites each control's position to
+// keep it there (onTouchDragged -> moveSelectionToCtrl), announcing neither -- so
+// a record built frame by frame ends up holding a position that means something
+// only inside the parent the control has just left, and no record of the parent
+// at all. Undo then put the control somewhere it had never been.
+//-----------------------------------------------------------------------------
+
+function GuiEditorUndoRecorder::beginGesture(%this, %selection)
+{
+	%this.gestCount = 0;
+	%this.inGesture = true;
+
+	if(%this.suspended || !isObject(%selection))
+	{
+		return;
+	}
+
+	for(%i = 0; %i < %selection.getCount(); %i++)
+	{
+		%ctrl = %selection.getObject(%i);
+		%this.gestCtrl[%i] = %ctrl;
+		%this.gestPos[%i] = %ctrl.getPosition();
+		%this.gestExt[%i] = %ctrl.getExtent();
+		%this.gestLayout[%i] = %this.layoutOf(%ctrl);
+		%this.gestParent[%i] = %ctrl.getParent();
+		%this.gestIndex[%i] = %this.parentIndexOf(%ctrl);
+	}
+
+	%this.gestCount = %selection.getCount();
+}
+
+function GuiEditorUndoRecorder::endGesture(%this)
+{
+	%this.inGesture = false;
+
+	if(%this.suspended || %this.gestCount <= 0)
+	{
+		return;
+	}
+
+	%this.begin(%this.gestureName(), "");
+	for(%i = 0; %i < %this.gestCount; %i++)
+	{
+		%ctrl = %this.gestCtrl[%i];
+		if(!isObject(%ctrl))
+		{
+			continue;
+		}
+
+		// A control that changed parent has its geometry put back by the layout
+		// fix rather than by a field op. The fix carries the sizing modes as well
+		// as the bounds and is applied after every op has run, so it is the one
+		// that wins where the container places its own children -- and one writer
+		// per control is one less pair of records that can disagree.
+		if(%ctrl.getParent() != %this.gestParent[%i])
+		{
+			%this.watchFrameSet(%this.gestParent[%i]);
+			%this.watchFrameSet(%ctrl.getParent());
+
+			%this.recordMove(%ctrl, %this.gestParent[%i], %this.gestIndex[%i], "");
+			if(isObject(%this.pending))
+			{
+				%this.pending.addLayoutFix(%ctrl, %this.gestLayout[%i], %this.layoutOf(%ctrl));
+			}
+			continue;
+		}
+
+		%this.recordField(%ctrl, "Position", %this.gestPos[%i], %ctrl.getPosition(), false);
+		%this.recordField(%ctrl, "Extent", %this.gestExt[%i], %ctrl.getExtent(), false);
+	}
+	%this.end();
+
+	%this.gestCount = 0;
+}
+
+// What the gesture turned out to be, which is only knowable now it is over. The
+// C++ knows whether the mouse took a handle or the body (mMouseDownMode) but
+// does not pass it, and the snapshot can answer anyway.
+function GuiEditorUndoRecorder::gestureName(%this)
+{
+	%name = "Move Control";
+
+	for(%i = 0; %i < %this.gestCount; %i++)
+	{
+		%ctrl = %this.gestCtrl[%i];
+		if(!isObject(%ctrl))
+		{
+			continue;
+		}
+
+		if(%ctrl.getParent() != %this.gestParent[%i])
+		{
+			return "Reparent Control";
+		}
+
+		if(strcmp(%this.gestExt[%i], %ctrl.getExtent()) != 0)
+		{
+			%name = "Resize Control";
+		}
+	}
+
+	return %name;
 }
 
 //-----------------------------------------------------------------------------
@@ -764,6 +894,13 @@ function GuiEditorUndoRecorder::clear(%this)
 	%this.lastAction = 0;
 	%this.lastKind = "";
 	%this.snapCount = 0;
+
+	// Including a gesture left open. Nothing clears the stack in the middle of a
+	// drag, but a gesture whose mouse-up never arrived would otherwise go on
+	// swallowing every move made after it.
+	%this.gestCount = 0;
+	%this.inGesture = false;
+
 	%this.replayTouched = "";
 	%this.refreshMenu();
 }

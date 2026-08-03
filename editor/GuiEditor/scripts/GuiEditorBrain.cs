@@ -547,15 +547,22 @@ function GuiEditorBrain::onObjectRemoved(%this, %ctrl)
 // what actually moved. A mouse-down that only selected records nothing.
 //-----------------------------------------------------------------------------
 
-// Mouse-down on a selection, before a drag-move or a handle-resize.
+// Mouse-down on a selection, before a drag-move or a handle-resize, and the
+// mouse-up that ends it. The pair is the whole gesture, and the gesture is one
+// undo step however many times the C++ moves the selection inside it - and
+// whatever else it does in there, which includes reparenting the selection into
+// whatever container the pointer wandered over. See
+// GuiEditorUndoRecorder::beginGesture.
 function GuiEditorBrain::onPreEdit(%this, %selection)
 {
-    GuiEditor.undoRecorder.snapshot(%selection);
+    GuiEditor.undoRecorder.beginGesture(%selection);
 }
 
+// The selection is handed over again here and deliberately not used: what the
+// gesture has to be measured against is the snapshot taken when it began.
 function GuiEditorBrain::onPostEdit(%this, %selection)
 {
-    GuiEditor.undoRecorder.commitGeometry("", "");
+    GuiEditor.undoRecorder.endGesture();
 }
 
 // Arrow-key and menu nudges, which the C++ gives a callback of their own
