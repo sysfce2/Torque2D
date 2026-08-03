@@ -192,7 +192,12 @@ function GuiEditorControlSpec::buildSections(%this)
 
 	%this.addSection("GuiListBoxCtrl", "List", "List",
 		"AllowMultipleSelections FitParentWidth");
-	%this.addSection("GuiTreeViewCtrl", "Tree", "Tree", "AllowReorder");
+	// IndentSize reads 0 for "one row height", which is the step the tree has
+	// always used; IconImage empty means a row draws no picture and spends no
+	// width on one. Claimed here rather than left to the Other section so the
+	// three arrive together, under the heading that explains them.
+	%this.addSection("GuiTreeViewCtrl", "Tree", "Tree",
+		"AllowReorder IndentSize IconImage IconSize");
 	%this.addSection("GuiTreeViewCtrl", "List", "List",
 		"AllowMultipleSelections FitParentWidth");
 

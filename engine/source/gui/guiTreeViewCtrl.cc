@@ -33,7 +33,13 @@ IMPLEMENT_CONOBJECT(GuiTreeViewCtrl);
 GuiTreeViewCtrl::GuiTreeViewCtrl()
 {
 	mActive = true;
-	mIndentSize = 10;
+	// Zero is "one row height", which is the step the tree has always used. The
+	// field sat here unread for years holding 10; wiring it up without resetting
+	// it would have re-indented every tree in the engine as a side effect.
+	mIndentSize = 0;
+	mIconImageAssetID = StringTable->EmptyString;
+	mIconImageAsset = NULL;
+	mIconSize = 16;
 	mMultipleSelections = true;
 	mTouchPoint = Point2I::Zero;
 	mDragActive = false;
@@ -46,6 +52,118 @@ GuiTreeViewCtrl::GuiTreeViewCtrl()
 
 GuiTreeViewCtrl::~GuiTreeViewCtrl()
 {
+}
+
+S32 GuiTreeViewCtrl::resolveIndent(S32 indentSize, S32 rowInnerHeight)
+{
+	// A row height is the historical step and stays the default, so a tree that
+	// says nothing indents exactly as it always did. Neither answer may go
+	// negative: a row too short to have an inside would otherwise walk the tree
+	// backwards, one level at a time.
+	const S32 indent = (indentSize > 0) ? indentSize : rowInnerHeight;
+	return (indent > 0) ? indent : 0;
+}
+
+S32 GuiTreeViewCtrl::focusLineOffset(S32 rowInnerHeight)
+{
+	const S32 offset = (rowInnerHeight - smFocusLineWidth) / 2;
+	return (offset > 0) ? offset : 0;
+}
+
+bool GuiTreeViewCtrl::iconSlot(const RectI& contentRect, S32 iconSize, RectI& dstOut, S32& advanceOut)
+{
+	advanceOut = 0;
+	if (iconSize <= 0 || contentRect.extent.y <= 0)
+	{
+		return false;
+	}
+
+	// Never enlarge. The art is drawn for one size and blowing it up is what
+	// looks soft, so a row shorter than the icon gets the icon shrunk to it.
+	const S32 size = getMin(iconSize, contentRect.extent.y);
+	const S32 advance = size + smIconGap;
+	if (size <= 0 || contentRect.extent.x < advance)
+	{
+		// No room for the icon and a space after it. Consume nothing, so the row
+		// falls back to plain text rather than to text drawn over an icon.
+		return false;
+	}
+
+	dstOut.set(Point2I(contentRect.point.x, contentRect.point.y + ((contentRect.extent.y - size) / 2)),
+			   Point2I(size, size));
+	advanceOut = advance;
+	return true;
+}
+
+void GuiTreeViewCtrl::setIconImageAsset(const char* pImageAssetID)
+{
+	// Sanity!
+	AssertFatal(pImageAssetID != NULL, "Cannot use a NULL asset ID.");
+
+	mIconImageAssetID = StringTable->insert(pImageAssetID);
+
+	// Unlike a profile's sheet there is no refcount to wait on: a tree draws its
+	// own icons rather than lending them to whatever wears it, so resolve now.
+	// An empty id clears, which is how a tree turns icons back off.
+	if (mIconImageAssetID != StringTable->EmptyString)
+	{
+		mIconImageAsset = pImageAssetID;
+	}
+	else
+	{
+		mIconImageAsset.clear();
+	}
+}
+
+void GuiTreeViewCtrl::drawIconFrame(const RectI& dst, ImageAsset* sheet, U32 frame)
+{
+	if (sheet == NULL || !sheet->isAssetValid() || frame >= sheet->getFrameCount())
+	{
+		return;
+	}
+
+	const ImageAsset::FrameArea::PixelArea& pixelArea = sheet->getImageFrameArea(frame).mPixelArea;
+	RectI srcRect(pixelArea.mPixelOffset, Point2I(pixelArea.mPixelWidth, pixelArea.mPixelHeight));
+
+	dglDrawBitmapStretchSR(sheet->getImageTexture(), dst, srcRect);
+}
+
+void GuiTreeViewCtrl::renderItemIcon(RectI& contentRect, TreeItem* treeItem, GuiControlState currentState)
+{
+	if (!treeItem || treeItem->iconFrame < 0 || mIconImageAsset.isNull())
+	{
+		return;
+	}
+
+	RectI dst;
+	S32 advance = 0;
+	if (!iconSlot(contentRect, mIconSize, dst, advance))
+	{
+		return;
+	}
+
+	// The modulation is still the row's font color, set before any of this drew.
+	drawIconFrame(dst, mIconImageAsset, (U32)treeItem->iconFrame);
+
+	contentRect.point.x += advance;
+	contentRect.extent.x -= advance;
+}
+
+S32 GuiTreeViewCtrl::getObjectIconFrame(SimObject* obj)
+{
+	// No sheet means no icons at all, so do not trouble script for an answer we
+	// would only throw away.
+	if (!obj || mIconImageAsset.isNull() || !isMethod("onGetItemIcon"))
+	{
+		return -1;
+	}
+
+	const char* frame = Con::executef(this, 2, "onGetItemIcon", Con::getIntArg(obj->getId()));
+	if (!frame || !frame[0])
+	{
+		return -1;
+	}
+	return dAtoi(frame);
 }
 
 GuiTreeViewCtrl::TreeItem* GuiTreeViewCtrl::grabItemPtr(S32 index)
@@ -70,6 +188,15 @@ void GuiTreeViewCtrl::initPersistFields()
 	// It defaults off so trees holding non-GuiControl items (e.g. the Profile
 	// Editor's proxy tree) can never enter the reorder path; opt in explicitly.
 	addField("AllowReorder", TypeBool, Offset(mAllowReorder, GuiTreeViewCtrl));
+	// How far one level of depth steps a row in. Zero - the default - is one row
+	// height, which is what the tree has always done; a narrow tree carrying
+	// other things in the row can buy the width back by naming a smaller step.
+	addField("IndentSize", TypeS32, Offset(mIndentSize, GuiTreeViewCtrl), "Pixels per level of depth. 0 uses the row height.");
+	// A sheet of small pictures, one per row, drawn between the triangle and the
+	// text. Which frame a row wears is script's answer to onGetItemIcon; with no
+	// sheet set the question is never asked and no width is spent.
+	addProtectedField("IconImage", TypeAssetId, Offset(mIconImageAssetID, GuiTreeViewCtrl), &setIconImage, &getIconImage, "The image asset a row's icon is a frame of.");
+	addField("IconSize", TypeS32, Offset(mIconSize, GuiTreeViewCtrl), "How big to draw a row's icon. The art is never enlarged past this.");
 }
 
 S32 GuiTreeViewCtrl::getAdjacentVisibleIndex(S32 fromIndex, S32 direction)
@@ -514,26 +641,37 @@ void GuiTreeViewCtrl::onRenderItem(RectI& itemRect, LBItem* item)
 	RectI fillRect = applyBorders(ctrlRect.point, ctrlRect.extent, currentState, mProfile);
 	RectI contentRect = applyPadding(fillRect.point, fillRect.extent, currentState, mProfile);
 
+	// Anything pinned to the row's left edge goes in here: before the focus line
+	// and before the depth indent, so it stays put instead of travelling with the
+	// tree. The base draws nothing and carves nothing.
+	renderItemGutter(itemRect, contentRect, treeItem, currentState);
+	if (contentRect.extent.x <= 0)
+	{
+		return;
+	}
+
+	const S32 indent = resolveIndent(mIndentSize, contentRect.extent.y);
+
 	//indent to the focus level
 	if(mFocusLevel >= 0)
 	{
-		contentRect.point.x += (mFocusLevel * contentRect.extent.y);
-		contentRect.extent.x -= (mFocusLevel * contentRect.extent.y);
+		contentRect.point.x += (mFocusLevel * indent);
+		contentRect.extent.x -= (mFocusLevel * indent);
 
-		//convert this space to a line by crushing down the sides
-		S32 crush = mRound((contentRect.extent.y - 2) / 2);
-		RectI line = RectI(contentRect.point.x + crush, contentRect.point.y, 2, contentRect.extent.y);
+		// Crushed down to a line, hanging from the triangle's point.
+		S32 crush = focusLineOffset(contentRect.extent.y);
+		RectI line = RectI(contentRect.point.x + crush, contentRect.point.y, smFocusLineWidth, contentRect.extent.y);
 		ColorI lineColor = currentState == SelectedState ? mProfile->getFillColor(NormalState) : mProfile->getFillColor(SelectedState);
 		dglDrawRectFill(line, lineColor);
 
 		//Remove indent
-		contentRect.point.x -= (mFocusLevel * contentRect.extent.y);
-		contentRect.extent.x += (mFocusLevel * contentRect.extent.y);
+		contentRect.point.x -= (mFocusLevel * indent);
+		contentRect.extent.x += (mFocusLevel * indent);
 	}
 
 	// Indent by level
-	contentRect.point.x += (treeItem->level * contentRect.extent.y);
-	contentRect.extent.x -= (treeItem->level * contentRect.extent.y);
+	contentRect.point.x += (treeItem->level * indent);
+	contentRect.extent.x -= (treeItem->level * indent);
 
 	// Render open/close triangle
 	if(obj)
@@ -555,6 +693,10 @@ void GuiTreeViewCtrl::onRenderItem(RectI& itemRect, LBItem* item)
 	}
 	contentRect.point.x += contentRect.extent.y;
 	contentRect.extent.x -= contentRect.extent.y;
+
+	// The row's own picture, between the triangle and the words. The base draws
+	// nothing and carves nothing.
+	renderItemIcon(contentRect, treeItem, currentState);
 
 	renderText(contentRect.point, contentRect.extent, item->itemText, mProfile);
 }
@@ -701,6 +843,7 @@ void GuiTreeViewCtrl::inspectObject(SimObject* obj)
 	S32 id = addItemWithID(text, obj->getId(), obj);
 	TreeItem* treeItem = grabItemPtr(id);
 	treeItem->level = 0;
+	treeItem->iconFrame = getObjectIconFrame(obj);
 	addBranches(treeItem, obj, 1);
 }
 
@@ -722,6 +865,7 @@ void GuiTreeViewCtrl::addBranches(TreeItem* treeItem, SimObject* obj, U16 level)
 			TreeItem* branch = grabItemPtr(index);
 			branch->level = level;
 			branch->trunk = treeItem;
+			branch->iconFrame = getObjectIconFrame(sub);
 			treeItem->branchList.push_back(branch);
 
 			addBranches(branch, sub, level + 1);
@@ -800,7 +944,10 @@ void GuiTreeViewCtrl::refreshTree()
 
 StringTableEntry GuiTreeViewCtrl::getObjectText(SimObject* obj)
 {
-	char buffer[1024];
+	// Empty rather than uninitialised: the fall-through at the bottom returns
+	// this buffer whether or not the block below filled it, and a null object
+	// used to hand the string table whatever was on the stack.
+	char buffer[1024] = { 0 };
 	if (obj)
 	{
 		if (isMethod("onGetObjectText"))
@@ -840,23 +987,17 @@ StringTableEntry GuiTreeViewCtrl::getObjectText(SimObject* obj)
 	return StringTable->insert(buffer, true);
 }
 
-void GuiTreeViewCtrl::calculateHeaderExtent()
+void GuiTreeViewCtrl::refreshItem(S32 index)
 {
-	if(mProfile)
+	TreeItem* treeItem = grabItemPtr(index);
+	if (!treeItem)
 	{
-		GuiBorderProfile* topProfile = mProfile->getTopBorder();
-		GuiBorderProfile* bottomProfile = mProfile->getBottomBorder();
-
-		S32 topSize = (topProfile) ? topProfile->getMargin(NormalState) + topProfile->getBorder(NormalState) + topProfile->getPadding(NormalState) : 0;
-		S32 bottomSize = (bottomProfile) ? bottomProfile->getMargin(NormalState) + bottomProfile->getBorder(NormalState) + bottomProfile->getPadding(NormalState) : 0;
-
-		GFont* font = mProfile->getFont();
-		S32 fontSize = (font) ? font->getHeight() : 0;
-
-		S32 height = topSize + bottomSize + fontSize;
-		S32 width = mBounds.extent.x;
-
+		return;
 	}
+
+	SimObject* obj = getItemObject(treeItem);
+	setItemText(index, getObjectText(obj));
+	treeItem->iconFrame = getObjectIconFrame(obj);
 }
 
 void GuiTreeViewCtrl::updateSize()
