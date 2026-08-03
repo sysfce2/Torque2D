@@ -39,6 +39,13 @@ function GuiEditorExplorerWindow::onAdd(%this)
 		BindToGuiEditor="1";
 		AllowReorder="1";
 
+		// A narrower step than the default, which is one row height. This tree
+		// spends more of its width on chrome than any other -- two columns, a
+		// triangle and an icon before a single letter of the name -- and at three
+		// levels deep the default step left almost nothing for the text. Twelve
+		// is still a clear step and buys back ten pixels a level.
+		IndentSize = 12;
+
 		// The eye and the padlock. Frames come from EditorIcons.cs, never from
 		// the engine: that file is generated and alphabetical, so a number baked
 		// into C++ would silently become a different picture on the next rebuild.
