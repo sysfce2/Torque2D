@@ -43,6 +43,7 @@ function GuiEditor::create( %this )
     exec("./scripts/GuiProfileEditorFieldRow.cs");
     exec("./scripts/GuiProfileEditorStateColorRow.cs");
     exec("./scripts/GuiProfileEditorProfileForm.cs");
+    exec("./scripts/GuiProfileEditorCursorForm.cs");
     exec("./scripts/ProfileThemeEditForm.cs");
     exec("./scripts/GuiProfileEditorLibrary.cs");
     exec("./scripts/GuiProfileEditorTree.cs");

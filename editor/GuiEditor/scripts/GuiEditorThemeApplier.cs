@@ -16,6 +16,29 @@ function GuiEditorThemeApplier::onAdd(%this)
 {
 	%this.buildFieldTable();
 	%this.buildClassTable();
+	%this.buildCursorFieldTable();
+}
+
+// The engine has exactly six cursor slots across three classes, and unlike a
+// profile slot each one means the same thing wherever it appears: a window's
+// upDownCursor and a frame set's are both "the pointer for a horizontal edge".
+// So this needs no per-class exceptions, only the field name.
+function GuiEditorThemeApplier::buildCursorFieldTable(%this)
+{
+	%this.setCursorFieldCategory("editCursor", "Edit");
+	%this.setCursorFieldCategory("leftRightCursor", "LeftRight");
+	%this.setCursorFieldCategory("upDownCursor", "UpDown");
+	%this.setCursorFieldCategory("nWSECursor", "NWSE");
+}
+
+function GuiEditorThemeApplier::setCursorFieldCategory(%this, %field, %category)
+{
+	%this.cursorFieldCategory[strlwr(%field)] = %category;
+}
+
+function GuiEditorThemeApplier::cursorCategoryForField(%this, %field)
+{
+	return %this.cursorFieldCategory[strlwr(%field)];
 }
 
 // What each named slot is for, independent of the control wearing it. "Profile"
@@ -269,7 +292,106 @@ function GuiEditorThemeApplier::applyToControl(%this, %ctrl, %theme, %overrideSt
 		%changed++;
 	}
 
+	%changed += %this.applyCursorsToControl(%ctrl, %theme);
+
 	return %changed;
+}
+
+// The cursor slots, filled the same way and for the same reason: a Gui should
+// wear ITS theme's cursors, not whichever set a project happened to install
+// globally. Done silently -- the properties pane only shows a cursor row when
+// the theme offers a choice, so most controls are themed here and never
+// mention it.
+//
+// A cursor already belonging to this theme is left alone, which is what lets a
+// deliberate second choice survive a re-apply.
+function GuiEditorThemeApplier::applyCursorsToControl(%this, %ctrl, %theme)
+{
+	%changed = 0;
+
+	%count = %ctrl.getFieldCount();
+	for(%i = 0; %i < %count; %i++)
+	{
+		%field = %ctrl.getField(%i);
+		if(%ctrl.getFieldType(%field) !$= "GuiCursor")
+		{
+			continue;
+		}
+
+		%category = %this.cursorCategoryForField(%field);
+		if(%category $= "")
+		{
+			continue;
+		}
+
+		%current = %this.fieldCursor(%ctrl, %field);
+		if(isObject(%current) && %this.themeOfCursor(%current) == %theme)
+		{
+			continue;
+		}
+
+		// From another theme: carry the category across rather than this one's
+		// guess, exactly as a profile slot does.
+		if(isObject(%current) && %current.category !$= "")
+		{
+			%category = %current.category;
+		}
+
+		%target = %theme.getCursor(%category);
+		if(!isObject(%target) || %current == %target)
+		{
+			continue;
+		}
+
+		GuiEditor.undoRecorder.writeField(%ctrl, %field, %target.getId());
+		%changed++;
+	}
+
+	return %changed;
+}
+
+// The object in a cursor field, or 0. Same reasoning as fieldProfile: the field
+// reads back as a name, and a name the Sim cannot resolve is not necessarily a
+// dead reference while the editor is running in editor mode.
+function GuiEditorThemeApplier::fieldCursor(%this, %ctrl, %field)
+{
+	%value = %ctrl.getFieldValue(%field);
+	if(%value $= "")
+	{
+		return 0;
+	}
+	if(isObject(%value))
+	{
+		return %value.getId();
+	}
+	return %this.library.findCursorByName(%value);
+}
+
+// The theme a cursor belongs to, or 0. A cursor carries its category, which
+// narrows the search to one list per theme.
+function GuiEditorThemeApplier::themeOfCursor(%this, %cursor)
+{
+	%category = %cursor.category;
+	if(%category $= "")
+	{
+		return 0;
+	}
+
+	%themeCount = getWordCount(%this.themeList);
+	for(%i = 0; %i < %themeCount; %i++)
+	{
+		%theme = getWord(%this.themeList, %i);
+		%members = %theme.getCursors(%category);
+		for(%m = 0; %m < getWordCount(%members); %m++)
+		{
+			if(getWord(%members, %m) == %cursor)
+			{
+				return %theme;
+			}
+		}
+	}
+
+	return 0;
 }
 
 // The object in a profile field, or 0. The field reads back as a name (or an id
@@ -384,9 +506,55 @@ function GuiEditorThemeApplier::detachWalk(%this, %ctrl, %theme, %profile)
 		%changed++;
 	}
 
+	%changed += %this.detachCursors(%ctrl, %theme);
+
 	for(%i = 0; %i < %ctrl.getCount(); %i++)
 	{
 		%changed += %this.detachWalk(%ctrl.getObject(%i), %theme, %profile);
+	}
+
+	return %changed;
+}
+
+// The same rescue for cursor slots. A GuiCursor* is as raw a pointer as a
+// profile's, so a control still naming one of a doomed theme's cursors would be
+// left pointing at freed memory.
+//
+// The replacement is the canonical name for the slot ("LeftRightCursor" and the
+// rest) rather than an empty string: writing "" through TypeGuiCursor does not
+// clear the field, it falls back to DefaultCursor (guiTypes.cc), which would
+// put an arrow on a window's resize edge.
+function GuiEditorThemeApplier::detachCursors(%this, %ctrl, %theme)
+{
+	if(!isObject(%theme))
+	{
+		return 0;
+	}
+
+	%changed = 0;
+	%count = %ctrl.getFieldCount();
+	for(%i = 0; %i < %count; %i++)
+	{
+		%field = %ctrl.getField(%i);
+		if(%ctrl.getFieldType(%field) !$= "GuiCursor")
+		{
+			continue;
+		}
+
+		%current = %this.fieldCursor(%ctrl, %field);
+		if(!isObject(%current) || %this.themeOfCursor(%current) != %theme)
+		{
+			continue;
+		}
+
+		%category = %this.cursorCategoryForField(%field);
+		if(%category $= "")
+		{
+			continue;
+		}
+
+		%ctrl.setEditFieldValue(%field, %theme.getCursorCanonicalName(%category));
+		%changed++;
 	}
 
 	return %changed;

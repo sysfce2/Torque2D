@@ -96,7 +96,13 @@ function GuiProfileEditorFieldRow::build(%this)
 	}
 	else if(%kind $= "color")
 	{
-		%this.editor = %this.makeSwatch(%pad, %editorY, %editorW, 22);
+		// swatchWidth opts a row out of filling its cell. A swatch that spans the
+		// whole width reads as a bar of flat color -- a progress bar, a divider --
+		// rather than as the button it is. Rows that show a state's colors keep
+		// the full width, because there four of them share it and the widths are
+		// how you tell which is which.
+		%this.editor = %this.makeSwatch(%pad, %editorY,
+			(%this.swatchWidth > 0) ? %this.swatchWidth : %editorW, 22);
 	}
 	else if(%kind $= "enum" || %kind $= "dropdown")
 	{
@@ -255,7 +261,9 @@ function GuiProfileEditorFieldRow::makeSwatch(%this, %x, %y, %w, %h)
 	%swatch = new GuiColorPopupCtrl()
 	{
 		class = "GuiProfileEditorColorPopup";
-		HorizSizing = "width";
+		// A fixed-width swatch stays put as the cell widens; a full-width one
+		// follows it.
+		HorizSizing = (%this.swatchWidth > 0) ? "anchorLeft" : "width";
 		Position = %x SPC %y;
 		Extent = %w SPC %h;
 		showColorValues = true;

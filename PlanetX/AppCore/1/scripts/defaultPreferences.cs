@@ -35,6 +35,12 @@ $pref::iOS::EnableOrientationRotation = 1;
 $pref::iOS::EnableOtherOrientationRotation = 1;
 $pref::iOS::StatusBarType       = 0;
 
+/// AppCore. Which theme's cursors are installed under the names the engine
+/// looks up when a control names none of its own - DefaultCursor, EditCursor
+/// and the rest (see gui/guiCursors.cs). Empty is the usual answer: a project
+/// with one theme uses it, and one with several is asked to say which.
+$pref::AppCore::cursorTheme = "";
+
 /// T2D
 $pref::T2D::ParticlePlayerEmissionRateScale = 1.0;
 $pref::T2D::ParticlePlayerSizeScale = 1.0;

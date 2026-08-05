@@ -703,6 +703,11 @@ function GuiEditorInspectorPane::buildVariantsSection(%this)
 // The slots worth showing: every TypeGuiProfile field except the control's own
 // Profile, which the header already carries, and only where the narrow
 // candidate set has more than one member.
+//
+// Cursor slots join on the same terms. A themed Gui gets its cursors filled by
+// GuiEditorThemeApplier without being asked, and a theme almost always offers
+// exactly one cursor per category -- so a row appears only once the theme holds
+// a second cursor for that job and there is genuinely a choice to make.
 function GuiEditorInspectorPane::variantSlots(%this, %ctrl)
 {
 	if(!isObject(%ctrl) || %this.spec.hasFlag(%ctrl.getClassName(), "bare"))
@@ -715,17 +720,47 @@ function GuiEditorInspectorPane::variantSlots(%this, %ctrl)
 	for(%i = 0; %i < %count; %i++)
 	{
 		%field = %ctrl.getField(%i);
-		if(%ctrl.getFieldType(%field) !$= "GuiProfile" || %field $= "Profile")
+		%type = %ctrl.getFieldType(%field);
+
+		if(%type $= "GuiProfile" && %field !$= "Profile")
 		{
-			continue;
+			if(getWordCount(%this.profileAnchors(%ctrl, %field)) > 1)
+			{
+				%fields = (%fields $= "") ? %field : (%fields SPC %field);
+			}
 		}
-		if(getWordCount(%this.profileAnchors(%ctrl, %field)) <= 1)
+		else if(%type $= "GuiCursor")
 		{
-			continue;
+			if(getWordCount(%this.cursorAnchors(%ctrl, %field)) > 1)
+			{
+				%fields = (%fields $= "") ? %field : (%fields SPC %field);
+			}
 		}
-		%fields = (%fields $= "") ? %field : (%fields SPC %field);
 	}
 	return %fields;
+}
+
+// A cursor slot's candidates: the active theme's members of the slot's cursor
+// category, plus whatever the slot holds now. There is no stand-alone cursor to
+// merge in - a cursor belongs to a theme or to nothing.
+function GuiEditorInspectorPane::cursorAnchors(%this, %ctrl, %field)
+{
+	%category = GuiEditor.themeApplier.cursorCategoryForField(%field);
+	if(%category $= "")
+	{
+		return "";
+	}
+
+	%theme = GuiEditor.themeByName(GuiEditor.themeName);
+	%list = isObject(%theme) ? %theme.getCursors(%category) : "";
+
+	%current = GuiEditor.themeApplier.fieldCursor(%ctrl, %field);
+	if(isObject(%current))
+	{
+		%list = %this.addUnique(%list, %current);
+	}
+
+	return %list;
 }
 
 // Why does this control show the Variants rows it shows? Type
@@ -1381,11 +1416,47 @@ function GuiEditorInspectorPane::refreshProfileChoices(%this)
 	{
 		%field = getWord(%slots, %i);
 		%row = %this.row[%field];
-		if(isObject(%row))
+		if(!isObject(%row))
+		{
+			continue;
+		}
+
+		if(%this.isCursorSlot(%field))
+		{
+			%this.fillCursorRow(%row, %field);
+		}
+		else
 		{
 			%this.fillProfileRow(%row, %field);
 		}
 	}
+}
+
+// A cursor slot's candidates, by name, exactly as a profile slot's: the name is
+// the label and the commit looks it back up, because a cursor created this
+// session has a name the Sim may not resolve.
+function GuiEditorInspectorPane::fillCursorRow(%this, %row, %field)
+{
+	%ids = %this.cursorAnchors(%this.target, %field);
+	%items = "";
+	%count = getWordCount(%ids);
+	for(%i = 0; %i < %count; %i++)
+	{
+		%cursor = getWord(%ids, %i);
+		%name = %cursor.getName();
+		if(%name $= "")
+		{
+			continue;
+		}
+		%items = (%items $= "") ? %name : (%items TAB %name);
+		%this.cursorByName[%name] = %cursor;
+	}
+
+	%row.currentItem = "";
+	%row.fillItems(%items);
+
+	%current = GuiEditor.themeApplier.fieldCursor(%this.target, %field);
+	%row.setValue(isObject(%current) ? %current.getName() : "");
 }
 
 // The categories this class may take, and which one it is on. Unlike a profile
@@ -1506,6 +1577,14 @@ function GuiEditorInspectorPane::onProfileRowCommit(%this, %row)
 			%this.writeField(%field, %profile.getId());
 		}
 	}
+	else if(%this.isCursorSlot(%field))
+	{
+		%cursor = %this.cursorByName[%row.getValue()];
+		if(isObject(%cursor))
+		{
+			%this.writeField(%field, %cursor.getId());
+		}
+	}
 	else
 	{
 		%this.writeField(%field, %row.getValue());
@@ -1528,6 +1607,12 @@ function GuiEditorInspectorPane::isProfileSlot(%this, %field)
 {
 	return isObject(%this.target) &&
 		%this.target.getFieldType(%field) $= "GuiProfile";
+}
+
+function GuiEditorInspectorPane::isCursorSlot(%this, %field)
+{
+	return isObject(%this.target) &&
+		%this.target.getFieldType(%field) $= "GuiCursor";
 }
 
 function GuiEditorInspectorPane::isSpriteSourceField(%this, %field)

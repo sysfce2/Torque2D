@@ -30,6 +30,38 @@ function planetXSmoke()
 	smokeCheck("AppCore no longer creates GuiWindowProfile", !isObject(GuiWindowProfile));
 	smokeCheck("AppCore still creates its cursors", isObject(DefaultCursor) && isObject(EditCursor));
 
+	// Cursors come from the theme now. The canonical names still answer -- the
+	// engine hard-codes them for any control that names no cursor of its own --
+	// but what they hold is a copy of the theme's member, art and tint included.
+	smokeCheck("the theme owns a cursor per category",
+		isObject(PlanetXDefaultCursor) && isObject(PlanetXEditCursor) && isObject(PlanetXNWSECursor));
+	// Either the recipe's tint or one the project chose. Asserting it always
+	// equals colorForeground would forbid the override the pane exists to make;
+	// that the tint tracks the palette when NOT overridden is covered by
+	// GuiProfileThemeTests and smoke/cursorPane.
+	smokeCheck("cursor tint is the palette's, or a deliberate override",
+		PlanetX.isFieldOverridden(PlanetXDefaultCursor, "color") ||
+		PlanetXDefaultCursor.color $= PlanetX.colorForeground);
+	smokeCheck("theme cursors have their own art",
+		strstr(PlanetXDefaultCursor.bitmapName, "themes/cursors/PlanetX") >= 0);
+	smokeCheck("the art was seeded beside the theme",
+		isDirectory(testRoot("PlanetX/themes/cursors/PlanetX")));
+	smokeCheck("the canonical names carry the theme's cursors",
+		DefaultCursor.bitmapName $= PlanetXDefaultCursor.bitmapName &&
+		DefaultCursor.hotSpot $= PlanetXDefaultCursor.hotSpot &&
+		DefaultCursor.color $= PlanetXDefaultCursor.color);
+	smokeCheck("an installed copy is not mistaken for a theme member", DefaultCursor.category $= "");
+
+	// Counted relative to what the project's own theme file holds, which is the
+	// user's to change: PlanetX already ships an extra Default cursor of its own.
+	%before = getWordCount(PlanetX.getCursors("Default"));
+	%extra = PlanetX.createCursor("Default");
+	%extra.bitmapName = "unitTestArt/other.png";
+	smokeCheck("a category can hold another cursor", getWordCount(PlanetX.getCursors("Default")) == (%before + 1));
+	PlanetX.removeCursor(%extra);
+	smokeCheck("an extra cursor can be removed again", getWordCount(PlanetX.getCursors("Default")) == %before);
+	smokeCheck("the project's own extra cursor survived", %before >= 1 && isObject(PlanetXDefaultCursor2));
+
 	smokeCheck("the PlanetX theme loaded", isObject(PlanetX));
 	smokeCheck("theme button profile", isObject(PlanetXButtonProfile));
 	smokeCheck("theme window profile", isObject(PlanetXWindowProfile));

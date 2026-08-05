@@ -20,15 +20,24 @@
 // IN THE SOFTWARE.
 //-----------------------------------------------------------------------------
 
-/// The mouse cursors a GUI names by convention: a text field asks for EditCursor,
-/// a window's edges for LeftRightCursor and friends, and a control with none of
-/// its own gets DefaultCursor.
+/// The mouse cursors a GUI names by convention: a text field asks for
+/// EditCursor, a window's edges for LeftRightCursor and friends, and a control
+/// with none of its own gets DefaultCursor. Those names are hard-coded in the
+/// engine (guiTextEditCtrl.cc, guiWindowCtrl.cc, guiFrameSetCtrl.cc,
+/// guiEditCtrl.cc), so something has to answer to them.
 ///
-/// This file used to build a project's ~70 GUI profiles as well. Those are now a
-/// GuiProfileTheme (see scripts/themes.cs), which derives the whole set from six
-/// colors and is editable in the GUI Profile Editor - so a project skins itself
-/// by editing a theme rather than by forking a thousand lines of script. Cursors
-/// have not moved into the theme yet, so they stay here.
+/// This file used to answer by building seven cursors out of literals, the last
+/// of the hand-written GUI furniture after the ~70 profiles became a
+/// GuiProfileTheme. Now the theme owns cursors too - each one its own art,
+/// tinted from the theme's palette - and this installs a chosen theme's set
+/// under the canonical names. A control that names a cursor outright still wins;
+/// this is only what everything else falls back to, including the canvas arrow.
+///
+/// It is also callable at any time, which is how a game swaps between themes
+/// that look nothing alike:
+///
+///     AppCore.installThemeCursors(Combat);
+///     Canvas.setCursor(DefaultCursor);
 
 /// Registers %object under %name, or - if something already holds the name -
 /// copies the new object's fields onto the existing one and throws the new one
@@ -55,54 +64,106 @@ function AppCore::SafeCreateNamedObject(%this, %name, %object)
 	}
 }
 
-function AppCore::createGuiCursors(%this)
+/// Every theme the project loaded, as a space-separated list of ids. They live
+/// in the Gui data group, which is where GuiProfileTheme::onAdd puts them.
+function AppCore::getThemes(%this)
 {
-	%this.SafeCreateNamedObject("DefaultCursor", new GuiCursor()
+	%themes = "";
+	if(!isObject(GuiDataGroup))
 	{
-	    hotSpot = "1 1";
-	    renderOffset = "0 0";
-	    bitmapName = "^AppCore/gui/images/cursors/defaultCursor";
-	});
+		return %themes;
+	}
 
-	%this.SafeCreateNamedObject("LeftRightCursor", new GuiCursor()
+	for(%i = 0; %i < GuiDataGroup.getCount(); %i++)
 	{
-	   hotSpot = "0.5 0";
-	   renderOffset = "0.5 0.4";
-	   bitmapName = "^AppCore/gui/images/cursors/leftRight";
-	});
+		%object = GuiDataGroup.getObject(%i);
+		if(%object.getClassName() $= "GuiProfileTheme")
+		{
+			%themes = (%themes $= "") ? %object.getId() : (%themes SPC %object.getId());
+		}
+	}
 
-	%this.SafeCreateNamedObject("UpDownCursor", new GuiCursor()
-	{
-	   hotSpot = "1 1";
-	   renderOffset = "0.5 0.5";
-	   bitmapName = "^AppCore/gui/images/cursors/upDown";
-	});
+	return %themes;
+}
 
-	%this.SafeCreateNamedObject("NWSECursor", new GuiCursor()
+/// Which theme's cursors become the canonical ones. A project with one theme
+/// never has to think about this; a project with several says so by setting
+/// $pref::AppCore::cursorTheme, and gets told when it hasn't.
+function AppCore::cursorTheme(%this)
+{
+	%themes = %this.getThemes();
+	%count = getWordCount(%themes);
+	if(%count == 0)
 	{
-	   hotSpot = "1 1";
-	   renderOffset = "0.5 0.5";
-	   bitmapName = "^AppCore/gui/images/cursors/NWSE";
-	});
+		return 0;
+	}
 
-	%this.SafeCreateNamedObject("NESWCursor", new GuiCursor()
+	if($pref::AppCore::cursorTheme !$= "")
 	{
-	   hotSpot = "1 1";
-	   renderOffset = "0.5 0.5";
-	   bitmapName = "^AppCore/gui/images/cursors/NESW";
-	});
+		for(%i = 0; %i < %count; %i++)
+		{
+			%theme = getWord(%themes, %i);
+			if(%theme.getName() $= $pref::AppCore::cursorTheme)
+			{
+				return %theme;
+			}
+		}
+		warn("AppCore::cursorTheme: $pref::AppCore::cursorTheme names '" @ $pref::AppCore::cursorTheme @ "', which is not a loaded theme.");
+	}
 
-	%this.SafeCreateNamedObject("MoveCursor", new GuiCursor()
+	if(%count == 1)
 	{
-	   hotSpot = "1 1";
-	   renderOffset = "0.5 0.5";
-	   bitmapName = "^AppCore/gui/images/cursors/move";
-	});
+		return getWord(%themes, 0);
+	}
 
-	%this.SafeCreateNamedObject("EditCursor", new GuiCursor()
+	for(%i = 0; %i < %count; %i++)
 	{
-	   hotSpot = "0 0";
-	   renderOffset = "0.5 0.5";
-	   bitmapName = "^AppCore/gui/images/cursors/ibeam";
-	});
+		%theme = getWord(%themes, %i);
+		if(%theme.getName() $= "Base")
+		{
+			return %theme;
+		}
+	}
+
+	%first = getWord(%themes, 0);
+	warn("AppCore::cursorTheme: " @ %count @ " themes are loaded and none is named 'Base', so the cursors come from '" @
+		%first.getName() @ "'. Set $pref::AppCore::cursorTheme to choose.");
+	return %first;
+}
+
+/// Point the canonical cursor names at %theme's cursors. The names are copies
+/// rather than the members themselves: a name can only belong to one object,
+/// and a theme's members have to keep their own names for the Guis that
+/// reference them.
+function AppCore::installThemeCursors(%this, %theme)
+{
+	if(!isObject(%theme))
+	{
+		warn("AppCore::installThemeCursors: no theme to install cursors from.");
+		return false;
+	}
+
+	%categories = %theme.getCursorCategoryNames();
+	%count = getWordCount(%categories);
+	for(%i = 0; %i < %count; %i++)
+	{
+		%category = getWord(%categories, %i);
+		%cursor = %theme.getCursor(%category);
+		if(!isObject(%cursor))
+		{
+			continue;
+		}
+
+		// The category's canonical name comes from the engine's own table, so
+		// this never has to take a theme name apart to find it.
+		%this.SafeCreateNamedObject(%theme.getCursorCanonicalName(%category), new GuiCursor()
+		{
+			bitmapName = %cursor.bitmapName;
+			hotSpot = %cursor.hotSpot;
+			renderOffset = %cursor.renderOffset;
+			color = %cursor.color;
+		});
+	}
+
+	return true;
 }

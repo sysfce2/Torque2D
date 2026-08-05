@@ -55,9 +55,14 @@
 //
 // Fields absent from everything here are never shown: canSave (its write
 // function is defaultProtectedNotWriteFn, so it never even serializes),
-// canSaveDynamicFields, parentGroup, and every TypeGuiCursor field -- GuiCursor
-// has no category and GuiProfileTheme has no cursor table, so cursors cannot
-// join the Variants scheme the profile slots use.
+// canSaveDynamicFields, and parentGroup.
+//
+// TypeGuiCursor fields were once in that list too, because GuiCursor had no
+// category and GuiProfileTheme had no cursor table. Both now exist, so a cursor
+// slot joins the Variants scheme on the same terms as a profile slot: the theme
+// fills it silently, and a row appears only where the theme holds more than one
+// cursor for that job. They stay "hidden" to the generic field walk regardless,
+// so an unremarkable window shows no cursor rows at all.
 //
 // The spec is pure data with no UI; the pane owns one and asks it what to show.
 //-----------------------------------------------------------------------------
@@ -850,6 +855,13 @@ function GuiEditorControlSpec::kindForType(%this, %type)
 		case "filename": return "file";
 		case "assetIdString": return "asset";
 		case "GuiProfile": return "profile";
+		// Both stay hidden from the generic path that fills the Other section.
+		// A border profile has nothing to offer there at all -- the Profile
+		// Editor owns borders and a control never names one. A cursor does, but
+		// only sometimes: buildVariantsSection adds its row deliberately, and
+		// only where the theme holds a choice. Answering "dropdown" here would
+		// instead put an empty one on every window, which is the noise the
+		// Variants rule exists to prevent.
 		case "GuiCursor" or "GuiBProfile": return "hidden";
 	}
 	return "text";
@@ -990,6 +1002,15 @@ function GuiEditorControlSpec::buildLabels(%this)
 	%this.label["selectorProfile"] = "Selector";
 	%this.label["valueProfile"] = "Value Boxes";
 	%this.label["backgroundProfile"] = "Background";
+
+	// Cursor slots. Named for the job rather than the direction the field is:
+	// "nWSECursor" describes the arrow's art, "Corner" describes what hovering
+	// there does, and only one of those is a question the person laying out a
+	// window is asking.
+	%this.label["editCursor"] = "Text Cursor";
+	%this.label["leftRightCursor"] = "Horizontal Resize";
+	%this.label["upDownCursor"] = "Vertical Resize";
+	%this.label["nWSECursor"] = "Corner Resize";
 }
 
 function GuiEditorControlSpec::labelFor(%this, %field)
