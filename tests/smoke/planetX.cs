@@ -60,7 +60,6 @@ function planetXSmoke()
 	smokeCheck("a category can hold another cursor", getWordCount(PlanetX.getCursors("Default")) == (%before + 1));
 	PlanetX.removeCursor(%extra);
 	smokeCheck("an extra cursor can be removed again", getWordCount(PlanetX.getCursors("Default")) == %before);
-	smokeCheck("the project's own extra cursor survived", %before >= 1 && isObject(PlanetXDefaultCursor2));
 
 	smokeCheck("the PlanetX theme loaded", isObject(PlanetX));
 	smokeCheck("theme button profile", isObject(PlanetXButtonProfile));

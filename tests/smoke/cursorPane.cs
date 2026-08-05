@@ -213,9 +213,45 @@ function cStep3()
 	cCheck("the moved art file exists",
 		isFile(makeFullPath(%theme.getCursor("Default").bitmapName, getMainDotCsDir())));
 
-	// --- Removing the extra puts the category back to one. ---
-	%d.library.removeExtraCursor(%theme, %extra);
+	// An extra's art is named after the member rather than the category, so a
+	// rename that moved only the stock files left it behind while its cursor
+	// pointed hopefully into the new folder.
+	cCheck("an extra's art followed the rename too",
+		strstr(%extra.bitmapName, "cursors/CurSmokeTwo") >= 0);
+	cCheck("and the extra's file is really there",
+		isFile(makeFullPath(%extra.bitmapName, getMainDotCsDir())));
+
+	// --- Removing the extra puts the category back to one, and offers to take
+	// its picture with it rather than doing so behind the user's back. ---
+	%art = %extra.bitmapName;
+	%artFile = makeFullPath(%art, getMainDotCsDir());
+	%orphaned = %d.library.removeExtraCursor(%theme, %extra);
 	cCheck("extra removed", getWordCount(%theme.getCursors("Default")) == 1);
+	cCheck("its now-unused art is offered up, not deleted", %orphaned $= %artFile);
+	cCheck("the file is still there until someone says otherwise", isFile(%artFile));
+
+	// Saying yes only dooms it -- Cancel would still keep it, like every other
+	// file this editor removes.
+	%d.doomedCursorArt = %orphaned;
+	%d.doDeleteCursorArt();
+	cCheck("confirming dooms the file", %d.library.isDirty());
+
+	// --- Art that is still in use is never offered. This is the case that
+	// would really have hurt: an extra pointed at the category's stock art,
+	// which the default member is also using. ---
+	%shared = %d.library.createExtraCursor(%theme, "Edit");
+	%shared.bitmapName = %theme.getCursor("Edit").bitmapName;
+	%sharedFile = makeFullPath(%shared.bitmapName, getMainDotCsDir());
+	%orphaned = %d.library.removeExtraCursor(%theme, %shared);
+	cCheck("shared art is not offered for deletion", %orphaned $= "");
+	cCheck("and the file the default still uses survives", isFile(%sharedFile));
+
+	// --- Nor is art the user chose from somewhere else. ---
+	%outside = %d.library.createExtraCursor(%theme, "Move");
+	%outside.bitmapName = "editor/EditorCore/Themes/BaseTheme/images/cursors/move.png";
+	cCheck("art from outside the theme's folder is left alone",
+		%d.library.removeExtraCursor(%theme, %outside) $= "");
+
 	cCheck("a default cursor cannot be removed",
 		!%theme.removeCursor(%theme.getCursor("Default")));
 

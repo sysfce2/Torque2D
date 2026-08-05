@@ -1063,9 +1063,10 @@ function GuiProfileEditorDialog::onRemoveProfile(%this)
 	%this.currentRoot = "";
 	%this.currentMember = "";
 
+	%orphanedArt = "";
 	if(%isCursor)
 	{
-		%this.library.removeExtraCursor(%theme, %member);
+		%orphanedArt = %this.library.removeExtraCursor(%theme, %member);
 	}
 	else
 	{
@@ -1074,6 +1075,32 @@ function GuiProfileEditorDialog::onRemoveProfile(%this)
 
 	%this.tree.refresh();
 	%this.toolbar.refreshEnabled();
+
+	// Removing a cursor leaves its picture behind. Deleting that as a side
+	// effect would be a file thrown away without being asked about, and keeping
+	// it always would litter the folder with the art of every cursor ever tried.
+	// So ask -- but only when the answer is not already obvious: the library
+	// hands back a path only for art it made, that nothing else is using, and
+	// that is really on disk.
+	if(%orphanedArt !$= "")
+	{
+		%this.doomedCursorArt = %orphanedArt;
+		%this.openConfirmDialog("Delete Image",
+			"The cursor is gone. Its image file, " @ fileName(%orphanedArt) @
+			", is not used by any other cursor. Delete it as well?",
+			"Delete Image", "doDeleteCursorArt");
+	}
+}
+
+// The confirm arm of the question above. Cancel is the other, and it does
+// nothing at all: the file stays where it is.
+function GuiProfileEditorDialog::doDeleteCursorArt(%this)
+{
+	if(%this.doomedCursorArt !$= "")
+	{
+		%this.library.deleteCursorArt(%this.doomedCursorArt);
+		%this.doomedCursorArt = "";
+	}
 }
 
 function GuiProfileEditorDialog::onNewStandalone(%this)

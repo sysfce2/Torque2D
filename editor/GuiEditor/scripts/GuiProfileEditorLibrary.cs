@@ -208,24 +208,27 @@ function GuiProfileEditorLibrary::moveThemeCursors(%this, %theme, %oldName)
 	}
 
 	createPath(%target @ "/");
-	%oldPrefix = makeRelativePath(%source, getMainDotCsDir());
 	%newPrefix = makeRelativePath(%target, getMainDotCsDir());
 
 	%categories = %theme.getCursorCategoryNames();
 	for(%i = 0; %i < getWordCount(%categories); %i++)
 	{
 		%category = getWord(%categories, %i);
-		%file = %theme.getCursorStockFile(%category);
-		if(%file !$= "")
-		{
-			pathCopy(pathConcat(%source, %file), pathConcat(%target, %file));
-			%this.doomFile(pathConcat(%source, %file));
-		}
 
+		// The stock file for the category, whether or not anything points at it
+		// yet: a member with no art is filled from it at the next restamp, and
+		// that has to find it in the new folder.
+		%this.moveCursorFile(%theme.getCursorStockFile(%category), %source, %target);
+
+		// Then every member's own file. Driven by what the members actually
+		// name rather than by the stock list, because an extra's art is named
+		// after the member -- a rename that copied only the stock files left
+		// every extra pointing into the new folder at a file still sitting in
+		// the old one.
 		%members = %theme.getCursors(%category);
 		for(%m = 0; %m < getWordCount(%members); %m++)
 		{
-			%this.repointCursorArt(getWord(%members, %m), %oldPrefix, %newPrefix);
+			%this.moveCursorArt(getWord(%members, %m), %source, %target, %newPrefix);
 		}
 	}
 
@@ -233,17 +236,37 @@ function GuiProfileEditorLibrary::moveThemeCursors(%this, %theme, %oldName)
 	return true;
 }
 
-// Move one cursor's bitmap from the old folder to the new, if that is where it
-// lives. Compared as relative paths because that is the form a theme stores.
-function GuiProfileEditorLibrary::repointCursorArt(%this, %cursor, %oldPrefix, %newPrefix)
+// Copy one file between the two folders and drop the original at the next save.
+// Silent about a file that is not there: the stock art of a category whose
+// member was pointed elsewhere never existed in the old folder either.
+function GuiProfileEditorLibrary::moveCursorFile(%this, %name, %source, %target)
 {
-	%current = %cursor.bitmapName;
-	if(%current $= "" || strpos(%current, %oldPrefix) != 0)
+	if(%name $= "")
 	{
 		return;
 	}
 
-	%cursor.bitmapName = %newPrefix @ getSubStr(%current, strlen(%oldPrefix), strlen(%current) - strlen(%oldPrefix));
+	%from = pathConcat(%source, %name);
+	if(pathCopy(%from, pathConcat(%target, %name)))
+	{
+		%this.doomFile(%from);
+	}
+}
+
+// Follow one cursor's art into the new folder, if that is where it lives. Art
+// the user chose from somewhere else is left exactly where it is - it is not
+// the theme's to move.
+function GuiProfileEditorLibrary::moveCursorArt(%this, %cursor, %source, %target, %newPrefix)
+{
+	%current = %cursor.bitmapName;
+	if(%current $= "" || filePath(makeFullPath(%current, getMainDotCsDir())) !$= %source)
+	{
+		return;
+	}
+
+	%name = fileName(%current);
+	%this.moveCursorFile(%name, %source, %target);
+	%cursor.bitmapName = pathConcat(%newPrefix, %name);
 }
 
 // Point a loaded or new root at the project's font folder. A theme restamps its
@@ -1231,23 +1254,20 @@ function GuiProfileEditorLibrary::createExtraCursor(%this, %theme, %category)
 	return %cursor;
 }
 
+// Removes the cursor and answers with the art file it leaves behind, or "" if
+// there is nothing worth asking about. The file is NOT deleted here: the art
+// may be the user's own, it may still be in use, and either way throwing away
+// a picture is not something to do as a side effect of removing the thing that
+// happened to be pointing at it. The caller asks; deleteCursorArt does it.
 function GuiProfileEditorLibrary::removeExtraCursor(%this, %theme, %cursor)
 {
 	%leaf = %this.cursorExtraProxy[%cursor.getId()];
-
-	// Its art was made for it alone, so it goes too - but only on save, like
-	// every other file this editor drops.
 	%bitmap = %cursor.bitmapName;
 
 	%removed = %theme.removeCursor(%cursor);
 	if(!%removed)
 	{
-		return false;
-	}
-
-	if(%bitmap !$= "")
-	{
-		%this.doomFile(makeFullPath(%bitmap, getMainDotCsDir()));
+		return "";
 	}
 
 	if(isObject(%leaf))
@@ -1256,7 +1276,72 @@ function GuiProfileEditorLibrary::removeExtraCursor(%this, %theme, %cursor)
 	}
 	%this.cursorExtraProxy[%cursor.getId()] = "";
 	%this.markDirty(%theme);
-	return true;
+
+	return %this.orphanedCursorArt(%theme, %bitmap);
+}
+
+// Is this art now unused, ours to remove, and actually there? Only then is
+// there a question to ask. Called after the cursor is gone, so "unused" is a
+// plain search of what remains.
+//
+// Three ways to answer no, and each is a file that must survive:
+//   - a path outside the theme's own cursor folder is the user's own picture,
+//     chosen with the Find button; this editor did not put it there.
+//   - a path another cursor still names is in use, and the obvious case is an
+//     extra pointed at the category's stock art, which the default member uses.
+//   - a path with no file behind it has nothing to delete.
+function GuiProfileEditorLibrary::orphanedCursorArt(%this, %theme, %bitmap)
+{
+	if(%bitmap $= "")
+	{
+		return "";
+	}
+
+	%full = makeFullPath(%bitmap, getMainDotCsDir());
+	%folder = %this.getThemeCursorsPath(%theme);
+	if(%folder $= "" || filePath(%full) !$= %folder)
+	{
+		return "";
+	}
+
+	if(%this.isCursorArtInUse(%bitmap) || !isFile(%full))
+	{
+		return "";
+	}
+
+	return %full;
+}
+
+// Does any cursor in any loaded theme still name this art? Compared as the
+// relative paths a theme stores, which is the one form they all agree on.
+function GuiProfileEditorLibrary::isCursorArtInUse(%this, %bitmap)
+{
+	%themes = %this.getThemes();
+	for(%i = 0; %i < getWordCount(%themes); %i++)
+	{
+		%theme = getWord(%themes, %i);
+		%categories = %theme.getCursorCategoryNames();
+		for(%c = 0; %c < getWordCount(%categories); %c++)
+		{
+			%members = %theme.getCursors(getWord(%categories, %c));
+			for(%m = 0; %m < getWordCount(%members); %m++)
+			{
+				if(getWord(%members, %m).bitmapName $= %bitmap)
+				{
+					return true;
+				}
+			}
+		}
+	}
+
+	return false;
+}
+
+// Drop the file at the next save, like every other file this editor removes -
+// so Cancel keeps it, exactly as Cancel keeps a deleted theme.
+function GuiProfileEditorLibrary::deleteCursorArt(%this, %file)
+{
+	%this.doomFile(%file);
 }
 
 function GuiProfileEditorLibrary::removeExtraProfile(%this, %theme, %profile)
