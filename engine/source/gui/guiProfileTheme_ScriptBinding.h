@@ -164,8 +164,116 @@ ConsoleMethodWithDocs(GuiProfileTheme, removeBorder, ConsoleBool, 3, 3, (border)
     return object->removeBorder(border);
 }
 
+/*! Gets the default member cursor for a cursor category.
+    @param category The cursor category name (see getCursorCategoryNames).
+    @return The GuiCursor id, or 0 if the category is unknown.
+*/
+ConsoleMethodWithDocs(GuiProfileTheme, getCursor, ConsoleInt, 3, 3, (category))
+{
+    GuiCursor* cursor = object->getCursor(StringTable->insert(argv[2]));
+    return cursor != NULL ? cursor->getId() : 0;
+}
+
+/*! Gets all member cursors for a category: the default first, then extras.
+    This is how a game picks between several cursors a theme offers for the same
+    job - Canvas.setCursor(getWord(%theme.getCursors("Default"), 1)).
+    @param category The cursor category name (see getCursorCategoryNames).
+    @return A space-separated list of GuiCursor ids.
+*/
+ConsoleMethodWithDocs(GuiProfileTheme, getCursors, ConsoleString, 3, 3, (category))
+{
+    StringTableEntry category = StringTable->insert(argv[2]);
+
+    char* buffer = Con::getReturnBuffer(1024);
+    S32 offset = 0;
+    buffer[0] = '\0';
+
+    GuiCursor* cursor = object->getCursor(category);
+    if (cursor != NULL)
+        offset += dSprintf(buffer + offset, 1024 - offset, "%d", cursor->getId());
+
+    const Vector<GuiCursor*>& extras = object->getExtraCursors();
+    for (S32 i = 0; i < extras.size(); ++i)
+    {
+        if (extras[i]->mCategory != category)
+            continue;
+        offset += dSprintf(buffer + offset, 1024 - offset, "%s%d", offset > 0 ? " " : "", extras[i]->getId());
+    }
+
+    return buffer;
+}
+
+/*! Gets the engine-defined cursor category names. The suffixes these produce
+    are also the canonical cursor names the engine falls back to when a control
+    names no cursor of its own.
+    @return A space-separated list of cursor category names.
+*/
+ConsoleMethodWithDocs(GuiProfileTheme, getCursorCategoryNames, ConsoleString, 2, 2, ())
+{
+    char* buffer = Con::getReturnBuffer(1024);
+    S32 offset = 0;
+    buffer[0] = '\0';
+
+    for (S32 i = 0; i < GuiProfileTheme::getCursorCategoryCount(); ++i)
+        offset += dSprintf(buffer + offset, 1024 - offset, "%s%s", i > 0 ? " " : "", GuiProfileTheme::getCursorCategoryName(i));
+
+    return buffer;
+}
+
+/*! Gets the stock art file name a cursor category starts from
+    ("defaultCursor.png"). The editor asks so it can seed a theme's own cursor
+    folder; a theme never copies files itself.
+    @param category The cursor category name (see getCursorCategoryNames).
+    @return The stock file name, or "" if the category is unknown.
+*/
+ConsoleMethodWithDocs(GuiProfileTheme, getCursorStockFile, ConsoleString, 3, 3, (category))
+{
+    return GuiProfileTheme::getCursorStockFile(GuiProfileTheme::findCursorCategoryIndex(StringTable->insert(argv[2])));
+}
+
+/*! Gets the name the engine falls back to for a cursor category
+    ("EditCursor"). Installing a theme's cursors means registering copies of
+    them under these names; see AppCore::installThemeCursors.
+    @param category The cursor category name (see getCursorCategoryNames).
+    @return The canonical cursor name, or "" if the category is unknown.
+*/
+ConsoleMethodWithDocs(GuiProfileTheme, getCursorCanonicalName, ConsoleString, 3, 3, (category))
+{
+    return GuiProfileTheme::getCursorCanonicalName(GuiProfileTheme::findCursorCategoryIndex(StringTable->insert(argv[2])));
+}
+
+/*! Creates an extra member cursor in a category, alongside the default. A
+    category holding more than one cursor is what makes the Gui Editor offer a
+    choice on a control's cursor slot.
+    @param category The cursor category name (see getCursorCategoryNames).
+    @param name Optional object name; defaults to <ThemeName><Suffix><N>.
+    @return The new GuiCursor id, or 0 on failure.
+*/
+ConsoleMethodWithDocs(GuiProfileTheme, createCursor, ConsoleInt, 3, 4, (category, [name]))
+{
+    GuiCursor* cursor = object->createCursor(argv[2], argc > 3 ? argv[3] : NULL);
+    return cursor != NULL ? cursor->getId() : 0;
+}
+
+/*! Removes an extra member cursor. Default members are refused: a theme always
+    provides one cursor per category.
+    @param cursor The extra cursor to remove.
+    @return True if the cursor was an extra and was removed.
+*/
+ConsoleMethodWithDocs(GuiProfileTheme, removeCursor, ConsoleBool, 3, 3, (cursor))
+{
+    GuiCursor* cursor = dynamic_cast<GuiCursor*>(Sim::findObject(argv[2]));
+    if (cursor == NULL)
+    {
+        Con::warnf("GuiProfileTheme::removeCursor() - could not find cursor '%s'.", argv[2]);
+        return false;
+    }
+
+    return object->removeCursor(cursor);
+}
+
 /*! Clears a member's override on one field, so the field re-derives from the
-    theme. Accepts a member profile or border profile.
+    theme. Accepts a member profile, border profile or cursor.
     @param member The member profile or border profile.
     @param fieldName The field to reset.
     @return No return value.
@@ -187,6 +295,14 @@ ConsoleMethodWithDocs(GuiProfileTheme, resetField, ConsoleVoid, 4, 4, (member, f
     if (border != NULL && border->getTheme() == object)
     {
         border->clearThemeFieldOverride(field);
+        object->restamp();
+        return;
+    }
+
+    GuiCursor* cursor = dynamic_cast<GuiCursor*>(target);
+    if (cursor != NULL && cursor->getTheme() == object)
+    {
+        cursor->clearThemeFieldOverride(field);
         object->restamp();
         return;
     }
@@ -219,6 +335,14 @@ ConsoleMethodWithDocs(GuiProfileTheme, resetProfile, ConsoleVoid, 3, 3, (member)
         return;
     }
 
+    GuiCursor* cursor = dynamic_cast<GuiCursor*>(target);
+    if (cursor != NULL && cursor->getTheme() == object)
+    {
+        cursor->clearAllThemeOverrides();
+        object->restamp();
+        return;
+    }
+
     Con::warnf("GuiProfileTheme::resetProfile() - '%s' is not a member of this theme.", argv[2]);
 }
 
@@ -239,6 +363,10 @@ ConsoleMethodWithDocs(GuiProfileTheme, isFieldOverridden, ConsoleBool, 4, 4, (me
     GuiBorderProfile* border = dynamic_cast<GuiBorderProfile*>(target);
     if (border != NULL)
         return border->isThemeFieldOverridden(field);
+
+    GuiCursor* cursor = dynamic_cast<GuiCursor*>(target);
+    if (cursor != NULL)
+        return cursor->isThemeFieldOverridden(field);
 
     return false;
 }

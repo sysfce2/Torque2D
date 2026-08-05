@@ -1237,4 +1237,249 @@ TEST( GuiProfileThemeTests, FreshlyStampedProfileResolvesFallbackSidesToDefaultB
     SUCCEED();
 }
 
+//-----------------------------------------------------------------------------
+// Cursors: the third member family. They follow the profile pattern - a
+// category table, one guaranteed default per category, extras within a
+// category - with one difference that drives most of these tests: a cursor's
+// art cannot be derived from a palette, so bitmapName, hotSpot and renderOffset
+// are set once at creation and never stamped, while only the tint is.
+//
+// Nothing here may draw or resolve a cursor: a unit test has no GL context, and
+// loading a texture trips a modal assert that arrives as a hang.
+//-----------------------------------------------------------------------------
+
+TEST( GuiProfileThemeTests, ThemeProvidesOneCursorPerCategory )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    ASSERT_EQ( GuiProfileTheme::getCursorCategoryCount(), 7 );
+
+    for ( S32 i = 0; i < GuiProfileTheme::getCursorCategoryCount(); ++i )
+    {
+        StringTableEntry category = GuiProfileTheme::getCursorCategoryName( i );
+        GuiCursor* cursor = theme->getCursor( category );
+
+        ASSERT_TRUE( cursor != NULL ) << "Every cursor category must have a default member.";
+        ASSERT_STREQ( cursor->mCategory, category );
+        ASSERT_EQ( cursor->getTheme(), theme );
+    }
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+// The load-bearing invariant behind installing a theme's cursors: a member is
+// named <ThemeName><Suffix>, and the suffix IS the canonical name the engine
+// falls back to when a control names no cursor (guiTextEditCtrl.cc,
+// guiWindowCtrl.cc, guiFrameSetCtrl.cc, guiEditCtrl.cc). Installing is then
+// just dropping the theme's name from the front - no lookup table to drift.
+TEST( GuiProfileThemeTests, CursorMemberNamesAreThemeNamePlusCanonicalName )
+{
+    static const char* const canonicalNames[] =
+    {
+        "DefaultCursor", "EditCursor", "MoveCursor",
+        "LeftRightCursor", "UpDownCursor", "NWSECursor", "NESWCursor"
+    };
+
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    for ( S32 i = 0; i < GuiProfileTheme::getCursorCategoryCount(); ++i )
+    {
+        char expected[256];
+        dSprintf( expected, sizeof( expected ), "UnitTestTheme%s", canonicalNames[i] );
+
+        GuiCursor* cursor = theme->getCursor( GuiProfileTheme::getCursorCategoryName( i ) );
+        ASSERT_EQ( (SimObject*)cursor, Sim::findObject( expected ) )
+            << "Member name must be the theme name followed by the canonical cursor name.";
+    }
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, CursorColorIsStampedFromForegroundAndOverridable )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    GuiCursor* cursor = theme->getCursor( StringTable->insert( "Default" ) );
+    ASSERT_TRUE( cursor != NULL );
+
+    theme->setDataField( StringTable->insert( "colorForeground" ), NULL, "11 22 33 255" );
+    ASSERT_TRUE( cursor->mColor == ColorI( 11, 22, 33, 255 ) );
+
+    // An explicit tint survives later theme changes...
+    cursor->setDataField( StringTable->insert( "color" ), NULL, "9 8 7 6" );
+    ASSERT_TRUE( cursor->isThemeFieldOverridden( StringTable->insert( "color" ) ) );
+    theme->setDataField( StringTable->insert( "colorForeground" ), NULL, "44 55 66 255" );
+    ASSERT_TRUE( cursor->mColor == ColorI( 9, 8, 7, 6 ) );
+
+    // ...and clearing it re-derives.
+    cursor->clearThemeFieldOverride( StringTable->insert( "color" ) );
+    theme->restamp();
+    ASSERT_TRUE( cursor->mColor == ColorI( 44, 55, 66, 255 ) );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, CursorArtIsNeverStampedAndNeverOverrideTracked )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    GuiCursor* cursor = theme->getCursor( StringTable->insert( "Move" ) );
+    ASSERT_TRUE( cursor != NULL );
+
+    // The table's placement values for Move: centred on the pointer by the
+    // anchor alone, so the nudge has nothing left to say.
+    ASSERT_EQ( cursor->getHotSpot().x, 0 );
+    ASSERT_EQ( cursor->getHotSpot().y, 0 );
+    ASSERT_EQ( cursor->getRenderOffset().x, 0.5f );
+
+    cursor->setDataField( StringTable->insert( "hotSpot" ), NULL, "4 9" );
+    cursor->setDataField( StringTable->insert( "bitmapName" ), NULL, "unitTestArt/pointer.png" );
+
+    // Art is the user's, not the theme's: it is not an "override" of anything,
+    // because no recipe would ever write it.
+    ASSERT_FALSE( cursor->isThemeFieldOverridden( StringTable->insert( "hotSpot" ) ) );
+    ASSERT_FALSE( cursor->isThemeFieldOverridden( StringTable->insert( "bitmapName" ) ) );
+
+    // And a restamp leaves all of it alone.
+    theme->setDataField( StringTable->insert( "colorForeground" ), NULL, "1 2 3 255" );
+    theme->restamp();
+    ASSERT_EQ( cursor->getHotSpot().x, 4 );
+    ASSERT_EQ( cursor->getHotSpot().y, 9 );
+    ASSERT_TRUE( dStrstr( cursor->getBitmapName(), "pointer.png" ) != NULL );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+// A theme usually learns where its cursor folder is after its members already
+// exist, so filling the art is retried on every restamp - but only ever into a
+// blank, so it can never overwrite art the user chose.
+TEST( GuiProfileThemeTests, CursorArtFillsFromCursorDirectoryButOnlyWhenEmpty )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    GuiCursor* cursor = theme->getCursor( StringTable->insert( "Default" ) );
+    ASSERT_TRUE( cursor != NULL );
+    ASSERT_STREQ( cursor->getBitmapName(), "" ) << "A theme with no cursor directory has no art to point at.";
+
+    theme->setDataField( StringTable->insert( "cursorDirectory" ), NULL, "unitTestThemes/cursors/UnitTestTheme" );
+    ASSERT_TRUE( dStrstr( cursor->getBitmapName(), "defaultCursor.png" ) != NULL )
+        << "Naming the directory fills the category's stock art.";
+
+    // Pointing the directory somewhere else does not move a cursor that already
+    // has art - including art that was filled from the old directory.
+    theme->setDataField( StringTable->insert( "cursorDirectory" ), NULL, "unitTestThemes/cursors/Other" );
+    ASSERT_TRUE( dStrstr( cursor->getBitmapName(), "UnitTestTheme" ) != NULL )
+        << "Filled art must survive a directory change; only a blank is filled.";
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, ExtraCursorsShareCategoryAndOnlyExtrasAreRemovable )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+
+    GuiCursor* extra = theme->createCursor( "Default", NULL );
+    ASSERT_TRUE( extra != NULL );
+    ASSERT_STREQ( extra->getName(), "UnitTestThemeDefaultCursor2" );
+    ASSERT_STREQ( extra->mCategory, "Default" );
+    ASSERT_EQ( extra->getTheme(), theme );
+
+    // Both members of the category are offered; the default comes first.
+    ASSERT_EQ( theme->getExtraCursors().size(), 1 );
+    ASSERT_EQ( theme->getExtraCursors()[0], extra );
+
+    GuiCursor* defaultCursor = theme->getCursor( StringTable->insert( "Default" ) );
+    ASSERT_FALSE( theme->removeCursor( defaultCursor ) ) << "Default members must not be removable.";
+    ASSERT_TRUE( theme->removeCursor( extra ) );
+    ASSERT_EQ( theme->getExtraCursors().size(), 0 );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, RenameThemeRenamesCursorMembers )
+{
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestThemeA" );
+
+    GuiCursor* extra = theme->createCursor( "Edit", NULL );
+    ASSERT_STREQ( extra->getName(), "UnitTestThemeAEditCursor2" );
+
+    ASSERT_TRUE( theme->renameTheme( "UnitTestThemeB" ) );
+
+    ASSERT_EQ( (SimObject*)theme->getCursor( StringTable->insert( "Edit" ) ),
+               Sim::findObject( "UnitTestThemeBEditCursor" ) );
+    ASSERT_STREQ( extra->getName(), "UnitTestThemeBEditCursor2" );
+    ASSERT_TRUE( Sim::findObject( "UnitTestThemeAEditCursor" ) == NULL );
+
+    theme->deleteObject();
+
+    SUCCEED();
+}
+
+TEST( GuiProfileThemeTests, CursorTamlRoundTripPreservesArtAndOverrides )
+{
+    const char* fileName = "unitTestGuiProfileThemeCursors.taml";
+
+    GuiProfileTheme* theme = new GuiProfileTheme();
+    theme->registerObject( "UnitTestTheme" );
+    theme->setDataField( StringTable->insert( "cursorDirectory" ), NULL, "unitTestThemes/cursors/UnitTestTheme" );
+
+    GuiCursor* edit = theme->getCursor( StringTable->insert( "Edit" ) );
+    edit->setDataField( StringTable->insert( "hotSpot" ), NULL, "3 7" );
+    edit->setDataField( StringTable->insert( "color" ), NULL, "9 8 7 6" );
+    ASSERT_TRUE( theme->createCursor( "Default", NULL ) != NULL );
+
+    Taml taml;
+    ASSERT_TRUE( taml.write( theme, fileName ) );
+    theme->deleteObject();
+    ASSERT_TRUE( Sim::findObject( "UnitTestThemeEditCursor" ) == NULL );
+
+    GuiProfileTheme* loaded = taml.read<GuiProfileTheme>( fileName );
+    ASSERT_TRUE( loaded != NULL );
+
+    GuiCursor* loadedEdit = loaded->getCursor( StringTable->insert( "Edit" ) );
+    ASSERT_TRUE( loadedEdit != NULL );
+    ASSERT_EQ( (SimObject*)loadedEdit, Sim::findObject( "UnitTestThemeEditCursor" ) );
+    ASSERT_EQ( loadedEdit->getTheme(), loaded );
+
+    // Art persists although nothing marked it overridden - that is the whole
+    // point of exempting it, since no recipe could rebuild it on load.
+    ASSERT_EQ( loadedEdit->getHotSpot().x, 3 );
+    ASSERT_EQ( loadedEdit->getHotSpot().y, 7 );
+    ASSERT_TRUE( dStrstr( loadedEdit->getBitmapName(), "ibeam.png" ) != NULL );
+
+    // The tint round-trips as an override.
+    ASSERT_TRUE( loadedEdit->isThemeFieldOverridden( StringTable->insert( "color" ) ) );
+    ASSERT_TRUE( loadedEdit->mColor == ColorI( 9, 8, 7, 6 ) );
+
+    // The extra survives alongside a complete default set.
+    ASSERT_EQ( loaded->getExtraCursors().size(), 1 );
+    GuiCursor* loadedExtra = dynamic_cast<GuiCursor*>( Sim::findObject( "UnitTestThemeDefaultCursor2" ) );
+    ASSERT_TRUE( loadedExtra != NULL );
+    ASSERT_STREQ( loadedExtra->mCategory, "Default" );
+
+    loaded->deleteObject();
+    Platform::fileDelete( fileName );
+
+    SUCCEED();
+}
+
 #endif // TORQUE_SHIPPING

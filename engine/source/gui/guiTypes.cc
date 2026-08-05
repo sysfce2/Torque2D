@@ -33,6 +33,21 @@
 #include "graphics/TextureManager.h"
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- //
+//------------------------------------------------------------------------------
+// The theme-managed field names, shared by the membership glue on GuiCursor,
+// GuiBorderProfile and GuiControlProfile.
+static StringTableEntry themeCategoryField()
+{
+	static StringTableEntry categoryField = StringTable->insert("category");
+	return categoryField;
+}
+
+static StringTableEntry themeOverridesField()
+{
+	static StringTableEntry overridesField = StringTable->insert("themeOverrides");
+	return overridesField;
+}
+
 IMPLEMENT_CONOBJECT(GuiCursor);
 
 GuiCursor::GuiCursor()
@@ -40,6 +55,12 @@ GuiCursor::GuiCursor()
    mHotSpot.set(0,0);
    mRenderOffset.set(0.0f,0.0f);
    mExtent.set(1,1);
+   mBitmapName = StringTable->EmptyString;
+
+   // White is the identity for bitmap modulation, so an untinted cursor draws
+   // exactly as it did before this field existed.
+   mColor.set(255, 255, 255, 255);
+   mCategory = StringTable->EmptyString;
 }
 
 GuiCursor::~GuiCursor()
@@ -49,9 +70,22 @@ GuiCursor::~GuiCursor()
 void GuiCursor::initPersistFields()
 {
    Parent::initPersistFields();
+
+   // hotSpot and renderOffset both shift where the art lands, and they are not
+   // redundant. hotSpot is a pixel nudge; renderOffset is a fraction of the
+   // bitmap's own size, so "0.5 0.5" means "centered on the pointer" whatever
+   // the art measures. That is what stops a 13x17 arrow and a 32x32 sizer from
+   // appearing to leap when one replaces the other. The pointer ends up at
+   // hotSpot + (extent * renderOffset) within the image; see render().
    addField("hotSpot",     TypePoint2I,   Offset(mHotSpot, GuiCursor));
    addField("renderOffset",TypePoint2F,   Offset(mRenderOffset, GuiCursor));
-   addField("bitmapName",  TypeFilename,  Offset(mBitmapName, GuiCursor));
+   // Written relative to the game root; see getRelativeBitmapName.
+   addProtectedField("bitmapName", TypeFilename, Offset(mBitmapName, GuiCursor), &defaultProtectedSetFn, &getBitmapName, "Bitmap drawn for this cursor");
+   addField("color",       TypeColorI,    Offset(mColor, GuiCursor));
+
+   addField("category", TypeString, Offset(mCategory, GuiCursor));
+   // The offset is unused: both accessors are supplied and the setter returns false.
+   addProtectedField("themeOverrides", TypeString, Offset(mCategory, GuiCursor), &setThemeOverrides, &getThemeOverrides, "Theme-overridden field names");
 }
 
 bool GuiCursor::onAdd()
@@ -69,15 +103,23 @@ void GuiCursor::onRemove()
    Parent::onRemove();
 }
 
-void GuiCursor::render(const Point2I &pos)
+const Point2I& GuiCursor::resolve()
 {
    if (!mTextureHandle && mBitmapName && mBitmapName[0])
    {
 	  mTextureHandle = TextureHandle(mBitmapName, TextureHandle::BitmapTexture);
-	  if(!mTextureHandle)
-		 return;
-	  mExtent.set(mTextureHandle.getWidth(), mTextureHandle.getHeight());
+	  if (mTextureHandle)
+		 mExtent.set(mTextureHandle.getWidth(), mTextureHandle.getHeight());
    }
+
+   return mExtent;
+}
+
+void GuiCursor::render(const Point2I &pos)
+{
+   resolve();
+   if(!mTextureHandle)
+	  return;
 
    // Render the cursor centered according to dimensions of texture
    S32 texWidth = mTextureHandle.getWidth();
@@ -86,9 +128,115 @@ void GuiCursor::render(const Point2I &pos)
    Point2I renderPos = pos;
    renderPos.x -= (S32)( texWidth  * mRenderOffset.x );
    renderPos.y -= (S32)( texHeight * mRenderOffset.y );
-   
-   dglClearBitmapModulation();
+
+   // The stock cursors are grayscale - black outline, white body - so this
+   // colors the body and leaves the outline. mColor starts white, which is what
+   // dglClearBitmapModulation sets, so an untinted cursor is unaffected.
+   dglSetBitmapModulation(mColor);
    dglDrawBitmap(mTextureHandle, renderPos);
+   dglClearBitmapModulation();
+}
+
+StringTableEntry GuiCursor::getRelativeBitmapName( void ) const
+{
+	if (mBitmapName == NULL || mBitmapName == StringTable->EmptyString)
+		return mBitmapName;
+
+	// Only a path inside the game is made relative. Art somewhere else - another
+	// drive, a folder beside the repository - is left alone: a "../.." chain
+	// climbing out of the game folder is no more portable than the absolute path
+	// it came from. Same rule as GuiControlProfile's bitmap.
+	StringTableEntry gameRoot = Platform::getMainDotCsDir();
+	if (!Con::isBasePath(mBitmapName, gameRoot))
+		return mBitmapName;
+
+	return Platform::makeRelativePathName(mBitmapName, gameRoot);
+}
+
+void GuiCursor::setTheme(GuiProfileTheme* theme, bool preserveOverrides)
+{
+	if (mThemeMembership.mTheme == theme)
+		return;
+
+	if (mThemeMembership.mTheme != NULL)
+		clearNotify(mThemeMembership.mTheme);
+
+	mThemeMembership.mTheme = theme;
+	if (!preserveOverrides)
+		mThemeMembership.clearAll();
+
+	if (theme != NULL)
+		deleteNotify(theme);
+}
+
+// A cursor's art - which bitmap, and where the pointer sits within it - is the
+// one thing a theme cannot derive from a palette, so a theme sets these once
+// when it creates the member and never stamps them again. That makes them
+// unlike every other member field: there is no theme value behind them to
+// override or to reset to, and they must persist whether or not anything marked
+// them. Only "color" is stamped, and only it takes part in override tracking.
+static bool isCursorArtField(StringTableEntry field)
+{
+	static StringTableEntry bitmapField = StringTable->insert("bitmapName");
+	static StringTableEntry hotSpotField = StringTable->insert("hotSpot");
+	static StringTableEntry renderOffsetField = StringTable->insert("renderOffset");
+
+	return field == bitmapField || field == hotSpotField || field == renderOffsetField;
+}
+
+void GuiCursor::onStaticModified(const char* slotName, const char* newValue)
+{
+	Parent::onStaticModified(slotName, newValue);
+
+	StringTableEntry slot = StringTable->insert(slotName);
+
+	// The texture is loaded once and cached, so pointing a live cursor at new
+	// art has to drop it - otherwise the old bitmap draws forever and the
+	// extent, which the hot spot is measured against, stays wrong.
+	static StringTableEntry bitmapField = StringTable->insert("bitmapName");
+	if (slot == bitmapField)
+	{
+		mTextureHandle = TextureHandle();
+		mExtent.set(1, 1);
+	}
+
+	// On a themed cursor, an external write to a stamped field becomes an
+	// override that stamping will preserve. Category, the override list and the
+	// art fields are not stamped, so they are not overridable.
+	if (mThemeMembership.mTheme != NULL)
+	{
+		if (slot != themeCategoryField() && slot != themeOverridesField() && !isCursorArtField(slot))
+			mThemeMembership.markOverride(slot);
+	}
+}
+
+bool GuiCursor::writeField(StringTableEntry fieldname, const char* value)
+{
+	if (!Parent::writeField(fieldname, value))
+		return false;
+
+	// Themed cursors persist their art, their category and the override list
+	// unconditionally; everything else is derived from the theme and persists
+	// only when explicitly overridden.
+	if (mThemeMembership.mTheme != NULL)
+	{
+		if (fieldname != themeCategoryField() &&
+			fieldname != themeOverridesField() &&
+			!isCursorArtField(fieldname) &&
+			findField(fieldname) != NULL &&
+			!mThemeMembership.isOverridden(fieldname))
+			return false;
+	}
+
+	return true;
+}
+
+void GuiCursor::onDeleteNotify(SimObject* object)
+{
+	if (object == (SimObject*)mThemeMembership.mTheme)
+		mThemeMembership.mTheme = NULL;
+
+	Parent::onDeleteNotify(object);
 }
 
 // Setup the type, this will keep Border profiles from being listed with normal profiles.
@@ -129,21 +277,6 @@ ConsoleGetType(TypeGuiCursor)
 	GuiCursor **obj = (GuiCursor**)dptr;
 	dSprintf(returnBuffer, sizeof(returnBuffer), "%s", *obj ? (*obj)->getName() ? (*obj)->getName() : (*obj)->getIdString() : "");
 	return returnBuffer;
-}
-
-//------------------------------------------------------------------------------
-// The theme-managed field names, shared by the membership glue on
-// GuiBorderProfile and GuiControlProfile.
-static StringTableEntry themeCategoryField()
-{
-	static StringTableEntry categoryField = StringTable->insert("category");
-	return categoryField;
-}
-
-static StringTableEntry themeOverridesField()
-{
-	static StringTableEntry overridesField = StringTable->insert("themeOverrides");
-	return overridesField;
 }
 
 IMPLEMENT_CONOBJECT(GuiBorderProfile);

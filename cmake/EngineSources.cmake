@@ -200,6 +200,7 @@ set(TORQUE_ENGINE_SOURCES
     ${TORQUE_SRC}/gui/containers/guiTabPageCtrl.cc
     ${TORQUE_SRC}/gui/containers/guiWindowCtrl.cc
     # ---- gui/editor ----
+    ${TORQUE_SRC}/gui/editor/guiEditorCursorCtrl.cc
     ${TORQUE_SRC}/gui/editor/guiDebugger.cc
     ${TORQUE_SRC}/gui/editor/guiEditCtrl.cc
     ${TORQUE_SRC}/gui/editor/guiEditorExplorerTree.cc
@@ -339,6 +340,7 @@ set(TORQUE_ENGINE_SOURCES
     # ---- testing ----
     ${TORQUE_SRC}/testing/unitTesting.cc
     # ---- testing/tests ----
+    ${TORQUE_SRC}/testing/tests/guiCursorHotSpotTests.cc
     ${TORQUE_SRC}/testing/tests/guiProfileThemeTests.cc
     ${TORQUE_SRC}/testing/tests/guiScrollLayoutTests.cc
     ${TORQUE_SRC}/testing/tests/guiTextEditTests.cc
