@@ -83,6 +83,21 @@ function planetXSmoke()
 	smokeCheck("the title screen is up", isObject(PlanetXTitle));
 	smokeCheck("title wears a theme profile", PlanetXTitle.getFieldValue("Profile") $= "PlanetXEmptyProfile");
 
+	// The upgrade catalog is named, not classed: a name IS a namespace, so onAdd
+	// and every method reach upgrades.cs through it. Saying the same word again as
+	// a class would only ask the namespace to become its own parent.
+	smokeCheck("the upgrade catalog is up", isObject(PlanetXUpgrades));
+	smokeCheck("its onAdd ran through the name", getWordCount(PlanetXUpgrades.keys) > 0);
+	smokeCheck("its methods resolve by name", PlanetXUpgrades.isEligible("damage", 1));
+
+	// One module namespace holds every asset family, so a sound and a particle
+	// cannot both be "playerDeath" - whichever is scanned second is dropped, and
+	// the id then answers with the wrong kind of asset entirely.
+	smokeCheck("the death sound is an audio asset",
+		AssetDatabase.getAssetType("PlanetXGame:playerDeathBurst") $= "AudioAsset");
+	smokeCheck("the death effect is still a particle asset",
+		AssetDatabase.getAssetType("PlanetXGame:playerDeath") $= "ParticleAsset");
+
 	screenShot(testRoot("shots/planetXThemeSmoke.png"), "PNG");
 	schedule(1000, 0, "planetXSmokeDone");
 }

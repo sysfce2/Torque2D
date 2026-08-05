@@ -150,6 +150,11 @@ bool Namespace::canTabComplete(const char *prevText, const char *bestMatch, cons
 
 bool Namespace::unlinkClass(Namespace* parent)
 {
+   // Giving back a self-link (see classLinkTo). Nothing was linked and nothing
+   // was counted, so there is nothing here to undo.
+   if(parent == this)
+      return true;
+
    Namespace* walk = this;
 
    while(walk->mParent && walk->mParent->mName == mName)
@@ -180,6 +185,23 @@ bool Namespace::unlinkClass(Namespace* parent)
 
 bool Namespace::classLinkTo(Namespace* parent)
 {
+   // A namespace already is itself, so linking it to itself cannot change what
+   // it inherits: it is a no-op, not the parent change it looks like. Objects
+   // ask for it whenever they are named after their own class - the singleton
+   // "new ScriptObject(Foo) { class = "Foo"; }" links Foo to the C++ class and
+   // then asks to link its name, Foo, to Foo. Counting it here would need an
+   // unlink that never comes, so it is not counted either.
+   //
+   // It is still worth saying, because the object said one thing twice and the
+   // second one is doing nothing. Once, here, where the repeat is made - not
+   // again from unlinkClass when it is given back.
+   if(parent == this)
+   {
+      Con::warnf(ConsoleLogEntry::General, "Namespace::classLinkTo - %s cannot be its own parent, and has no need to be: a name is already a namespace. An object whose name and class are both '%s' wants only the name.",
+         mName, mName);
+      return true;
+   }
+
    Namespace* walk = this;
 
    while(walk->mParent && walk->mParent->mName == mName)
