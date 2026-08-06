@@ -1,6 +1,6 @@
 <GuiSpriteCtrl
     Name="MainGameDlg"
-    Profile="GuiToolboxProfile"
+    Profile="GuiSpriteProfile"
     HorizSizing="width"
     VertSizing="height"
     Position="0 0"
@@ -10,7 +10,7 @@
 	HelpTag="0"
 	Image="@asset=Sandbox:blueGradient">
 	
-   <GuiTextCtrl
+   <GuiControl
       Name = "UserNameTxt"
       text="NONAME"
       canSaveDynamicFields="0"
@@ -25,9 +25,7 @@
       Visible="1"
       Active="0"
       hovertime="1000"
-      toolTipProfile="GuiToolTipProfile"
-      maxLength="255"
-      truncate="0" />
+      toolTipProfile="GuiToolTipProfile" />
       
 	<GuiButtonCtrl
 		Profile="BlueButtonProfile"

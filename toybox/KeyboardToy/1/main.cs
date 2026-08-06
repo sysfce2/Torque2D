@@ -21,11 +21,18 @@
 //-----------------------------------------------------------------------------
 
 function KeyboardToy::create( %this )
-{  
-    Sandbox.add( TamlRead("./MainGameDlg.gui.taml") );
-    Sandbox.add( TamlRead("./ChangeUsernameDlg.gui.taml") );
+{
+    // Keep hold of what we make. The Sandbox owns the controls once they are
+    // added, so the toy cannot assume they are still there when it is torn
+    // down, and a held id does not depend on the name being registered.
+    %this.mainDlg = TamlRead("./MainGameDlg.gui.taml");
+    Sandbox.add( %this.mainDlg );
+
+    %this.changeUsernameDlg = TamlRead("./ChangeUsernameDlg.gui.taml");
+    Sandbox.add( %this.changeUsernameDlg );
+
     // Reset the toy.
-    KeyboardToy.reset();
+    %this.reset();
 }
 
 
@@ -33,8 +40,13 @@ function KeyboardToy::create( %this )
 
 function KeyboardToy::destroy( %this )
 {
-   MainGameDlg.delete();
-   ChangeUsernameDlg.delete();
+    // The Sandbox may have taken these down with it already, so delete only
+    // what is still standing.
+    if ( isObject(%this.mainDlg) )
+        %this.mainDlg.delete();
+
+    if ( isObject(%this.changeUsernameDlg) )
+        %this.changeUsernameDlg.delete();
 }
 
 //-----------------------------------------------------------------------------
@@ -43,8 +55,7 @@ function KeyboardToy::reset( %this )
 {
     // Clear the scene.
     SandboxScene.clear();
-    
-   Canvas.pushDialog(MainGameDlg);
-       
+
+    Canvas.pushDialog(%this.mainDlg);
 }
 //-----------------------------------------------------------------------------

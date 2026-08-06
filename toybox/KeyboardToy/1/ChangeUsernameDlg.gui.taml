@@ -1,6 +1,6 @@
 <GuiSpriteCtrl
     Name="ChangeUserNameDlg"
-    Profile="GuiToolboxProfile"
+    Profile="GuiSpriteProfile"
     HorizSizing="width"
     VertSizing="height"
     Position="0 0"
@@ -12,7 +12,7 @@
 
     <GuiTextEditCtrl
       Name="ChangeUsernameEntry"
-		Profile="GuiConsoleTextEditProfile"
+		Profile="GuiTextEditProfile"
 		HorizSizing="width"
 		VertSizing="top"
 		Position="400 150"
