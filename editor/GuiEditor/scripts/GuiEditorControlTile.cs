@@ -226,7 +226,35 @@ function GuiEditorControlTile::makePayload(%this)
 		%payload.paletteCategory = %category;
 	}
 
+	// A caption for the controls that wear one, taken from the palette's own
+	// label so the tile and the control it makes agree. The engine used to seed
+	// "Button" in the constructor, but a caption the author clears has to
+	// survive a save and a constructor default cannot let it: writeField drops
+	// every empty value, so a blank caption is written as an absent one and the
+	// default stands back up on read. Placing a control is the moment that
+	// wants a placeholder, so the placeholder lives here.
+	if(%this.takesCaption(GuiEditor.controlIcons.classFor(%this.key)))
+	{
+		%payload.setText(GuiEditor.controlIcons.labelFor(%this.key));
+	}
+
 	return %payload;
+}
+
+//-----------------------------------------------------------------------------
+// Whether a freshly placed control should arrive with a caption. The button
+// family draws mText as its face and used to inherit "Button" from
+// GuiButtonCtrl -- which is why a checkbox dropped from the palette read
+// "Button" and not "Check Box". A drop down is deliberately absent: it draws
+// mText only while nothing is selected, so its "none" is an empty state and
+// not a caption to be replaced.
+//-----------------------------------------------------------------------------
+
+function GuiEditorControlTile::takesCaption(%this, %class)
+{
+	return %class $= "GuiButtonCtrl" ||
+		%class $= "GuiCheckBoxCtrl" ||
+		%class $= "GuiRadioCtrl";
 }
 
 //-----------------------------------------------------------------------------

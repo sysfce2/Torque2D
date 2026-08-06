@@ -38,7 +38,12 @@ GuiButtonCtrl::GuiButtonCtrl()
 	mMouseOver = false;
 	mActive = true;
 	mBounds.extent.set(140, 30);
-	mText = StringTable->insert("Button");
+	// No caption. A button whose text is deliberately blank - an image button
+	// wearing its whole face in the profile's imageAsset, say - must be able to
+	// say so: SimObject::writeField drops every empty value, so a blank caption
+	// is written as an absent one, and a default here would stand back up on
+	// read. The Gui Editor captions the buttons it places instead.
+	mText = StringTable->EmptyString;
 	mTextID = StringTable->EmptyString;
 	mProfile = NULL;
 	mIsContainer = false;
