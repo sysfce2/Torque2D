@@ -18,7 +18,7 @@ function VirtualKeyboard::resetState(%this)
 }
 function VirtualKeyboard::push(%this, %targetGui, %textBox, %showClose)
 {
-   Sandbox.add( TamlRead("./gui/keyboardGui.taml") );
+   Sandbox.add( TamlRead("./gui/keyboardGui.gui.taml") );
    %textBox.setText("");
 
    %this.targetGui = %targetGui;
