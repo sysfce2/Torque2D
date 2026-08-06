@@ -1,7 +1,7 @@
 //-----------------------------------------------------------------------------
 // The control palette's entries and their icons. GENERATED - do not hand-edit.
 //
-// GuiEditor:controlIcons16, controlIcons64 and controlIcons128 are the same 31
+// GuiEditor:controlIcons16, controlIcons64 and controlIcons128 are the same 30
 // drawings at three sizes in the same 8x4 grid, so one index names the same icon
 // in all of them and a tile can change size without changing its Frame. The
 // sizes are source resolution, not tile size: the palette's grid view draws from
@@ -57,7 +57,6 @@ function GuiEditorControlIcons::onAdd(%this)
 		"GuiRadioCtrl"          TAB "GuiRadioCtrl"          TAB ""        TAB "Input & Data" TAB "Radio Button" NL
 		"GuiDropDownCtrl"       TAB "GuiDropDownCtrl"       TAB ""        TAB "Basics"       TAB "Drop Down" NL
 		"GuiColorPopupCtrl"     TAB "GuiColorPopupCtrl"     TAB ""        TAB "Advanced"     TAB "Color Popup" NL
-		"GuiImageButtonCtrl"    TAB "GuiImageButtonCtrl"    TAB ""        TAB "Input & Data" TAB "Image Button" NL
 		"GuiTextEditCtrl"       TAB "GuiTextEditCtrl"       TAB ""        TAB "Basics"       TAB "Text Edit" NL
 		"GuiTextEditSliderCtrl" TAB "GuiTextEditSliderCtrl" TAB ""        TAB "Input & Data" TAB "Number Box" NL
 		"GuiSliderCtrl"         TAB "GuiSliderCtrl"         TAB ""        TAB "Input & Data" TAB "Slider" NL

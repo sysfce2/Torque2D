@@ -46,7 +46,6 @@ set(TORQUE_ENGINE_SOURCES
     ${TORQUE_SRC}/2d/experimental/composites/WaveComposite.cc
     # ---- 2d/gui ----
     ${TORQUE_SRC}/2d/gui/SceneWindow.cc
-    ${TORQUE_SRC}/2d/gui/guiImageButtonCtrl.cc
     ${TORQUE_SRC}/2d/gui/guiSceneObjectCtrl.cc
     ${TORQUE_SRC}/2d/gui/guiSpriteCtrl.cc
     # ---- 2d/scene ----

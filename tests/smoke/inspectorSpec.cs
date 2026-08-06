@@ -144,10 +144,6 @@ function sStep3()
 	sCheck("check box hides easing", !%s.isFieldVisible("GuiCheckBoxCtrl", "easeFillColorHL"));
 	sCheck("radio hides easing", !%s.isFieldVisible("GuiRadioCtrl", "easeFillColorHL"));
 
-	// An image button draws only its asset -- there is no fill to ease.
-	sCheck("image button hides easing", !%s.isFieldVisible("GuiImageButtonCtrl", "easeFillColorHL"));
-	sCheck("image button hides text", !%s.isFieldVisible("GuiImageButtonCtrl", "text"));
-
 	// A menu item calls SimObject::initPersistFields, not GuiControl's.
 	sCheck("menu item is bare", %s.hasFlag("GuiMenuItemCtrl", "bare"));
 	sCheck("menu item hides Profile", !%s.isFieldVisible("GuiMenuItemCtrl", "Profile"));

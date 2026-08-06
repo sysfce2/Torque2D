@@ -46,7 +46,7 @@ Each size is drawn at **8× supersample** and downsampled with Lanczos. Corners 
 
 ### The 31 icons
 
-Frame index is display order in an 8×4 sheet — 31 used, 1 spare. Grouped by what a person is looking for, not alphabetically.
+Frame index is display order in an 8×4 sheet — 30 used, 2 spare. Grouped by what a person is looking for, not alphabetically.
 
 | # | key | icon |
 |---|---|---|
@@ -60,27 +60,26 @@ Frame index is display order in an 8×4 sheet — 31 used, 1 spare. Grouped by w
 | 7 | `GuiRadioCtrl` | Ring with a dot, label bars right |
 | 8 | `GuiDropDownCtrl` | Field, divider, ▼ chevron |
 | 9 | `GuiColorPopupCtrl` | 3×2 swatch block + the same chevron |
-| 10 | `GuiImageButtonCtrl` | Button with a small picture **on** it |
-| 11 | `GuiTextEditCtrl` | Field, text bar, I-beam caret |
-| 12 | `GuiTextEditSliderCtrl` | The same field with ▲▼ spinner |
-| 13 | `GuiSliderCtrl` | Thin track, thumb, tick marks |
-| 14 | `GuiProgressCtrl` | Pill filled from the left |
-| 15 | `GuiColorPickerCtrl` | Blend field with a selector ring, banded hue strip |
-| 16 | `GuiSpriteCtrl` | Closed frame, peak, sun — a photo |
-| 17 | `SceneWindow` | Heavier frame, ground line, ball and crate — a game view |
-| 18 | `GuiListBoxCtrl` | Framed rows, one inverted |
-| 19 | `GuiTreeViewCtrl` | Spine, elbows, disclosure triangle |
-| 20 | `GuiMenuBarCtrl` | Title bar with a menu dropped open |
-| 21 | `GuiChainCtrl` | Three equal unframed bars, equal gaps |
-| 22 | `GuiGridCtrl` | 3×3 cells with gutters |
-| 23 | `GuiScrollCtrl` | Content with a track and thumb |
-| 24 | `GuiFrameSetCtrl` | Panes split by thick dividers |
-| 25 | `GuiPanelCtrl` | Captioned header, chevron right, body |
-| 26 | `GuiExpandCtrl` | Bare header, centred double chevron, body with content |
-| 27 | `GuiTabBookCtrl` | Three tabs, first merged into the page |
-| 28 | `GuiTabPageCtrl` | One tab and its page, content drawn |
-| 29 | `GuiWindowCtrl` | Title bar with three buttons, body |
-| 30 | `GuiInputCtrl` | Keycap with a pointer over it — the one metaphor |
+| 10 | `GuiTextEditCtrl` | Field, text bar, I-beam caret |
+| 11 | `GuiTextEditSliderCtrl` | The same field with ▲▼ spinner |
+| 12 | `GuiSliderCtrl` | Thin track, thumb, tick marks |
+| 13 | `GuiProgressCtrl` | Pill filled from the left |
+| 14 | `GuiColorPickerCtrl` | Blend field with a selector ring, banded hue strip |
+| 15 | `GuiSpriteCtrl` | Closed frame, peak, sun — a photo |
+| 16 | `SceneWindow` | Heavier frame, ground line, ball and crate — a game view |
+| 17 | `GuiListBoxCtrl` | Framed rows, one inverted |
+| 18 | `GuiTreeViewCtrl` | Spine, elbows, disclosure triangle |
+| 19 | `GuiMenuBarCtrl` | Title bar with a menu dropped open |
+| 20 | `GuiChainCtrl` | Three equal unframed bars, equal gaps |
+| 21 | `GuiGridCtrl` | 3×3 cells with gutters |
+| 22 | `GuiScrollCtrl` | Content with a track and thumb |
+| 23 | `GuiFrameSetCtrl` | Panes split by thick dividers |
+| 24 | `GuiPanelCtrl` | Captioned header, chevron right, body |
+| 25 | `GuiExpandCtrl` | Bare header, centred double chevron, body with content |
+| 26 | `GuiTabBookCtrl` | Three tabs, first merged into the page |
+| 27 | `GuiTabPageCtrl` | One tab and its page, content drawn |
+| 28 | `GuiWindowCtrl` | Title bar with three buttons, body |
+| 29 | `GuiInputCtrl` | Keycap with a pointer over it — the one metaphor |
 
 ### The eight pairs that must stay apart
 

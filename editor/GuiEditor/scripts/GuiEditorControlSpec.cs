@@ -77,13 +77,12 @@ function GuiEditorControlSpec::onAdd(%this)
 		// GuiButtonCtrl and GuiDropDownCtrl actually call getFillColor.
 		// GuiCheckBoxCtrl::onRender draws its box through renderInnerControl and
 		// never renders a universal rect for itself, so Radio inherits a dead
-		// set too, and GuiImageButtonCtrl draws only its asset.
+		// set too.
 		"GuiButtonCtrl"         TAB "render"      TAB "command easing"  TAB ""                    NL
 		"GuiCheckBoxCtrl"       TAB "render"      TAB "command"         TAB ""                    NL
 		"GuiRadioCtrl"          TAB "render"      TAB "command"         TAB ""                    NL
 		"GuiDropDownCtrl"       TAB "placeholder" TAB "command easing"  TAB ""                    NL
 		"GuiColorPopupCtrl"     TAB "none"        TAB "command"         TAB ""                    NL
-		"GuiImageButtonCtrl"    TAB "none"        TAB "command"         TAB ""                    NL
 
 		// A text edit reads mTextWrap (it is the multi-line control) and
 		// getAlignmentType, but never mVAlignment or mTextExtend.
@@ -170,9 +169,6 @@ function GuiEditorControlSpec::buildSections(%this)
 
 	%this.addSection("GuiColorPopupCtrl", "Popup", "Popup",
 		"popupSize barHeight showAlphaBar swatchColumns showColorValues valueMode valueBoxHeight");
-
-	%this.addSection("GuiImageButtonCtrl", "Images", "Images",
-		"HoverImage DownImage InactiveImage");
 
 	%this.addSection("GuiTextEditCtrl", "Input", "Input",
 		"maxLength password returnCausesTab sinkAllKeyEvents");
@@ -288,7 +284,6 @@ function GuiEditorControlSpec::buildHeaderValues(%this)
 	%this.headerValues["GuiCheckBoxCtrl"] = "stateOn";
 	%this.headerValues["GuiRadioCtrl"] = "stateOn groupNum";
 	%this.headerValues["GuiColorPopupCtrl"] = "baseColor";
-	%this.headerValues["GuiImageButtonCtrl"] = "NormalImage";
 	%this.headerValues["GuiTextEditCtrl"] = "inputMode";
 	%this.headerValues["GuiTextEditSliderCtrl"] = "inputMode range increment";
 	%this.headerValues["GuiSliderCtrl"] = "range value";
@@ -936,10 +931,6 @@ function GuiEditorControlSpec::buildLabels(%this)
 	%this.label["fullSize"] = "Full Size";
 	%this.label["clampImage"] = "Clamp Image";
 	%this.label["tileImage"] = "Tile Image";
-	%this.label["NormalImage"] = "Normal";
-	%this.label["HoverImage"] = "Hover";
-	%this.label["DownImage"] = "Down";
-	%this.label["InactiveImage"] = "Inactive";
 	%this.label["baseColor"] = "Color";
 	%this.label["BaseColor"] = "Color";
 	%this.label["PickColor"] = "Picked Color";

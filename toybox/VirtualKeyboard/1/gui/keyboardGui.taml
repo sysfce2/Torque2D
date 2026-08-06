@@ -24,12 +24,13 @@
       Active = "1"
       Image = "VirtualKeyboard:keyboardAlpha">
       
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="6 6"
          Extent="66 66"
          MinExtent = "6 6"
@@ -39,16 +40,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(Q,1,"[");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="75 6"
          Extent="66 66"
          MinExtent = "6 6"
@@ -58,16 +57,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(W,2,"]");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="146 6"
          Extent="66 66"
          MinExtent = "6 6"
@@ -77,16 +74,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(E,3,"{");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="216 6"
          Extent="66 66"
          MinExtent = "6 6"
@@ -96,16 +91,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(R,4,"}");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="286 6"
          Extent="66 66"
          MinExtent = "6 6"
@@ -115,16 +108,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(T,5,"#");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="358 6"
          Extent="66 66"
          MinExtent = "6 6"
@@ -134,16 +125,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(Y,6,"%");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="427 6"
          Extent="66 66"
          MinExtent = "6 6"
@@ -153,16 +142,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(U,7,"^");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="496 6"
          Extent="66 66"
          MinExtent = "6 6"
@@ -172,16 +159,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(I,8, "*");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="568 6"
          Extent="66 66"
          MinExtent = "6 6"
@@ -191,16 +176,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(O, 9, "+");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="638 6"
          Extent="66 66"
          MinExtent = "6 6"
@@ -210,16 +193,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(P,0,"=");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="46 78"
          Extent="66 66"
          MinExtent = "6 6"
@@ -229,16 +210,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(A,"-", "_");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="116 78"
          Extent="66 66"
          MinExtent = "6 6"
@@ -248,16 +227,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(S,"\/","\\");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="186 78"
          Extent="66 66"
          MinExtent = "6 6"
@@ -267,16 +244,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(D,":","|");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="256 78"
          Extent="66 66"
          MinExtent = "6 6"
@@ -286,16 +261,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(F,";","~");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="327 78"
          Extent="66 66"
          MinExtent = "6 6"
@@ -305,16 +278,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(G,"(","<");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="397 78"
          Extent="66 66"
          MinExtent = "6 6"
@@ -324,16 +295,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(H,")",">");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="466 78"
          Extent="66 66"
          MinExtent = "6 6"
@@ -343,16 +312,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(J,"$","€");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="537 78"
          Extent="66 66"
          MinExtent = "6 6"
@@ -362,16 +329,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(K,"","£");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="608 78"
          Extent="66 66"
          MinExtent = "6 6"
@@ -381,16 +346,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(L,"@","¥");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="116 150"
          Extent="66 66"
          MinExtent = "6 6"
@@ -400,16 +363,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(Z,".",".");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="186 150"
          Extent="66 66"
          MinExtent = "6 6"
@@ -419,16 +380,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(X,",",",");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="256 150"
          Extent="66 66"
          MinExtent = "6 6"
@@ -438,16 +397,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(C,"?","?");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="327 150"
          Extent="66 66"
          MinExtent = "6 6"
@@ -457,16 +414,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(V,"!","!");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="397 150"
          Extent="66 66"
          MinExtent = "6 6"
@@ -476,16 +431,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(B,"","");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="466 150"
          Extent="66 66"
          MinExtent = "6 6"
@@ -495,16 +448,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(N,"\"","\"");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="537 150"
          Extent="66 66"
          MinExtent = "6 6"
@@ -514,16 +465,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command='VirtualKeyboard.KeyPress(M,".",".");'/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="636 150"
          Extent="66 66"
          MinExtent = "6 6"
@@ -533,16 +482,14 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command="VirtualKeyboard.KeyPress(DELETE);"/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardSpaceProfile"
+         Text = ""
          Position="187 225"
          Extent="344 60"
          MinExtent = "6 6"
@@ -552,18 +499,16 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:spaceBarD"
-         NormalImage = "VirtualKeyboard:spaceBar"
-         HoverImage = "VirtualKeyboard:spaceBar"
          command="VirtualKeyboard.KeyPress(SPACE);"/>
          
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          name = "toUpperBtn"
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="6 150"
          Extent="80 60"
          MinExtent = "6 6"
@@ -573,18 +518,16 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         command = "VirtualKeyboard.toUpper();"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"/>
+         command = "VirtualKeyboard.toUpper();"/>
          
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          name = "toUpperLockBtn"
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="6 150"
          Extent="80 60"
          MinExtent = "6 6"
@@ -594,18 +537,16 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         command = "VirtualKeyboard.toUpperLock();"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"/>
+         command = "VirtualKeyboard.toUpperLock();"/>
          
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          name = "toLower_UpperLockBtn"
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardLatchedProfile"
+         Text = ""
          Position="6 150"
          Extent="80 60"
          MinExtent = "6 6"
@@ -615,17 +556,15 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         command = "VirtualKeyboard.toLower();"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbD"
-         HoverImage = "VirtualKeyboard:kbbD"/>
-      <GuiImageButtonCtrl
+         command = "VirtualKeyboard.toLower();"/>
+      <GuiButtonCtrl
          name = "toLowerBtn"
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="6 150"
          Extent="80 60"
          MinExtent = "6 6"
@@ -635,18 +574,16 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         command = "VirtualKeyboard.toLower();"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"/>
+         command = "VirtualKeyboard.toLower();"/>
          
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          name = "toNumberBtn"
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="6 225"
          Extent="80 60"
          MinExtent = "6 6"
@@ -656,18 +593,16 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command = "VirtualKeyboard.toNumber();"/>
          
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          name = "toLower_NumberBtn"
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="6 225"
          Extent="80 60"
          MinExtent = "6 6"
@@ -677,18 +612,16 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command = "VirtualKeyboard.tolower();"/>
          
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          name = "toSymbolBtn"
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="6 150"
          Extent="80 60"
          MinExtent = "6 6"
@@ -698,17 +631,15 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command = "VirtualKeyboard.toSymbol();"/>
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          name = "toNumber_SymbolBtn"
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardKeyProfile"
+         Text = ""
          Position="6 150"
          Extent="80 60"
          MinExtent = "6 6"
@@ -718,18 +649,16 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         DownImage = "VirtualKeyboard:kbbD"
-         NormalImage = "VirtualKeyboard:kbbN"
-         HoverImage = "VirtualKeyboard:kbbN"
          command = "VirtualKeyboard.toNumber();"/>
          
-      <GuiImageButtonCtrl
+      <GuiButtonCtrl
          name = "keyCloseBtn"
          HorizSizing = "relative"
          VertSizing = "relative"
          canSaveDynamicFields = "0"
          isContainer = "0"
-         Profile = "GuiKeyboardProfile"
+         Profile = "GuiKeyboardCloseProfile"
+         Text = ""
          Position="656 235"
          Extent="54 54"
          MinExtent = "6 6"
@@ -739,10 +668,6 @@
          groupNum = "-1"
          buttonType = "PushButton"
          useMouseEvents = "1"
-         NormalImage = "VirtualKeyboard:closeBtn"
-         DownImage = "VirtualKeyboard:closeBtn"
-         HoverImage = "VirtualKeyboard:closeBtn"
-         InactiveImage = "VirtualKeyboard:closeBtn"
          command="VirtualKeyboard.KeyPress(CLOSE);"/>
    </GuiSpriteCtrl>
    

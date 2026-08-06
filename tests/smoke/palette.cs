@@ -76,13 +76,13 @@ function palTableChecks()
 	palCheck("third group is named \"" @ %awkward @ "\"", %awkward $= "Input & Data");
 	palCheck("a group name with a space and an ampersand still keys its entries (" @
 		getFieldCount(%icons.keysInGroup(%awkward)) @ ")",
-		getFieldCount(%icons.keysInGroup(%awkward)) == 7);
+		getFieldCount(%icons.keysInGroup(%awkward)) == 6);
 
 	// Every entry lands in exactly one group, and the groups account for all of
 	// them -- no entry silently dropped, none listed twice.
 	%all = %icons.keys();
 	%total = getFieldCount(%all);
-	palCheck("30 entries outside the fallback (" @ %total @ ")", %total == 30);
+	palCheck("29 entries outside the fallback (" @ %total @ ")", %total == 29);
 
 	%sum = 0;
 	for(%g = 0; %g < getFieldCount(%groups); %g++)
@@ -216,9 +216,9 @@ function palPaletteChecks()
 			getWord(%group.getExtent(), 1) > $GuiEditorControlGroup::headerHeight);
 		%tiles += %group.tileCount;
 	}
-	// One fewer than the 30 table entries: Tab Page is refused, so it has a row
+	// One fewer than the 29 table entries: Tab Page is refused, so it has a row
 	// and an icon but no tile.
-	palCheck("29 tiles across the groups (" @ %tiles @ ")", %tiles == 29);
+	palCheck("28 tiles across the groups (" @ %tiles @ ")", %tiles == 28);
 	palCheck("no Tab Page tile", palFindTile("GuiTabPageCtrl") == 0);
 
 	palWidthChecks();

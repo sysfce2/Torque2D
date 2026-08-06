@@ -1,0 +1,7 @@
+<ImageAsset
+    AssetName="keyLatched"
+    ImageFile="keyLatched.png"
+    CellCountX="4"
+    CellCountY="1"
+    CellWidth="65"
+    CellHeight="65"/>

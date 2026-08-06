@@ -107,11 +107,14 @@ function tbStepPalette()
 		%icons.labelFor("GuiTabPageCtrl") $= "Tab Page");
 
 	// The two frames either side of the seam. If the row had been deleted rather
-	// than refused, Window would have slid down onto Tab Page's art.
-	tbCheck("Tab Page keeps frame 28 (" @ %icons.frameFor("GuiTabPageCtrl") @ ")",
-		%icons.frameFor("GuiTabPageCtrl") == 28);
-	tbCheck("Window keeps frame 29 (" @ %icons.frameFor("GuiWindowCtrl") @ ")",
-		%icons.frameFor("GuiWindowCtrl") == 29);
+	// than refused, frameFor would answer 0 for Tab Page and Window would have
+	// slid down onto its art. Asserted as adjacency rather than two literals:
+	// the frame IS the row index, so removing any earlier entry renumbers both
+	// without saying anything about the seam these two are here to guard.
+	%tabPage = %icons.frameFor("GuiTabPageCtrl");
+	tbCheck("Tab Page keeps a frame of its own (" @ %tabPage @ ")", %tabPage > 0);
+	tbCheck("Window sits right after it (" @ %icons.frameFor("GuiWindowCtrl") @ ")",
+		%icons.frameFor("GuiWindowCtrl") == (%tabPage + 1));
 
 	schedule(300, 0, "tbStepDrop");
 }
