@@ -137,11 +137,6 @@
     return error;
  }
 
-bool dPathCopy(const char *fromName, const char *toName, bool nooverwrite)
-{
-    return CopyFile(fromName,toName);
-}
- 
  //-----------------------------------------------------------------------------
  static char sgPrefDir[MaxPath];
  static bool sgPrefDirInitialized = false;
@@ -1249,14 +1244,224 @@ StringTableEntry Platform::osGetTemporaryDirectory()
 	return StringTable->insert("~/");
 }
 
+//-----------------------------------------------------------------------------
+// Copying, which the editors lean on harder than the name suggests: it is how a
+// new project is stamped out of a template, and how a theme is given its own
+// copy of the stock cursor art.
+//
+// Paths are used as handed over, like isFile and isDirectory and fileDelete
+// above, rather than routed through MungePath into the pref directory the way
+// createPath is. Every caller builds an absolute path first and then asks isFile
+// whether the copy arrived, so a copy that landed anywhere else would read as a
+// failure -- and MungePath leaves an absolute path alone in any case.
+//-----------------------------------------------------------------------------
+
+static const U32 sCopyBufferSize = 32768;
+
+// The directories leading up to a file, made on the path exactly as given.
+// Platform::createPath is not usable here: it sends a relative path through
+// MungePath into the pref directory, which is not where the copy itself would
+// then be written, so the open would fail on the parent it had just made
+// somewhere else.
+static void CreateParentDirectories(const char* path)
+{
+   char buffer[MaxPath];
+   dStrncpy(buffer, path, MaxPath - 1);
+   buffer[MaxPath - 1] = '\0';
+
+   for (char* walk = dStrchr(buffer, '/'); walk != NULL; walk = dStrchr(walk + 1, '/'))
+   {
+      if (walk == buffer)
+         continue;   // the leading slash of an absolute path
+
+      *walk = '\0';
+      mkdir(buffer, 0777);
+      *walk = '/';
+   }
+}
+
+static bool CopyOneFile(const char* fromName, const char* toName, bool nooverwrite)
+{
+   if (nooverwrite && (Platform::isFile(toName) || Platform::isDirectory(toName)))
+      return false;
+
+   struct stat fromStat;
+   if (stat(fromName, &fromStat) < 0)
+      return false;
+
+   // The destination's folder may not exist yet -- copying a tree creates the
+   // directories as it walks, but a lone file copied into a new folder does not.
+   CreateParentDirectories(toName);
+
+   S32 fromFd = open(fromName, O_RDONLY);
+   if (fromFd < 0)
+      return false;
+
+   // Carry the mode across, so a copied executable is still executable.
+   S32 toFd = open(toName, O_WRONLY | O_CREAT | O_TRUNC, fromStat.st_mode & 0777);
+   if (toFd < 0)
+   {
+      close(fromFd);
+      return false;
+   }
+
+   char buffer[sCopyBufferSize];
+   bool ok = true;
+   for (;;)
+   {
+      const ssize_t got = read(fromFd, buffer, sizeof(buffer));
+      if (got == 0)
+         break;
+      if (got < 0)
+      {
+         if (errno == EINTR)
+            continue;
+         ok = false;
+         break;
+      }
+
+      ssize_t written = 0;
+      while (written < got)
+      {
+         const ssize_t put = write(toFd, buffer + written, got - written);
+         if (put < 0)
+         {
+            if (errno == EINTR)
+               continue;
+            ok = false;
+            break;
+         }
+         written += put;
+      }
+
+      if (!ok)
+         break;
+   }
+
+   close(fromFd);
+   if (close(toFd) < 0)
+      ok = false;
+
+   // A half-written file is worse than none: the next run would find it with
+   // isFile and take it for good art.
+   if (!ok)
+      unlink(toName);
+
+   return ok;
+}
+
+static bool CopyOneDirectory(const char* fromName, const char* toName)
+{
+   DIR* dir = opendir(fromName);
+   if (dir == NULL)
+      return false;
+
+   struct stat fromStat;
+   if (stat(fromName, &fromStat) == 0)
+      mkdir(toName, fromStat.st_mode & 0777);
+   else
+      mkdir(toName, 0700);
+
+   bool ok = true;
+   struct dirent* entry;
+   while ((entry = readdir(dir)) != NULL)
+   {
+      if (dStrcmp(entry->d_name, ".") == 0 || dStrcmp(entry->d_name, "..") == 0)
+         continue;
+
+      char fromChild[MaxPath];
+      char toChild[MaxPath];
+      dSprintf(fromChild, sizeof(fromChild), "%s/%s", fromName, entry->d_name);
+      dSprintf(toChild, sizeof(toChild), "%s/%s", toName, entry->d_name);
+
+      // Asking the filesystem rather than trusting d_type, which is DT_UNKNOWN
+      // on filesystems that do not carry the kind in the directory entry.
+      if (Platform::isDirectory(fromChild))
+      {
+         if (!CopyOneDirectory(fromChild, toChild))
+            ok = false;
+      }
+      else
+      {
+         // Overwriting freely: the caller's nooverwrite was already answered
+         // against the top of the tree, and stopping here would leave a
+         // half-copied project behind.
+         if (!CopyOneFile(fromChild, toChild, false))
+            ok = false;
+      }
+   }
+
+   closedir(dir);
+   return ok;
+}
+
 bool Platform::pathCopy(const char* source, const char* dest, bool nooverwrite)
 {
+   if (source == NULL || dest == NULL || !*source || !*dest)
+      return false;
+
+   if (Platform::isFile(source))
+      return CopyOneFile(source, dest, nooverwrite);
+
+   if (Platform::isDirectory(source))
+   {
+      if (nooverwrite && (Platform::isDirectory(dest) || Platform::isFile(dest)))
+         return false;
+
+      // Refuse to copy a tree into itself, which would recurse until the path
+      // outgrew MaxPath. Platform::isSubDirectory is no help here: it matches a
+      // bare child name against the parent's entries, not one path inside
+      // another.
+      dsize_t sourceLen = dStrlen(source);
+      while (sourceLen > 1 && source[sourceLen - 1] == '/')
+         sourceLen--;   // a trailing slash would put dest past the comparison
+
+      if (dStrncmp(source, dest, sourceLen) == 0 &&
+          (dest[sourceLen] == '/' || dest[sourceLen] == '\0'))
+      {
+         Con::errorf("Platform::pathCopy: %s is inside %s", dest, source);
+         return false;
+      }
+
+      CreateParentDirectories(dest);
+      return CopyOneDirectory(source, dest);
+   }
+
+   Con::errorf("Platform::pathCopy: nothing to copy at %s", source);
    return false;
 }
 
 bool Platform::fileRename(const char* source, const char* dest)
 {
-   return false;
+   if (source == NULL || dest == NULL || !*source || !*dest)
+      return false;
+
+   if (!Platform::isFile(source) && !Platform::isDirectory(source))
+   {
+      Con::errorf("Platform::fileRename: no file exists at %s", source);
+      return false;
+   }
+
+   if (Platform::isFile(dest) || Platform::isDirectory(dest))
+      Con::warnf("Platform::fileRename: overwriting %s", dest);
+
+   CreateParentDirectories(dest);
+
+   if (rename(source, dest) == 0)
+      return true;
+
+   // rename cannot cross a filesystem, and the pref directory and the game
+   // directory are not always on the same one. Fall back to moving it by hand.
+   if (errno != EXDEV)
+      return false;
+
+   if (!Platform::pathCopy(source, dest, false))
+      return false;
+
+   if (Platform::isDirectory(source))
+      return Platform::deleteDirectory(source);
+
+   return Platform::fileDelete(source);
 }
 
 bool Platform::fileDelete(const char* name)
