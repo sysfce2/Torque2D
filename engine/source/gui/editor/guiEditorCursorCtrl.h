@@ -69,6 +69,16 @@ private:
 protected:
 	GuiCursor* mCursor;         ///< The cursor being edited. Nothing is drawn without one.
 
+	/// The cursor we hold a delete notification from, which is not always the one
+	/// in mCursor: the "cursor" field is written straight through TypeGuiCursor,
+	/// which overwrites the pointer without telling us what used to be there. So
+	/// the registration is tracked separately and reconciled after every write.
+	GuiCursor* mNotifiedCursor;
+
+	/// Point the delete notification at whatever mCursor now holds. Cheap and
+	/// idempotent, so it is safe to call after any write to the field.
+	void bindCursorNotify();
+
 	// Its own decoded copy of the art, because the pixels are the point. A
 	// cursor's TextureHandle is a BitmapTexture, and TextureManager deletes the
 	// CPU-side bitmap once it has uploaded one of those -- so asking the cursor
@@ -124,6 +134,16 @@ public:
 	static void initPersistFields();
 
 	void onRender(Point2I offset, const RectI& updateRect);
+
+	/// A cursor can be deleted while this pane still points at it -- removing a
+	/// theme's extra cursor does exactly that -- and the next frame would draw
+	/// from freed memory. Forget it instead.
+	virtual void onDeleteNotify(SimObject* object);
+
+	/// The "cursor" field bypasses setCursorObject entirely (script assigns it
+	/// directly, and so does a .gui.taml load), so this is the only place such a
+	/// write can be noticed.
+	virtual void onStaticModified(const char* slotName, const char* newValue = NULL);
 
 	void onTouchDown(const GuiEvent& event);
 	void onTouchDragged(const GuiEvent& event);

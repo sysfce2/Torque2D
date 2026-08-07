@@ -35,6 +35,7 @@ IMPLEMENT_CONOBJECT(GuiEditorCursorCtrl);
 GuiEditorCursorCtrl::GuiEditorCursorCtrl()
 {
 	mCursor = NULL;
+	mNotifiedCursor = NULL;
 	mBitmap = NULL;
 	mBitmapKey = StringTable->EmptyString;
 	mZoom = 8;
@@ -95,6 +96,56 @@ void GuiEditorCursorCtrl::setCursorObject(GuiCursor* cursor)
 {
 	mCursor = cursor;
 	mDragging = false;
+	bindCursorNotify();
+}
+
+// Both halves of the notification are unwound by SimObject itself when either
+// end is deleted, so this only has to keep the registration pointed at the
+// current cursor.
+void GuiEditorCursorCtrl::bindCursorNotify()
+{
+	if (mCursor == mNotifiedCursor)
+		return;
+
+	if (mNotifiedCursor != NULL)
+		clearNotify(mNotifiedCursor);
+
+	if (mCursor != NULL)
+		deleteNotify(mCursor);
+
+	mNotifiedCursor = mCursor;
+
+	// Different cursor, so the art decoded for the last one is stale. resolveBitmap
+	// would notice a changed file name on its own, but not two cursors naming the
+	// same file with different hot spots.
+	releaseBitmap();
+}
+
+void GuiEditorCursorCtrl::onStaticModified(const char* slotName, const char* newValue)
+{
+	Parent::onStaticModified(slotName, newValue);
+
+	if (dStricmp(slotName, "cursor") == 0)
+	{
+		mDragging = false;
+		bindCursorNotify();
+	}
+}
+
+void GuiEditorCursorCtrl::onDeleteNotify(SimObject* object)
+{
+	if (object == mNotifiedCursor)
+	{
+		// The notification is the cursor's last act -- SimObject has already taken
+		// this end of the registration apart -- so drop the pointer without
+		// clearing anything, and let the pane draw empty until it is given another.
+		mCursor = NULL;
+		mNotifiedCursor = NULL;
+		mDragging = false;
+		releaseBitmap();
+	}
+
+	Parent::onDeleteNotify(object);
 }
 
 void GuiEditorCursorCtrl::releaseBitmap()
