@@ -88,6 +88,7 @@ class GuiEditCtrl : public GuiControl
    void setCurrentAddSet(GuiControl *ctrl, bool clearSelection = true);
    const GuiControl* getCurrentAddSet() const;
    void setSelection(GuiControl *ctrl);
+   void controlHidden(GuiControl *ctrl);
 
    // Undo Access
    void undo();

@@ -307,6 +307,46 @@ void GuiEditCtrl::setEditMode(bool value)
 		mCurrentAddSet = mEditorRoot;
 }
 
+// The eye was just turned off for a control. If the container being worked in is
+// that control or something inside it, come back out to the nearest one that is
+// still drawn.
+//
+// A drag heals itself, because onControlDragged picks its target with
+// findHitControl and that no longer answers anything hidden. Click-to-place from
+// the palette does not: it adds into the add set, so without this the next
+// control placed would land inside a hidden parent and appear nowhere at all.
+//
+// The selection is deliberately left alone. Clicking the eye must not move it -
+// that is the promise the Explorer's gutter is built around.
+void GuiEditCtrl::controlHidden(GuiControl* ctrl)
+{
+	if (ctrl == NULL || !ctrl->isHidden() || mCurrentAddSet == NULL)
+		return;
+
+	bool inside = false;
+	for (GuiControl* walk = mCurrentAddSet; walk != NULL; walk = walk->getParent())
+	{
+		if (walk == ctrl)
+		{
+			inside = true;
+			break;
+		}
+		if (walk == mEditorRoot)
+			break;
+	}
+
+	if (!inside)
+		return;
+
+	// Up past anything else that is hidden. One hidden branch inside another is
+	// the case this loop is for.
+	GuiControl* newAddSet = ctrl->getParent();
+	while (newAddSet != NULL && newAddSet != mEditorRoot && newAddSet->isHidden())
+		newAddSet = newAddSet->getParent();
+
+	setCurrentAddSet(newAddSet != NULL ? newAddSet : mEditorRoot, false);
+}
+
 void GuiEditCtrl::setCurrentAddSet(GuiControl* ctrl, bool clearSelection)
 {
 	if (ctrl != mCurrentAddSet)
@@ -428,13 +468,17 @@ S32 GuiEditCtrl::getSizingHitKnobs(const Point2I& pt, const RectI& box)
 
 // Whether the editor must leave this control's position and extent alone.
 //
-// Two different reasons that come to the same thing: isLocked is the padlock the
-// user turned on, and isGeometryEditable is the control saying its parent
+// Three different reasons that come to the same thing. isLocked is the padlock
+// the user turned on. isGeometryEditable is the control saying its parent
 // dictates its geometry - a tab page, a menu item - so that dragging it would
-// change a number something else overwrites on the next layout pass.
+// change a number something else overwrites on the next layout pass. And
+// isHidden is the eye: a control the editor does not draw offers nothing to take
+// hold of, so the eight sizing knobs it would otherwise keep - hit tested before
+// findHitControl ever runs, and drawn by nothing - would be invisible traps
+// straddling the edges of whatever the user was trying to reach behind it.
 static inline bool editGeometryFrozen(GuiControl* ctrl)
 {
-	return ctrl == NULL || ctrl->isLocked() || !ctrl->isGeometryEditable();
+	return ctrl == NULL || ctrl->isHidden() || ctrl->isLocked() || !ctrl->isGeometryEditable();
 }
 
 void GuiEditCtrl::drawControlDecoration(GuiControl* ctrl, RectI& box, ColorI& outlineColor, ColorI& nutColor)
@@ -982,6 +1026,13 @@ void GuiEditCtrl::onTouchUp(const GuiEvent& event)
 		for (i = mCurrentAddSet->begin(); i != mCurrentAddSet->end(); i++)
 		{
 			GuiControl* ctrl = dynamic_cast<GuiControl*>(*i);
+
+			// A band is drawn across the canvas, and a hidden control is not on
+			// the canvas. This walks the children rather than hit testing them,
+			// so it is the one selection path findHitControl does not answer for.
+			if (ctrl == NULL || ctrl->isHidden())
+				continue;
+
 			Point2I upperL = globalToLocalCoord(ctrl->localToGlobalCoord(Point2I(0, 0)));
 			Point2I lowerR = upperL + ctrl->mBounds.extent - Point2I(1, 1);
 
@@ -1217,8 +1268,10 @@ void GuiEditCtrl::moveSelectionToCtrl(GuiControl* newParent)
 		if (ctrl->getParent() == newParent)
 			continue;
 
-		// skip locked controls
-		if (ctrl->isLocked())
+		// skip locked controls, and hidden ones: this runs off a drag that
+		// moveSelection has already refused to move them with, so reparenting
+		// them here would change the one number the drag left alone
+		if (ctrl->isLocked() || ctrl->isHidden())
 			continue;
 
 		// skip controls that will not live there - a tab page outside a tab book

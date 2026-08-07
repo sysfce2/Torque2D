@@ -23,6 +23,7 @@
 #include "gui/editor/guiEditorExplorerTree.h"
 #include "graphics/dgl.h"
 #include "gui/guiCanvas.h"
+#include "gui/editor/guiEditCtrl.h"
 
 #include "guiEditorExplorerTree_ScriptBinding.h"
 
@@ -353,6 +354,13 @@ void GuiEditorExplorerTree::onTouchDown(const GuiEvent& event)
 		if (column == GutterHidden)
 		{
 			obj->setHidden(!obj->isHidden());
+
+			// A hidden control is not a target on the canvas any more, and that
+			// includes being the container the next control is placed into.
+			if (GuiControl::smEditorHandle != NULL)
+			{
+				GuiControl::smEditorHandle->controlHidden(dynamic_cast<GuiControl*>(obj));
+			}
 		}
 		else
 		{

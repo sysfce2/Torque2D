@@ -1233,7 +1233,7 @@ void GuiControl::renderChildControls(const Point2I& offset, const RectI& content
 			  Con::errorf( "GuiControl::renderChildControls() object %i is NULL", count );
 			continue;
 		  }
-		  if (ctrl->mVisible && (!isEditMode() || !ctrl->isHidden()))
+		  if (ctrl->mVisible && !isHiddenInEditor(ctrl))
 		  {
 			 renderChild(ctrl, offset, content, clipRect);
 		  }
@@ -1672,6 +1672,10 @@ bool GuiControl::pointInControl(const Point2I& parentCoordPoint)
 }
 
 
+// A hidden child is skipped here and not descended into, which is what takes its
+// whole subtree with it - the same thing renderChildControls does, and it has to
+// be the same thing, or the Gui Editor's eye would take a control out of sight
+// while leaving it in the way of every click aimed at what is behind it.
 GuiControl* GuiControl::findHitControl(const Point2I &pt, S32 initialLayer, const bool ignoreUseInput, const bool ignoreEditSelected)
 {
    iterator i = end(); // find in z order (last to first)
@@ -1683,9 +1687,10 @@ GuiControl* GuiControl::findHitControl(const Point2I &pt, S32 initialLayer, cons
       {
          continue;
       }
-      else if (ctrl->pointInControl(pt - ctrl->mRenderInsetLT) && 
-		ctrl->mVisible && 
-		(ignoreUseInput || ctrl->mUseInput) && 
+      else if (ctrl->pointInControl(pt - ctrl->mRenderInsetLT) &&
+		ctrl->mVisible &&
+		!isHiddenInEditor(ctrl) &&
+		(ignoreUseInput || ctrl->mUseInput) &&
 		(ignoreEditSelected || (isEditMode() && !ctrl->isEditSelected())))
       {
          Point2I ptemp = pt - (ctrl->mBounds.point + ctrl->mRenderInsetLT);

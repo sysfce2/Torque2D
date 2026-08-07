@@ -175,6 +175,19 @@ public:
 	virtual bool isEditMode();
 	virtual bool isEditSelected();
 
+	/// Whether a child of this control must be treated as though it were not
+	/// there: the eye in the Gui Editor's Explorer is off for it.
+	///
+	/// The paint and the hit test both ask this, and they have to agree. A
+	/// control the editor does not draw must not be a target either, or the eye
+	/// takes it out of sight while leaving it in the way - which is the one
+	/// thing hiding is for.
+	///
+	/// Cheap test first: isHidden is a bit, isEditMode walks the parent chain,
+	/// and the answer for almost every control on almost every mouse move is no.
+	inline bool isHiddenInEditor(GuiControl* child)
+		{ return child->isHidden() && isEditMode(); }
+
     /// @name Keyboard Input
     /// @{
     GuiControl* mFirstResponder;

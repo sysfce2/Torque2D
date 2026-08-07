@@ -341,6 +341,7 @@ set(TORQUE_ENGINE_SOURCES
     # ---- testing/tests ----
     ${TORQUE_SRC}/testing/tests/guiControlReparentTests.cc
     ${TORQUE_SRC}/testing/tests/guiCursorHotSpotTests.cc
+    ${TORQUE_SRC}/testing/tests/guiHitTestTests.cc
     ${TORQUE_SRC}/testing/tests/guiProfileThemeTests.cc
     ${TORQUE_SRC}/testing/tests/guiScrollLayoutTests.cc
     ${TORQUE_SRC}/testing/tests/guiTextEditTests.cc
