@@ -55,7 +55,53 @@ function GuiEditorExplorerTree::onPreReorder(%this)
 
 function GuiEditorExplorerTree::onPostReorder(%this)
 {
+	%this.rescueStranded();
 	GuiEditor.undoRecorder.commitHierarchy("Reparent Control");
+}
+
+// A drag on the canvas puts a control under the pointer, so it lands inside the
+// container it landed in. A drag here has no pointer: nothing supplies a
+// position, and the control keeps the local one it held in its old parent. Move
+// a button at x=400 into a container 100 wide and it is not clipped or half
+// hidden, it is gone - and gone from the canvas is nearly gone for good, because
+// the canvas is where you would reach for it.
+//
+// So each control that moved is offered the chance to come back into view. It is
+// per axis and only for a control that is ENTIRELY outside: see
+// GuiControl::rescuedPosition. Anything still visible, and anything that did not
+// move, is left exactly as it was.
+//
+// Before commitHierarchy, and that ordering is the whole reason this is a
+// separate call rather than something the C++ does inside the reorder. The undo
+// step is built from what layoutOf reads at commit time - position, extent and
+// both sizing fields - so rescuing first folds the correction into the same
+// "Reparent Control" action. One Ctrl+Z then puts the control back in its old
+// parent AT ITS OLD POSITION, which is what the user will expect, rather than
+// leaving it rescued in a parent that no longer wants it there.
+//
+// The selection is the set that moved: reorderFromDrag moves every selected
+// item, and it calls this back before refreshTree, so the rows are still the
+// ones that were dragged.
+function GuiEditorExplorerTree::rescueStranded(%this)
+{
+	%selected = %this.getSelectedItems();
+
+	for(%i = 0; %i < getWordCount(%selected); %i++)
+	{
+		// getSelectedItems answers "-1" for an empty selection rather than an
+		// empty string, so the index has to be looked at before it is used.
+		%index = getWord(%selected, %i);
+		if(%index < 0)
+		{
+			continue;
+		}
+
+		%ctrl = %this.getItemID(%index);
+		if(isObject(%ctrl))
+		{
+			%ctrl.pullIntoView();
+		}
+	}
 }
 
 // refreshItem rather than refreshItemText: a control's picture can change
