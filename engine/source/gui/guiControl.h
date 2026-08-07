@@ -486,6 +486,31 @@ public:
     /// @param   newParentExtent   The new size of the parent object
     virtual void parentResized(const Point2I &oldParentExtent, const Point2I &newParentExtent);
     
+    /// Where a control goes when a move has stranded it outside its parent.
+    ///
+    /// Reparenting in the Explorer tree is a gesture with no pointer in it, so
+    /// nothing supplies a position and the control keeps the local one it held
+    /// in its old parent. Dropped into something smaller that can put it
+    /// entirely outside: not clipped, not partly visible, gone.
+    ///
+    /// Per axis, because a placement that is still valid should be kept -- a
+    /// control that was 20 pixels down and 400 across is still 20 pixels down.
+    /// Only when it is ENTIRELY outside on that axis, because a control the user
+    /// can see is a control the user can drag, and moving one that merely
+    /// overhangs the edge would be undoing a placement rather than rescuing it.
+    ///
+    /// Static and taking everything it uses, so the arithmetic can be tested
+    /// without a canvas -- as GuiScrollCtrl::subtractScrollBars is.
+    static Point2I rescuedPosition(const Point2I &pos, const Point2I &extent, const Point2I &parentInnerExtent);
+
+    /// The same against the parent this control actually has, resizing it if it
+    /// had to move. Answers whether it did.
+    ///
+    /// A no-op for a control that is even partly visible, and for one with no
+    /// parent at all, so a caller can ask about a whole selection without
+    /// working out which members need it.
+    bool pullIntoView();
+
 	/// Removes the resize mode of fill and changes it to right or bottom
 	void preventResizeModeFill();
 

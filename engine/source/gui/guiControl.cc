@@ -367,6 +367,30 @@ void GuiControl::addObject(SimObject *object)
    if(mAwake)
       ctrl->awaken();
 
+   // Two pieces of cached sizing state describe the parent the control has just
+   // left, and neither means anything here. Both are cleared before
+   // onChildAdded, which is the first thing to read them.
+   //
+   // mStoredRelativePos is the proportion of its parent a SCALED control
+   // occupies, cached so that a run of layout passes cannot round its edges away
+   // a pixel at a time. Writing a position is the moment it stops describing the
+   // control, which is why the Position and Extent field setters clear it -- and
+   // changing parent is that moment too. Left alone, onChildAdded applied the OLD
+   // parent's proportion to the NEW parent's extent: a button 200 wide at x=100
+   // in an 800-wide container arrived 50 wide at x=25 in a 200-wide one. Reset,
+   // the proportion is recaptured against the parent it has now, old and new
+   // extents are the same value in that call, and the arithmetic is the identity
+   // -- so a move keeps the size it moved, which is what every other sizing mode
+   // already did.
+   //
+   // mStoredExtent is extent given up to minExtent and owed back when there is
+   // room again. A debt run up under one parent is not the next one's to pay.
+   //
+   // Note this cannot fire on a re-add: addObject returns above when the object
+   // is already a child of this control.
+   ctrl->resetStoredRelPos();
+   ctrl->resetStoredExtent();
+
     onChildAdded( ctrl );
 }
 
@@ -665,6 +689,49 @@ void GuiControl::parentResized(const Point2I &oldParentExtent, const Point2I &ne
    newExtent = extentBattery(newExtent);
 
    resize(newPosition, newExtent);
+}
+
+// One axis of the rescue. Nothing of the control is visible when its far edge is
+// at or before the parent's near edge, or its near edge is at or past the
+// parent's far edge -- and a parent with no room at all shows nothing wherever
+// the control is put, which the second test catches on its own (pos >= 0).
+static S32 rescuedAxis(S32 pos, S32 extent, S32 parentInnerExtent)
+{
+    const bool offTheNearSide = (pos + extent) <= 0;
+    const bool offTheFarSide = pos >= parentInnerExtent;
+
+    return (offTheNearSide || offTheFarSide) ? 0 : pos;
+}
+
+Point2I GuiControl::rescuedPosition(const Point2I &pos, const Point2I &extent, const Point2I &parentInnerExtent)
+{
+    return Point2I(rescuedAxis(pos.x, extent.x, parentInnerExtent.x),
+        rescuedAxis(pos.y, extent.y, parentInnerExtent.y));
+}
+
+bool GuiControl::pullIntoView()
+{
+    GuiControl* parent = getParent();
+    if (parent == NULL)
+    {
+        return false;
+    }
+
+    const Point2I rescued = rescuedPosition(mBounds.point, mBounds.extent, parent->getInnerRect().extent);
+    if (rescued == mBounds.point)
+    {
+        return false;
+    }
+
+    // Through resize rather than a direct write to mBounds, so a container that
+    // places its own children hears about it -- and then reset the cached
+    // proportion, because a scaled control that has just been moved must measure
+    // from where it landed. resize() does not do that for its caller: it is what
+    // parentResized itself calls, and clearing the cache there would defeat it.
+    resize(rescued, mBounds.extent);
+    resetStoredRelPos();
+
+    return true;
 }
 
 void GuiControl::preventResizeModeFill()

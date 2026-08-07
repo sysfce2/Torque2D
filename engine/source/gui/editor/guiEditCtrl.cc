@@ -1229,7 +1229,25 @@ void GuiEditCtrl::moveSelectionToCtrl(GuiControl* newParent)
 		Point2I globalpos = ctrl->localToGlobalCoord(Point2I(0, 0));
 		newParent->addObject(ctrl);
 		Point2I newpos = ctrl->globalToLocalCoord(globalpos) + ctrl->mBounds.point;
-		ctrl->mBounds.set(newpos, ctrl->mBounds.extent);
+
+		// resize rather than a direct write to mBounds, which is what this was.
+		//
+		// Keeping the control under the pointer is right for the modes that own
+		// their position, and wrong for the two that do not: addObject has just
+		// centred or filled the control against its new parent, and writing
+		// mBounds threw that away. resize puts it back -- it forces center and
+		// fill itself, for exactly this reason -- so the control is correct the
+		// moment it arrives rather than on the next mouse move that happens to
+		// call resize for some other reason.
+		ctrl->resize(newpos, ctrl->mBounds.extent);
+
+		// addObject cleared the cached proportion of a scaled control and
+		// onChildAdded recaptured it -- but against the position the control
+		// arrived at, which the line above has just replaced with the one under
+		// the pointer. Clear it again so the recapture happens from where the
+		// control actually is; otherwise the next time this parent is resized the
+		// control jumps back to where the drag happened to enter it.
+		ctrl->resetStoredRelPos();
 	}
 
 	Con::executef(this, 2, "onSelectionParentChange", Con::getIntArg(newParent->getId()));

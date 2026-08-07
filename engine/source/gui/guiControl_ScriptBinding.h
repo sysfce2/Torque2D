@@ -450,6 +450,28 @@ ConsoleMethodWithDocs(GuiControl, applySizing, ConsoleVoid, 2, 2, ())
     object->parentResized( extent, extent );
 }
 
+/*! Moves this control back inside its parent if a move has left it entirely
+    outside.
+
+    Reparenting in the Explorer tree is a gesture with no pointer in it, so
+    nothing supplies a position and the control keeps the local one it held in
+    its old parent. Dropped into something smaller that can put it entirely
+    outside: not clipped, not partly visible, gone.
+
+    An axis on which nothing of the control is visible is set to 0. The other axis
+    is left alone -- a control that was 20 pixels down and 400 across is still 20
+    pixels down -- and so is a control that merely overhangs an edge, because one
+    the user can see is one the user can drag.
+
+    Does nothing to a control with no parent, so a whole selection can be offered
+    without checking each member.
+    @return True if the control had to be moved.
+*/
+ConsoleMethodWithDocs(GuiControl, pullIntoView, ConsoleBool, 2, 2, ())
+{
+    return object->pullIntoView();
+}
+
 /*! Returns true if this control draws its children.
     A control that does not render children can never be a container: the
     isContainer field is forced to false for it and editing that field is
