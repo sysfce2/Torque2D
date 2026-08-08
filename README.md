@@ -1,5 +1,5 @@
 ![Torque Logo](images/banner1.png)
-## Torque2D 4.0 Early Access 3
+## Torque2D 4.0 Early Access 4
 
 MIT Licensed Open Source version of Torque2D from GarageGames. Maintained by the Torque Game Engines team and contributions from the community.
 
@@ -11,7 +11,7 @@ Torque2D 4.0: Rocket Edition is currently in progress. The major change with 4.0
 
 The managers can be reached by opening the console using the console button in the Toybox or by pressing Tilde(~) + Ctrl. You will then notice tabs along that top for the various tools currently available.
 
-Early Access 3 introduces a **full GUI Editor**, built from the ground up to replace the previous Gui Editor Toy. You build a screen by dragging controls from an illustrated palette onto the canvas, or by clicking one to have it placed for you, and arrange them by dragging, by the arrow keys, or through the Layout menu's align and spacing commands. There is undo and redo, and cut, copy and paste work within a Gui and between them.
+Early Access 4 builds out the **GUI Editor** that Early Access 3 introduced. You build a screen by dragging controls from an illustrated palette onto the canvas, or by clicking one to have it placed for you, and arrange them by dragging, by the arrow keys, or through the Layout menu's align and spacing commands. There is undo and redo, and cut, copy and paste work within a Gui and between them.
 
 Around the canvas sit two more panels. The **Explorer** shows the whole control tree, with a picture of each control's class, columns for hiding and locking, and drag-to-reparent. The **properties pane** shows only the fields the selected control's class actually reads — a chain never draws its own text, so it is not offered nine text fields it will ignore — and gives the common ones purpose-built editors rather than text boxes: an anchor picker for sizing, color swatches, an image picker you choose by looking at it, and editors for the things that used to be unreachable from an editor at all, such as a list box's rows and a menu bar's items.
 
