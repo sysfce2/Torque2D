@@ -390,6 +390,16 @@ U32 File::getSize() const
     {
         struct stat statData;
 
+        // The handle is buffered stdio, so bytes just written may still be in
+        // that buffer and not yet in the inode fstat reports. Windows and Linux
+        // both hold an unbuffered handle and so never see a stale size; push the
+        // buffer out first so this answers with the same authority they do. A
+        // read-only file has nothing to push, and the one hot caller
+        // (setPosition) has already flushed by way of its own fseek, so this
+        // costs nothing on the paths that ask most often.
+        if ( hasCapability(FileWrite) )
+            fflush((FILE*)handle);
+
         if(fstat(fileno((FILE*)handle), &statData) != 0)
             return 0;
         
