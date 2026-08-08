@@ -345,6 +345,7 @@ set(TORQUE_ENGINE_SOURCES
     ${TORQUE_SRC}/testing/tests/guiProfileThemeTests.cc
     ${TORQUE_SRC}/testing/tests/guiScrollLayoutTests.cc
     ${TORQUE_SRC}/testing/tests/guiTextEditTests.cc
+    ${TORQUE_SRC}/testing/tests/guiTextWrapTests.cc
     ${TORQUE_SRC}/testing/tests/guiTreeRowLayoutTests.cc
     ${TORQUE_SRC}/testing/tests/namespaceLinkTests.cc
     ${TORQUE_SRC}/testing/tests/platformFileIoTests.cc
