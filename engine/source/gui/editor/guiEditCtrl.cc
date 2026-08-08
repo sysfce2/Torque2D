@@ -30,6 +30,17 @@
 #include "io/fileStream.h"
 #include "gui/containers/guiScrollCtrl.h"
 
+// Undo lives in script (editor/GuiEditor/scripts/GuiEditorUndoRecorder.cs), on
+// the UndoManager this class owns. What is here is the announcements it needs:
+// every edit made below is bracketed by a callback, and the paired ones -
+// onPreEdit/onPostEdit for a drag or a handle-resize, onPreSelectionNudged and
+// its post for a run of arrow keys - are pairs because what a gesture did is
+// only known once it ends. onTrashSelection deliberately fires before the
+// controls reach the trash, while each one still knows where it came from.
+//
+// The three edits with no callback - justifySelection, bringToFront and
+// pushToBack - are reached only from the Layout menu, and the Gui Editor's
+// script wraps those commands to record either side of the call.
 IMPLEMENT_CONOBJECT(GuiEditCtrl);
 
 GuiEditCtrl::GuiEditCtrl() : mCurrentAddSet(NULL), mEditorRoot(NULL), mGridSnap(10, 10), mDragBeginPoint(-1, -1)
@@ -132,6 +143,22 @@ ConsoleMethod(GuiEditCtrl, setCurrentAddSet, void, 3, 3, "(GuiControl ctrl) Set 
 	object->setCurrentAddSet(addSet);
 }
 
+ConsoleMethod(GuiEditCtrl, moveSelectionToCtrl, void, 3, 3, "(GuiControl parent) Reparent every selected control into the given container.\n"
+	"What a drag across the canvas onto a container does. Controls that refuse the\n"
+	"parent - see GuiControl::canBeChildOf - and locked ones are left where they are.\n"
+	"@param parent The container to move the selection into.\n"
+	"@return No return value.")
+{
+	GuiControl* newParent;
+
+	if (!Sim::findObject(argv[2], newParent))
+	{
+		Con::printf("%s(): Invalid control: %s", argv[0], argv[2]);
+		return;
+	}
+	object->moveSelectionToCtrl(newParent);
+}
+
 ConsoleMethod(GuiEditCtrl, getCurrentAddSet, S32, 2, 2, "()\n @return Returns the set to which new controls will be added")
 {
 	const GuiControl* add = object->getCurrentAddSet();
@@ -180,18 +207,6 @@ ConsoleMethod(GuiEditCtrl, moveSelection, void, 4, 4, "(int deltax, int deltay) 
 	{
 		object->moveSelection(Point2I(dAtoi(argv[2]), dAtoi(argv[3])));
 	}
-}
-
-ConsoleMethod(GuiEditCtrl, saveSelection, void, 3, 3, "(string fileName) Saves the current selection to given filename\n"
-	"@return No return value.")
-{
-	object->saveSelection(argv[2]);
-}
-
-ConsoleMethod(GuiEditCtrl, loadSelection, void, 3, 3, "(string fileName) Loads from given filename\n"
-	"@return No return value.")
-{
-	object->loadSelection(argv[2]);
 }
 
 ConsoleMethod(GuiEditCtrl, selectAll, void, 2, 2, "() Selects all controls\n"
@@ -292,6 +307,46 @@ void GuiEditCtrl::setEditMode(bool value)
 		mCurrentAddSet = mEditorRoot;
 }
 
+// The eye was just turned off for a control. If the container being worked in is
+// that control or something inside it, come back out to the nearest one that is
+// still drawn.
+//
+// A drag heals itself, because onControlDragged picks its target with
+// findHitControl and that no longer answers anything hidden. Click-to-place from
+// the palette does not: it adds into the add set, so without this the next
+// control placed would land inside a hidden parent and appear nowhere at all.
+//
+// The selection is deliberately left alone. Clicking the eye must not move it -
+// that is the promise the Explorer's gutter is built around.
+void GuiEditCtrl::controlHidden(GuiControl* ctrl)
+{
+	if (ctrl == NULL || !ctrl->isHidden() || mCurrentAddSet == NULL)
+		return;
+
+	bool inside = false;
+	for (GuiControl* walk = mCurrentAddSet; walk != NULL; walk = walk->getParent())
+	{
+		if (walk == ctrl)
+		{
+			inside = true;
+			break;
+		}
+		if (walk == mEditorRoot)
+			break;
+	}
+
+	if (!inside)
+		return;
+
+	// Up past anything else that is hidden. One hidden branch inside another is
+	// the case this loop is for.
+	GuiControl* newAddSet = ctrl->getParent();
+	while (newAddSet != NULL && newAddSet != mEditorRoot && newAddSet->isHidden())
+		newAddSet = newAddSet->getParent();
+
+	setCurrentAddSet(newAddSet != NULL ? newAddSet : mEditorRoot, false);
+}
+
 void GuiEditCtrl::setCurrentAddSet(GuiControl* ctrl, bool clearSelection)
 {
 	if (ctrl != mCurrentAddSet)
@@ -360,7 +415,6 @@ void GuiEditCtrl::addNewControl(GuiControl* ctrl)
 	mSelectedControls.push_back(ctrl);
 	Con::executef(this, 2, "onAddSelected", Con::getIntArg(ctrl->getId()));
 	//}
-	// undo
 	Con::executef(this, 2, "onAddNewCtrl", Con::getIntArg(ctrl->getId()));
 }
 
@@ -412,6 +466,21 @@ S32 GuiEditCtrl::getSizingHitKnobs(const Point2I& pt, const RectI& box)
 	return sizingNone;
 }
 
+// Whether the editor must leave this control's position and extent alone.
+//
+// Three different reasons that come to the same thing. isLocked is the padlock
+// the user turned on. isGeometryEditable is the control saying its parent
+// dictates its geometry - a tab page, a menu item - so that dragging it would
+// change a number something else overwrites on the next layout pass. And
+// isHidden is the eye: a control the editor does not draw offers nothing to take
+// hold of, so the eight sizing knobs it would otherwise keep - hit tested before
+// findHitControl ever runs, and drawn by nothing - would be invisible traps
+// straddling the edges of whatever the user was trying to reach behind it.
+static inline bool editGeometryFrozen(GuiControl* ctrl)
+{
+	return ctrl == NULL || ctrl->isHidden() || ctrl->isLocked() || !ctrl->isGeometryEditable();
+}
+
 void GuiEditCtrl::drawControlDecoration(GuiControl* ctrl, RectI& box, ColorI& outlineColor, ColorI& nutColor)
 {
 	S32 lx = box.point.x, rx = box.point.x + box.extent.x - 1;
@@ -438,8 +507,10 @@ void GuiEditCtrl::drawControlDecoration(GuiControl* ctrl, RectI& box, ColorI& ou
 			dglDrawRect(box, outlineColor);
 		}
 	}
-	else if (ctrl->isLocked())
+	else if (editGeometryFrozen(ctrl))
 	{
+		// An outline rather than eight handles, because there is nothing here to
+		// take hold of - see editGeometryFrozen.
 		box.inset(-1, -1);
 		dglDrawRect(box, strongestColor);
 		box.inset(-1,-1);
@@ -700,7 +771,10 @@ void GuiEditCtrl::getCursor(GuiCursor*& cursor, bool& showCursor, const GuiEvent
 	Point2I mousePos = globalToLocalCoord(lastGuiEvent.mousePoint);
 
 	// first see if we hit a sizing knob on the currently selected control...
-	if (mSelectedControls.size() == 1 && initCursors() == true)
+	// (a control whose geometry is not the editor's to change draws no knobs, so
+	// it must not promise a resize cursor over one either)
+	if (mSelectedControls.size() == 1 && initCursors() == true &&
+		!editGeometryFrozen(mSelectedControls.first()))
 	{
 		ctrl = mSelectedControls.first();
 		cext = ctrl->getExtent();
@@ -765,7 +839,10 @@ void GuiEditCtrl::onTouchDown(const GuiEvent& event)
 	mLastMousePos = globalToLocalCoord(event.mousePoint);
 
 	// first see if we hit a sizing knob on the currently selected control...
-	if (mSelectedControls.size() == 1)
+	// (none are drawn for a control whose geometry is not the editor's to change,
+	// so none can be hit either - otherwise the gesture starts, fires onPreEdit
+	// and records an undo step for a resize that never happens)
+	if (mSelectedControls.size() == 1 && !editGeometryFrozen(mSelectedControls.first()))
 	{
 		ctrl = mSelectedControls.first();
 		cext = ctrl->getExtent();
@@ -775,7 +852,6 @@ void GuiEditCtrl::onTouchDown(const GuiEvent& event)
 		if ((mSizingMode = (GuiEditCtrl::sizingModes)getSizingHitKnobs(mLastMousePos, box)) != 0)
 		{
 			mMouseDownMode = SizingSelection;
-			// undo
 			Con::executef(this, 2, "onPreEdit", Con::getIntArg(getSelectedSet().getId()));
 			return;
 		}
@@ -836,7 +912,6 @@ void GuiEditCtrl::onTouchDown(const GuiEvent& event)
 
 			// Set Mouse Mode
 			mMouseDownMode = MovingSelection;
-			// undo
 			Con::executef(this, 2, "onPreEdit", Con::getIntArg(getSelectedSet().getId()));
 		}
 	}
@@ -951,6 +1026,13 @@ void GuiEditCtrl::onTouchUp(const GuiEvent& event)
 		for (i = mCurrentAddSet->begin(); i != mCurrentAddSet->end(); i++)
 		{
 			GuiControl* ctrl = dynamic_cast<GuiControl*>(*i);
+
+			// A band is drawn across the canvas, and a hidden control is not on
+			// the canvas. This walks the children rather than hit testing them,
+			// so it is the one selection path findHitControl does not answer for.
+			if (ctrl == NULL || ctrl->isHidden())
+				continue;
+
 			Point2I upperL = globalToLocalCoord(ctrl->localToGlobalCoord(Point2I(0, 0)));
 			Point2I lowerR = upperL + ctrl->mBounds.extent - Point2I(1, 1);
 
@@ -968,7 +1050,6 @@ void GuiEditCtrl::onTouchUp(const GuiEvent& event)
 
 	// deliver post edit event if we've been editing
 	// note: paxorr: this may need to be moved earlier, if the selection has changed.
-	// undo
 	if (mMouseDownMode == SizingSelection || mMouseDownMode == MovingSelection)
 		Con::executef(this, 2, "onPostEdit", Con::getIntArg(getSelectedSet().getId()));
 
@@ -1018,8 +1099,8 @@ void GuiEditCtrl::onTouchDragged(const GuiEvent& event)
 
 		GuiControl* ctrl = mSelectedControls.first();
 
-		// can't resize a locked control
-		if (ctrl && ctrl->isLocked())
+		// can't resize a locked control, nor one whose parent owns its geometry
+		if (editGeometryFrozen(ctrl))
 			return;
 
 		Point2I ctrlPoint = mCurrentAddSet->globalToLocalCoord(event.mousePoint);
@@ -1091,8 +1172,8 @@ void GuiEditCtrl::onTouchDragged(const GuiEvent& event)
 
 		for (; i != mSelectedControls.end(); i++)
 		{
-			// skip locked controls
-			if ((*i)->isLocked())
+			// skip controls the editor may not move
+			if (editGeometryFrozen(*i))
 				continue;
 
 			if ((*i)->mBounds.point.x < minPos.x)
@@ -1118,8 +1199,8 @@ void GuiEditCtrl::onTouchDragged(const GuiEvent& event)
 			{
 				for (S32 i = 0; i < mSelectedControls.size(); i++)
 				{
-					// skip locked controls
-					if (mSelectedControls[i]->isLocked())
+					// skip controls the editor may not move
+					if (editGeometryFrozen(mSelectedControls[i]))
 						continue;
 
 					Point2I snapBackPoint(mSelectedControls[i]->mBounds.point.x, mDragBeginPoints[i].y);
@@ -1133,8 +1214,8 @@ void GuiEditCtrl::onTouchDragged(const GuiEvent& event)
 			{
 				for (S32 i = 0; i < mSelectedControls.size(); i++)
 				{
-					// skip locked controls
-					if (mSelectedControls[i]->isLocked())
+					// skip controls the editor may not move
+					if (editGeometryFrozen(mSelectedControls[i]))
 						continue;
 
 					Point2I snapBackPoint(mDragBeginPoints[i].x, mSelectedControls[i]->mBounds.point.y);
@@ -1187,14 +1268,39 @@ void GuiEditCtrl::moveSelectionToCtrl(GuiControl* newParent)
 		if (ctrl->getParent() == newParent)
 			continue;
 
-		// skip locked controls
-		if (ctrl->isLocked())
+		// skip locked controls, and hidden ones: this runs off a drag that
+		// moveSelection has already refused to move them with, so reparenting
+		// them here would change the one number the drag left alone
+		if (ctrl->isLocked() || ctrl->isHidden())
+			continue;
+
+		// skip controls that will not live there - a tab page outside a tab book
+		// is the case this exists for
+		if (!ctrl->canBeChildOf(newParent))
 			continue;
 
 		Point2I globalpos = ctrl->localToGlobalCoord(Point2I(0, 0));
 		newParent->addObject(ctrl);
 		Point2I newpos = ctrl->globalToLocalCoord(globalpos) + ctrl->mBounds.point;
-		ctrl->mBounds.set(newpos, ctrl->mBounds.extent);
+
+		// resize rather than a direct write to mBounds, which is what this was.
+		//
+		// Keeping the control under the pointer is right for the modes that own
+		// their position, and wrong for the two that do not: addObject has just
+		// centred or filled the control against its new parent, and writing
+		// mBounds threw that away. resize puts it back -- it forces center and
+		// fill itself, for exactly this reason -- so the control is correct the
+		// moment it arrives rather than on the next mouse move that happens to
+		// call resize for some other reason.
+		ctrl->resize(newpos, ctrl->mBounds.extent);
+
+		// addObject cleared the cached proportion of a scaled control and
+		// onChildAdded recaptured it -- but against the position the control
+		// arrived at, which the line above has just replaced with the one under
+		// the pointer. Clear it again so the recapture happens from where the
+		// control actually is; otherwise the next time this parent is resized the
+		// control jumps back to where the drag happened to enter it.
+		ctrl->resetStoredRelPos();
 	}
 
 	Con::executef(this, 2, "onSelectionParentChange", Con::getIntArg(newParent->getId()));
@@ -1224,7 +1330,6 @@ void GuiEditCtrl::moveAndSnapSelection(const Point2I& delta)
 {
 	// move / nudge gets a special callback so that multiple small moves can be
 	// coalesced into one large undo action.
-	// undo
 	Con::executef(this, 2, "onPreSelectionNudged", Con::getIntArg(getSelectedSet().getId()));
 
 	Vector<GuiControl*>::iterator i;
@@ -1236,7 +1341,6 @@ void GuiEditCtrl::moveAndSnapSelection(const Point2I& delta)
 		(*i)->resize(newPos, (*i)->mBounds.extent);
 	}
 
-	// undo
 	Con::executef(this, 2, "onPostSelectionNudged", Con::getIntArg(getSelectedSet().getId()));
 
 	// allow script to update the inspector
@@ -1247,21 +1351,19 @@ void GuiEditCtrl::moveAndSnapSelection(const Point2I& delta)
 void GuiEditCtrl::moveSelection(const Point2I& delta)
 {
 	// move / nudge gets a special callback so that multiple small moves can be
-   // coalesced into one large undo action.
-   // undo
+	// coalesced into one large undo action.
 	Con::executef(this, 2, "onPreSelectionNudged", Con::getIntArg(getSelectedSet().getId()));
 
 	Vector<GuiControl*>::iterator i;
 	for (i = mSelectedControls.begin(); i != mSelectedControls.end(); i++)
 	{
-		// skip locked controls
-		if ((*i)->isLocked())
+		// skip controls the editor may not move
+		if (editGeometryFrozen(*i))
 			continue;
 
 		(*i)->resize((*i)->mBounds.point + delta, (*i)->mBounds.extent);
 	}
 
-	// undo
 	Con::executef(this, 2, "onPostSelectionNudged", Con::getIntArg(getSelectedSet().getId()));
 
 	// allow script to update the inspector
@@ -1369,7 +1471,8 @@ void GuiEditCtrl::justifySelection(Justification j)
 
 void GuiEditCtrl::deleteSelection(void)
 {
-	// undo
+	// Before the move below, while each control still knows the parent and the
+	// index it would have to go back to.
 	Con::executef(this, 2, "onTrashSelection", Con::getIntArg(getSelectedSet().getId()));
 
 	Vector<GuiControl*>::iterator i;
@@ -1378,57 +1481,6 @@ void GuiEditCtrl::deleteSelection(void)
 		mTrash.addObject(*i);
 	}
 	mSelectedControls.clear();
-}
-
-void GuiEditCtrl::loadSelection(const char* filename)
-{
-	if (!mCurrentAddSet)
-		mCurrentAddSet = mEditorRoot;
-
-	Con::executef(2, "exec", filename);
-	SimSet* set;
-	if (!Sim::findObject("guiClipboard", set))
-		return;
-
-	if (set->size())
-	{
-		Con::executef(this, 1, "onClearSelected");
-		mSelectedControls.clear();
-		for (U32 i = 0; i < (U32)set->size(); i++)
-		{
-			GuiControl* ctrl = dynamic_cast<GuiControl*>((*set)[i]);
-			if (ctrl)
-			{
-				mCurrentAddSet->addObject(ctrl);
-				mSelectedControls.push_back(ctrl);
-				Con::executef(this, 2, "onAddSelected", Con::getIntArg(ctrl->getId()));
-			}
-		}
-		// Undo 
-		Con::executef(this, 2, "onAddNewCtrlSet", Con::getIntArg(getSelectedSet().getId()));
-	}
-	set->deleteObject();
-}
-
-void GuiEditCtrl::saveSelection(const char* filename)
-{
-	// if there are no selected objects, then don't save
-	if (mSelectedControls.size() == 0)
-		return;
-
-	FileStream stream;
-	if (!ResourceManager->openFileForWrite(stream, filename))
-		return;
-	SimSet* clipboardSet = new SimSet;
-	clipboardSet->registerObject();
-	Sim::getRootGroup()->addObject(clipboardSet, "guiClipboard");
-
-	Vector<GuiControl*>::iterator i;
-	for (i = mSelectedControls.begin(); i != mSelectedControls.end(); i++)
-		clipboardSet->addObject(*i);
-
-	clipboardSet->write(stream, 0);
-	clipboardSet->deleteObject();
 }
 
 void GuiEditCtrl::selectAll()
@@ -1456,9 +1508,10 @@ void GuiEditCtrl::selectAll()
 	}
 }
 
+// No callback: the Layout menu is the only way in, and the Gui Editor's script
+// records around its own command (GuiEditor::BringToFront).
 void GuiEditCtrl::bringToFront()
 {
-	// undo
 	if (mSelectedControls.size() != 1)
 		return;
 
@@ -1466,9 +1519,9 @@ void GuiEditCtrl::bringToFront()
 	mCurrentAddSet->pushObjectToBack(ctrl);
 }
 
+// As above: recorded by GuiEditor::PushToBack.
 void GuiEditCtrl::pushToBack()
 {
-	// undo
 	if (mSelectedControls.size() != 1)
 		return;
 
@@ -1544,13 +1597,11 @@ void GuiEditCtrl::setSnapToGrid(U32 gridsize)
 
 void GuiEditCtrl::controlInspectPreApply(GuiControl* object)
 {
-	// undo
 	Con::executef(this, 2, "onControlInspectPreApply", Con::getIntArg(object->getId()));
 }
 
 void GuiEditCtrl::controlInspectPostApply(GuiControl* object)
 {
-	// undo
 	Con::executef(this, 2, "onControlInspectPostApply", Con::getIntArg(object->getId()));
 }
 

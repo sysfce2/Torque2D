@@ -91,9 +91,9 @@ function AssetImageLayersEditRow::onAdd(%this)
 
 	if(%this.LayerIndex > 0)
 	{
-		%this.buttonBar.addButton("MoveLayerUp", 2, "Move Layer Up", "getMoveLayerUpEnabled");
-		%this.buttonBar.addButton("MoveLayerDown", 6, "Move Layer Down", "getMoveLayerDownEnabled");
-		%this.buttonBar.addButton("RemoveLayer", 23, "Remove Layer", "");
+		%this.buttonBar.addButton("MoveLayerUp", $EditorIcon::arrow_top, "Move Layer Up", "getMoveLayerUpEnabled");
+		%this.buttonBar.addButton("MoveLayerDown", $EditorIcon::arrow_bottom, "Move Layer Down", "getMoveLayerDownEnabled");
+		%this.buttonBar.addButton("RemoveLayer", $EditorIcon::round_delete, "Remove Layer", "");
 	}
 	else
 	{

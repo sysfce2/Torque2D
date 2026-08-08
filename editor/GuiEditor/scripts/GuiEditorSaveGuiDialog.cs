@@ -100,9 +100,11 @@ function GuiEditorSaveGuiDialog::init(%this, %width, %height)
 	%this.validate();
 }
 
+// Grey the Save button until the form can be saved, and say why in the feedback
+// line either way. Every return below is a reason not to.
 function GuiEditorSaveGuiDialog::Validate(%this)
 {
-	%this.createButton.active = false;
+	%this.saveButton.setActive(false);
 
 	%folderPath = %this.getFolderPath();
 	%guiName = %this.guiNameBox.getText();
@@ -156,14 +158,34 @@ function GuiEditorSaveGuiDialog::Validate(%this)
 	}
 	if(isFile(%filePath))
 	{
-		%this.createButton.active = true;
-		%this.feedback.setText("A file by this name already exists. It will be overwritten.");
+		%this.saveButton.setActive(true);
+		%this.feedback.setText(%this.withFormatWarning(
+			"A file by this name already exists. It will be overwritten."));
 		return true;
 	}
 
-	%this.createButton.active = true;
-	%this.feedback.setText("A new Gui file will be created!");
+	%this.saveButton.setActive(true);
+	%this.feedback.setText(%this.withFormatWarning("A new Gui file will be created!"));
 	return true;
+}
+
+// The .gui script format writes fields and child objects and nothing else, so
+// anything a control keeps as TAML custom nodes goes missing. A warning rather
+// than a refusal: the format is still the right answer for a Gui that holds none
+// of it, and which of the two to save in is the user's call. Saying which
+// controls are affected is what makes it actionable.
+function GuiEditorSaveGuiDialog::withFormatWarning(%this, %text)
+{
+	if(%this.guiFormatDropDown.getSelectedItem() != 0)
+	{
+		return %text;
+	}
+
+	%warning = GuiEditor.tamlOnlyStateSummary();
+
+	// "\n\n" rather than NL NL: NL is a binary operator, so two of them in a row
+	// have nothing between them and will not parse.
+	return (%warning $= "") ? %text : (%text @ "\n\n" @ %warning);
 }
 
 function GuiEditorSaveGuiDialog::onSave(%this)
@@ -176,6 +198,23 @@ function GuiEditorSaveGuiDialog::onSave(%this)
 
 		%this.onClose();
 	}
+}
+
+// The Cancel button and the window X both land here, and so does onSave once the
+// file is written. Only the first two mean anything was called off, and by the
+// time the third arrives SaveCore has already released what it was holding - so
+// dropping it here is a no-op on that path and the answer on the other two.
+//
+// This is the far end of the unsaved-changes prompt's Save button: the user said
+// save-then-carry-on, changed their mind about the file name, and must not find
+// the editor carrying on anyway with nothing written.
+function GuiEditorSaveGuiDialog::onClose(%this)
+{
+	GuiEditor.dropPendingCommand();
+
+	Canvas.popDialog(%this);
+	EditorCore.dialog = %this;
+	EditorCore.schedule(100, "deleteDialog");
 }
 
 function GuiEditorSaveGuiDialog::onFolderOpened(%this, %textBox)

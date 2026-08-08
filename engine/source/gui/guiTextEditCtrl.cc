@@ -45,7 +45,7 @@ GuiTextEditTextBlock::GuiTextEditTextBlock()
     mLineStartIbeamValue = 0;
 }
 
-void GuiTextEditTextBlock::render(const RectI& bounds, string line, U32 ibeamStartValue, GuiControlProfile* profile, GuiControlState currentState, GuiTextEditSelection& selector, AlignmentType align, GFont* font, bool overrideFontColor)
+void GuiTextEditTextBlock::render(const RectI& bounds, string line, U32 ibeamStartValue, GuiControlProfile* profile, GuiControlState currentState, GuiTextEditSelection& selector, AlignmentType align, GFont* font, bool isLastLine, bool overrideFontColor)
 {
     mGlobalBounds.set(bounds.point, bounds.extent);
     mText.assign(line);
@@ -69,7 +69,7 @@ void GuiTextEditTextBlock::render(const RectI& bounds, string line, U32 ibeamSta
     }
 
     Point2I textStartPoint = getGlobalTextStart();
-    if (selector.renderIbeam(textStartPoint, mGlobalBounds.extent, line, mLineStartIbeamValue, mLineStartIbeamValue + line.length(), profile, font))
+    if (selector.renderIbeam(textStartPoint, mGlobalBounds.extent, line, mLineStartIbeamValue, mLineStartIbeamValue + line.length(), isLastLine, profile, font))
     {
         Point2I cursorCenter = selector.getCursorCenter();
         performScrollJumpX(cursorCenter.x, clipRect.point.x, clipRect.point.x + clipRect.extent.x);
@@ -173,29 +173,56 @@ void GuiTextEditTextBlock::processTextAlignment(const string line, GFont* font, 
 #pragma endregion
 
 #pragma region GuiTextEditSelection
+// In declaration order, and every member once, so that a missing one shows.
+// mBlockAnchor and mTextLength used to be missing, and mTextLength is the one
+// every caret move clamps against: a caret could be placed anywhere at all in a
+// box whose text had never been typed or clicked into, because the bound it was
+// checked against was whatever had last used the memory.
 GuiTextEditSelection::GuiTextEditSelection()
 {
+    mBlockAnchor = 0;
     mBlockStart = 0;
     mBlockEnd = 0;
     mCursorPos = 0;
-    mCursorOn = false;
-    mNumFramesElapsed = 0;
     mCursorAtEOL = false;
     mIsFirstResponder = false;
     mGlobalUnadjustedCursorRect.set(0, 0, 0, 0);
     mCursorRendered = false;
+    mTextLength = 0;
 
     mNumFramesElapsed = 0;
     mTimeLastCursorFlipped = 0;
     mCursorOn = false;
 }
 
-bool GuiTextEditSelection::renderIbeam(const Point2I& startPoint, const Point2I& extent, const string line, const U32 start, const U32 end, GuiControlProfile* profile, GFont* font)
+// Whether this line draws the caret. The caret is a position BETWEEN two
+// characters, so the seam between two lines is one position with two homes --
+// the end of the line above and the start of the line below -- and mCursorAtEOL
+// says which of them it is. Exactly one line may answer yes, or the box blinks
+// two carets at once.
+//
+// A seam needs both its lines to exist. The first line is recognizable on its
+// own -- only it starts at 0 -- but the last one is not, because a line can end
+// at the end of the text without being last: that is precisely what a trailing
+// return makes, a line ending at the text's end followed by the empty line the
+// caret has just moved to. So the caller says which line is last. Reading it
+// off mCursorPos instead is what drew the second caret.
+bool GuiTextEditSelection::isIbeamOnLine(const U32 start, const U32 end, const bool isLastLine) const
 {
     if (!mIsFirstResponder || !mCursorOn ||
-        (mCursorAtEOL && mCursorPos == start && mCursorPos != 0) ||
-        (!mCursorAtEOL && mCursorPos == end && mCursorPos != mTextLength) ||
+        (mCursorAtEOL && mCursorPos == start && start != 0) ||
+        (!mCursorAtEOL && mCursorPos == end && !isLastLine) ||
         (mCursorPos < start || mCursorPos > end))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+bool GuiTextEditSelection::renderIbeam(const Point2I& startPoint, const Point2I& extent, const string line, const U32 start, const U32 end, const bool isLastLine, GuiControlProfile* profile, GFont* font)
+{
+    if (!isIbeamOnLine(start, end, isLastLine))
     {
         return false;
     }
@@ -528,6 +555,13 @@ void GuiTextEditCtrl::setText( const UTF8 *txt )
     }
     else
         mTextBuffer.clear();
+
+    // Every caret move clamps to the length the selection was last told, and
+    // every other path that changes the text is a keystroke or a click that
+    // says so itself. This is the one that isn't -- it is how a control loaded
+    // from TAML gets its text -- so without this a box could answer setCursorPos
+    // with a position outside the text it is holding.
+    mSelector.setTextLength(mTextBuffer.length());
 
     setVariable(mTextBuffer.c_str());
 }
@@ -867,6 +901,10 @@ void GuiTextEditCtrl::onUndo()
 
     mUndoText = tempText;
     mUndoSelector = tempSelector;
+
+    // Every other path that changes the buffer reports it, so a Command
+    // watching the box live would have gone quiet on ctrl+Z alone.
+    execConsoleCallback();
 }
 
 bool GuiTextEditCtrl::onKeyDown(const GuiEvent &event)
@@ -1082,7 +1120,7 @@ void GuiTextEditCtrl::renderLineList(const Point2I& offset, const Point2I& exten
         {
             dglSetBitmapModulation(getFontColor(profile, NormalState));
         }
-        mTextBlockList[i].render(blockBounds, lineList[i], ibeamPos, mProfile, getCurrentState(), mSelector, getAlignmentType(), font, mOverrideFontColor);
+        mTextBlockList[i].render(blockBounds, lineList[i], ibeamPos, mProfile, getCurrentState(), mSelector, getAlignmentType(), font, (i == (lineList.size() - 1)), mOverrideFontColor);
 
         offsetY += textHeight;
         ibeamPos += lineList[i].length();
@@ -1614,6 +1652,17 @@ bool GuiTextEditCtrl::handleEscapeKey()
 
 bool GuiTextEditCtrl::handleEnterKey()
 {
+    // Wrapping is what makes this control multi-line -- it is the flag that
+    // decides whether the text is one line or a paragraph -- so in a wrapped
+    // box return is a line break rather than "I am done with this field".
+    // It takes precedence over returnCommand and returnCausesTab, which are
+    // how a single-line box ends an edit; a box with a paragraph in it ends
+    // its edit by losing focus.
+    if (mTextWrap)
+    {
+        return insertNewLine();
+    }
+
     if (isMethod("onReturn"))
         Con::executef(this, 1, "onReturn");
 
@@ -1636,6 +1685,43 @@ bool GuiTextEditCtrl::handleEnterKey()
 		}
 	}
 
+    return true;
+}
+
+// A newline goes in the buffer directly rather than through
+// handleCharacterInput: the font has no glyph for it, so isValidChar would
+// refuse it, and no InputMode has an opinion about it worth honouring -- a
+// Number-only box is single-line and never reaches this.
+bool GuiTextEditCtrl::insertNewLine()
+{
+    saveUndoState();
+
+    if (mSelector.hasSelection())
+    {
+        mSelector.eraseSelection(mTextBuffer);
+    }
+
+    if (mTextBuffer.length() >= mMaxStrLen)
+    {
+        keyDenied();
+        return true;
+    }
+
+    // Always an insert, never an overwrite: there is no character in a line
+    // break for insert-off mode to replace.
+    mTextBuffer.insert(mSelector.getCursorPos(), "\n");
+    mSelector.setTextLength(mTextBuffer.length());
+    mSelector.stepCursorForward();
+
+    // The caret has just moved to the start of the new line, which is the far
+    // side of a seam it may have been sitting on: a click at the end of a line
+    // leaves the end-of-line flag set, and left set it would draw the caret on
+    // the line the user has just left.
+    mSelector.setCursorAtEOL(false);
+
+    setText(mTextBuffer);
+
+    execConsoleCallback();
     return true;
 }
 

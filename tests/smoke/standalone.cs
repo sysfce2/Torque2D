@@ -63,6 +63,18 @@ function dropdownOffers(%ctrl, %text)
     return false;
 }
 
+// Bind the Gui Editor's properties pane to a control and ask what its Profile
+// picker offers. This used to read the native GuiInspector's dropdown, which
+// listed every named profile in the sim; the pane offers the candidates for the
+// control's category instead, so the question is the same but the place to ask
+// it moved.
+function paneOffers(%ctrl, %text)
+{
+    %pane = GuiEditor.inspectorWindow.pane;
+    %pane.bind(%ctrl);
+    return dropdownOffers(%pane.header.profileRow.editor, %text);
+}
+
 function previewSampleClass(%dialog, %index)
 {
     %stage = %dialog.preview.stage;
@@ -277,16 +289,27 @@ function reproStep5()
         Extent = "100 30";
         Text = "Probe";
     };
-    GuiEditor.inspectorWindow.inspector.inspect(%button);
+    // RubySwitch is stamped for the Button category, which is what a
+    // GuiButtonCtrl's own Profile slot asks for, so it is a candidate.
+    smokeCheck("pane offers the standalone profile",
+        paneOffers(%button, "RubySwitch"));
 
-    smokeCheck("inspector offers a known engine profile",
-        dropdownOffers(GuiEditor.inspectorWindow.inspector, "GuiDefaultProfile"));
-    smokeCheck("inspector offers the standalone profile",
-        dropdownOffers(GuiEditor.inspectorWindow.inspector, "RubySwitch"));
-    smokeCheck("inspector offers the migrated legacy profile",
-        dropdownOffers(GuiEditor.inspectorWindow.inspector, "LegacyProfile"));
+    // LegacyProfile carries no category at all -- what the Profile Editor shows
+    // as "Any". Those are offered as a control's main profile (the slot exists
+    // regardless, so listing one costs nothing) but never make a secondary
+    // Variants slot appear, which is the rule that keeps one uncategorised
+    // profile from sprouting a row on every slot of every control.
+    smokeCheck("pane offers the uncategorised legacy profile",
+        paneOffers(%button, "LegacyProfile"));
 
-    GuiEditor.inspectorWindow.inspector.clear();
+    // Deliberately NOT offered any more. GuiDefaultProfile is a script profile,
+    // neither a theme member nor a standalone the editor manages; the old
+    // inspector listed every named profile in the sim, which is the flat
+    // several-hundred-entry dropdown the pane exists to replace.
+    smokeCheck("pane does not offer a bare script profile",
+        !paneOffers(%button, "GuiDefaultProfile"));
+
+    GuiEditor.inspectorWindow.pane.unbind();
     %button.delete();
 
     // Reopen for the delete pass, and give the profile a custom border first:
@@ -351,12 +374,11 @@ function reproStep7()
         Extent = "100 30";
         Text = "Probe";
     };
-    GuiEditor.inspectorWindow.inspector.inspect(%button);
-    smokeCheck("inspector no longer offers the deleted profile",
-        !dropdownOffers(GuiEditor.inspectorWindow.inspector, "RubySwitch"));
-    smokeCheck("inspector still offers the surviving profile",
-        dropdownOffers(GuiEditor.inspectorWindow.inspector, "LegacyProfile"));
-    GuiEditor.inspectorWindow.inspector.clear();
+    smokeCheck("pane no longer offers the deleted profile",
+        !paneOffers(%button, "RubySwitch"));
+    smokeCheck("pane still offers the surviving profile",
+        paneOffers(%button, "LegacyProfile"));
+    GuiEditor.inspectorWindow.pane.unbind();
     %button.delete();
 
     %names = "RubyButton" TAB "RubySwitch" TAB "LegacyProfile";

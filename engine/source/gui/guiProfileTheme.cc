@@ -325,6 +325,37 @@ static void stampCondenserDarkBorder(GuiProfileTheme* theme, GuiBorderProfile* b
     applyBorderRecipe(border, recipe);
 }
 
+static void stampSelectedInsetBorder(GuiProfileTheme* theme, GuiBorderProfile* border)
+{
+    // A padded inset in three states and a rule in the fourth. The odd one out is
+    // SELECTED, and it is deliberate: a menu separator is drawn as the menu item
+    // profile in its selected state and nothing else in a menu ever uses that
+    // state (hover is Highlight, greyed is Disabled), so the SL fields of a menu
+    // item's borders belong to separators alone. One border therefore gives a
+    // theme both the room around a label and the groove between two groups of
+    // them, which is why this is what a generated MenuItem wears.
+    //
+    // The margin is what makes it a groove rather than a band. A separator's
+    // height is nothing but this border's margin, rim and padding
+    // (GuiMenuListCtrl::updateSize measures it with a zero-height interior), so
+    // dropping the padding to 0 and giving it 4 of margin buys 4px of the menu's
+    // own fill above and below a 2px rule.
+    BorderRecipe recipe = baseBorderRecipe(theme);
+    set4(recipe.margin, 0, 0, 4, 0);
+    set4(recipe.border, 0, 0, 1, 0);
+    set4(recipe.borderColor, theme->getColorSurface());
+    set4(recipe.padding, 10, 10, 0, 10);
+    recipe.underfill = true;
+
+    // Alone among the recipes, not scaled by the theme's border size. This rim is
+    // a rule between two groups of commands rather than the edge of a control: at
+    // borderSize 0 it would vanish and the menu would lose its grouping, and at 2
+    // or 3 it would thicken into a band.
+    recipe.borderScale = 1;
+
+    applyBorderRecipe(border, recipe);
+}
+
 //-----------------------------------------------------------------------------
 // Profile recipes. Every profile starts from the Default recipe and overrides
 // what its category needs; borders are wired to the theme's border members.
@@ -793,7 +824,12 @@ static void stampMenuItemProfile(GuiProfileTheme* theme, GuiControlProfile* prof
     STAMP_FIELD(profile, "fontColorHL", mFontColorHL, adj(text, 10));
     STAMP_FIELD(profile, "fontColorNA", mFontColorNA, alphaOf(text, 150));
     STAMP_FIELD(profile, "align", mAlignment, AlignmentType::LeftAlign);
-    stampProfileBorders(theme, profile, "Padded", NULL, NULL, NULL, NULL);
+    // Top and bottom take SelectedInset, so a new theme's menus arrive with
+    // separators that read as separators. The sides are held back from it and
+    // given the same inset with no state to it: were they to fall through, a
+    // separator would pick up the 4px margin and the rim at each end too, capping
+    // the rule with a tick rather than running it the width of the menu.
+    stampProfileBorders(theme, profile, "SelectedInset", "Padded", "Padded", NULL, NULL);
 }
 
 static void stampMenuContentProfile(GuiProfileTheme* theme, GuiControlProfile* profile)
@@ -897,6 +933,22 @@ static void stampDragAndDropProfile(GuiProfileTheme* theme, GuiControlProfile* p
 }
 
 //-----------------------------------------------------------------------------
+// Cursor recipe. There is only the one: a pointer is the mouse's equivalent of
+// text and wants the same contrast against the background, so every cursor in a
+// theme takes the foreground color and the set reads as a set. Anything else is
+// a per-cursor override, which costs one click in the editor.
+//
+// This tints art that is deliberately grayscale - black outline, white body -
+// so the body takes the color and the outline stays put. A theme that brings
+// its own colored art sets the tint to white and this stops mattering.
+//-----------------------------------------------------------------------------
+
+static void stampCursor(GuiProfileTheme* theme, GuiCursor* cursor)
+{
+    STAMP_FIELD(cursor, "color", mColor, theme->getColorForeground());
+}
+
+//-----------------------------------------------------------------------------
 // The engine-defined category tables: the canonical set of profiles a
 // complete theme provides, one entry per profile slot the stock GuiControls
 // consume. Adding a control with a new slot means adding its category here.
@@ -963,8 +1015,32 @@ const GuiProfileTheme::BorderCategory GuiProfileTheme::smBorderCategories[] =
     { "RimmedExpander", "RimmedExpanderBorder", stampRimmedExpanderBorder },
     { "CondenserLight", "CondenserLightBorder", stampCondenserLightBorder },
     { "CondenserDark",  "CondenserDarkBorder",  stampCondenserDarkBorder },
+    { "SelectedInset",  "SelectedInsetBorder",  stampSelectedInsetBorder },
 };
 const S32 GuiProfileTheme::smBorderCategoryCount = sizeof(smBorderCategories) / sizeof(smBorderCategories[0]);
+
+// The seven cursors the engine can ask for by name.
+//
+// The placement values started as the ones AppCore's hand-written cursors had
+// always used and are now what came back from actually aiming them in the
+// hot-spot editor -- which is the point of having built it. Five of the seven
+// moved: the resize cursors want their crosshair centred on the pointer rather
+// than a pixel down and right of it, and the two bars want one pixel of lift so
+// the gap between their arrowheads straddles the edge being dragged.
+//
+// A "0" hot spot with a centred anchor is not a missing value: the anchor does
+// the placing, and the nudge is only what the anchor cannot express.
+const GuiProfileTheme::CursorCategory GuiProfileTheme::smCursorCategories[] =
+{
+    { "Default",   "DefaultCursor",   "defaultCursor.png", 1,  1, 0.0f, 0.0f, stampCursor },
+    { "Edit",      "EditCursor",      "ibeam.png",         0,  0, 0.5f, 0.5f, stampCursor },
+    { "Move",      "MoveCursor",      "move.png",          0,  0, 0.5f, 0.5f, stampCursor },
+    { "LeftRight", "LeftRightCursor", "leftRight.png",     0, -1, 0.5f, 0.5f, stampCursor },
+    { "UpDown",    "UpDownCursor",    "upDown.png",        0, -1, 0.5f, 0.5f, stampCursor },
+    { "NWSE",      "NWSECursor",      "NWSE.png",          0,  0, 0.5f, 0.5f, stampCursor },
+    { "NESW",      "NESWCursor",      "NESW.png",          0,  0, 0.5f, 0.5f, stampCursor },
+};
+const S32 GuiProfileTheme::smCursorCategoryCount = sizeof(smCursorCategories) / sizeof(smCursorCategories[0]);
 
 //-----------------------------------------------------------------------------
 
@@ -976,6 +1052,7 @@ GuiProfileTheme::GuiProfileTheme()
     mFontTitle = StringTable->insert("Arial");
     mFontCode = StringTable->insert("Courier New");
     mFontDirectory = StringTable->EmptyString;
+    mCursorDirectory = StringTable->EmptyString;
     mFontSize = 12;
 
     // Semantic dark palette. Every profile fill/border is derived from these six
@@ -998,6 +1075,10 @@ GuiProfileTheme::GuiProfileTheme()
     mDefaultBorders.setSize(smBorderCategoryCount);
     for (S32 i = 0; i < smBorderCategoryCount; ++i)
         mDefaultBorders[i] = NULL;
+
+    mDefaultCursors.setSize(smCursorCategoryCount);
+    for (S32 i = 0; i < smCursorCategoryCount; ++i)
+        mDefaultCursors[i] = NULL;
 }
 
 void GuiProfileTheme::initPersistFields()
@@ -1022,6 +1103,13 @@ void GuiProfileTheme::initPersistFields()
     endGroup("Colors");
 
     addField("borderSize", TypeS32, Offset(mBorderSize, GuiProfileTheme));
+
+    // Where this theme's own cursor art lives, relative to the game root. Each
+    // theme gets its own folder so two themes can carry dramatically different
+    // cursors without one overwriting the other's files. Filled by whoever
+    // seeds the art (the Profile Editor, or AppCore for the stock theme); a
+    // theme that names none simply has cursors with no bitmap yet.
+    addField("cursorDirectory", TypeString, Offset(mCursorDirectory, GuiProfileTheme));
 }
 
 bool GuiProfileTheme::onAdd()
@@ -1045,6 +1133,19 @@ void GuiProfileTheme::onRemove()
 
     while (mExtraBorders.size() > 0)
         mExtraBorders.last()->deleteObject();
+
+    while (mExtraCursors.size() > 0)
+        mExtraCursors.last()->deleteObject();
+
+    for (S32 i = 0; i < smCursorCategoryCount; ++i)
+    {
+        if (mDefaultCursors[i] != NULL)
+        {
+            GuiCursor* cursor = mDefaultCursors[i];
+            mDefaultCursors[i] = NULL;
+            cursor->deleteObject();
+        }
+    }
 
     for (S32 i = 0; i < smProfileCategoryCount; ++i)
     {
@@ -1112,6 +1213,21 @@ void GuiProfileTheme::onDeleteNotify(SimObject* object)
             mDefaultBorders[i] = NULL;
     }
 
+    for (S32 i = 0; i < mExtraCursors.size(); ++i)
+    {
+        if (mExtraCursors[i] == object)
+        {
+            mExtraCursors.erase(i);
+            break;
+        }
+    }
+
+    for (S32 i = 0; i < smCursorCategoryCount; ++i)
+    {
+        if (mDefaultCursors[i] == object)
+            mDefaultCursors[i] = NULL;
+    }
+
     Parent::onDeleteNotify(object);
 }
 
@@ -1155,6 +1271,40 @@ S32 GuiProfileTheme::findBorderCategoryIndex(StringTableEntry categoryName)
     return -1;
 }
 
+StringTableEntry GuiProfileTheme::getCursorCategoryName(S32 index)
+{
+    if (index < 0 || index >= smCursorCategoryCount)
+        return NULL;
+
+    return StringTable->insert(smCursorCategories[index].name);
+}
+
+S32 GuiProfileTheme::findCursorCategoryIndex(StringTableEntry categoryName)
+{
+    for (S32 i = 0; i < smCursorCategoryCount; ++i)
+    {
+        if (StringTable->insert(smCursorCategories[i].name) == categoryName)
+            return i;
+    }
+    return -1;
+}
+
+const char* GuiProfileTheme::getCursorStockFile(S32 index)
+{
+    if (index < 0 || index >= smCursorCategoryCount)
+        return "";
+
+    return smCursorCategories[index].stockFile;
+}
+
+const char* GuiProfileTheme::getCursorCanonicalName(S32 index)
+{
+    if (index < 0 || index >= smCursorCategoryCount)
+        return "";
+
+    return smCursorCategories[index].suffix;
+}
+
 //-----------------------------------------------------------------------------
 // Members.
 //-----------------------------------------------------------------------------
@@ -1180,6 +1330,12 @@ GuiBorderProfile* GuiProfileTheme::getBorder(StringTableEntry categoryName) cons
 {
     const S32 index = findBorderCategoryIndex(categoryName);
     return (index >= 0) ? mDefaultBorders[index] : NULL;
+}
+
+GuiCursor* GuiProfileTheme::getCursor(StringTableEntry categoryName) const
+{
+    const S32 index = findCursorCategoryIndex(categoryName);
+    return (index >= 0) ? mDefaultCursors[index] : NULL;
 }
 
 GuiControlProfile* GuiProfileTheme::createMemberProfile(S32 categoryIndex, const char* objectName)
@@ -1234,6 +1390,63 @@ GuiBorderProfile* GuiProfileTheme::createMemberBorder(S32 categoryIndex)
     deleteNotify(border);
 
     return border;
+}
+
+GuiCursor* GuiProfileTheme::createMemberCursor(S32 categoryIndex, const char* objectName)
+{
+    const CursorCategory& category = smCursorCategories[categoryIndex];
+
+    GuiCursor* cursor = new GuiCursor();
+
+    char nameBuffer[256];
+    if (objectName == NULL && getName() != NULL && *getName() != '\0')
+    {
+        dSprintf(nameBuffer, sizeof(nameBuffer), "%s%s", getName(), category.suffix);
+        objectName = nameBuffer;
+    }
+    if (objectName != NULL && *objectName != '\0')
+        cursor->assignName(objectName);
+
+    if (!cursor->registerObject())
+    {
+        delete cursor;
+        return NULL;
+    }
+
+    cursor->mCategory = StringTable->insert(category.name);
+
+    // Placement comes from the table and belongs to the art, so it is set here
+    // rather than stamped -- a restamp must never move a hot spot the user
+    // tuned. setTheme comes after, so these writes are not seen as overrides.
+    cursor->setHotSpot(Point2I(category.hotSpotX, category.hotSpotY));
+    cursor->setRenderOffset(Point2F(category.renderOffsetX, category.renderOffsetY));
+
+    cursor->setTheme(this);
+    fillCursorArt(cursor, categoryIndex);
+    deleteNotify(cursor);
+
+    return cursor;
+}
+
+void GuiProfileTheme::fillCursorArt(GuiCursor* cursor, S32 categoryIndex)
+{
+    if (cursor == NULL || mCursorDirectory == NULL || *mCursorDirectory == '\0')
+        return;
+
+    // Only ever fills a blank. A cursor pointed at the user's own art keeps it
+    // through every restamp, which is the whole difference between art and the
+    // derived fields around it.
+    const StringTableEntry current = cursor->getBitmapName();
+    if (current != NULL && *current != '\0')
+        return;
+
+    char pathBuffer[1024];
+    dSprintf(pathBuffer, sizeof(pathBuffer), "%s/%s", mCursorDirectory, smCursorCategories[categoryIndex].stockFile);
+
+    // Through setDataField so TypeFilename expands it: the directory is stored
+    // relative to the game root, and the texture manager wants a real path.
+    // GuiCursor treats bitmapName as art, so this does not mark an override.
+    cursor->setDataField(StringTable->insert("bitmapName"), NULL, pathBuffer);
 }
 
 GuiControlProfile* GuiProfileTheme::createProfile(const char* categoryName, const char* objectName)
@@ -1323,6 +1536,58 @@ bool GuiProfileTheme::removeBorder(GuiBorderProfile* border)
     return false;
 }
 
+// An extra cursor belongs to a category, exactly as an extra profile does: a
+// theme with two "Default" cursors is offering a choice between two pointers,
+// which is the case the Gui Editor shows a cursor slot for. It starts on the
+// category's stock art; the editor gives it a copy of its own to edit.
+GuiCursor* GuiProfileTheme::createCursor(const char* categoryName, const char* objectName)
+{
+    const S32 categoryIndex = findCursorCategoryIndex(StringTable->insert(categoryName));
+    if (categoryIndex < 0)
+    {
+        Con::warnf("GuiProfileTheme::createCursor() - unknown category '%s'.", categoryName);
+        return NULL;
+    }
+
+    // Generate <ThemeName><Suffix><N> when no name is given.
+    char nameBuffer[256];
+    if ((objectName == NULL || *objectName == '\0') && getName() != NULL && *getName() != '\0')
+    {
+        for (S32 n = 2; n < 1000000; ++n)
+        {
+            dSprintf(nameBuffer, sizeof(nameBuffer), "%s%s%d", getName(), smCursorCategories[categoryIndex].suffix, n);
+            if (Sim::findObject(nameBuffer) == NULL)
+                break;
+        }
+        objectName = nameBuffer;
+    }
+
+    GuiCursor* cursor = createMemberCursor(categoryIndex, objectName);
+    if (cursor == NULL)
+        return NULL;
+
+    mExtraCursors.push_back(cursor);
+    smCursorCategories[categoryIndex].stamp(this, cursor);
+
+    return cursor;
+}
+
+bool GuiProfileTheme::removeCursor(GuiCursor* cursor)
+{
+    for (S32 i = 0; i < mExtraCursors.size(); ++i)
+    {
+        if (mExtraCursors[i] == cursor)
+        {
+            // Deletion notifies us back and erases the list entry.
+            cursor->deleteObject();
+            return true;
+        }
+    }
+
+    // Default members are never removed: a theme is always complete.
+    return false;
+}
+
 bool GuiProfileTheme::renameTheme(const char* newName)
 {
     if (!isProperlyAdded())
@@ -1375,6 +1640,15 @@ bool GuiProfileTheme::renameTheme(const char* newName)
         renames.push_back(rename);
     }
 
+    for (S32 i = 0; i < smCursorCategoryCount; ++i)
+    {
+        if (mDefaultCursors[i] == NULL)
+            continue;
+        dSprintf(nameBuffer, sizeof(nameBuffer), "%s%s", newName, smCursorCategories[i].suffix);
+        PendingRename rename = { mDefaultCursors[i], StringTable->insert(nameBuffer) };
+        renames.push_back(rename);
+    }
+
     // Extras rename only when they follow the <ThemeName>... pattern.
     for (S32 i = 0; i < mExtraProfiles.size(); ++i)
     {
@@ -1383,6 +1657,16 @@ bool GuiProfileTheme::renameTheme(const char* newName)
             continue;
         dSprintf(nameBuffer, sizeof(nameBuffer), "%s%s", newName, extraName + oldNameLength);
         PendingRename rename = { mExtraProfiles[i], StringTable->insert(nameBuffer) };
+        renames.push_back(rename);
+    }
+
+    for (S32 i = 0; i < mExtraCursors.size(); ++i)
+    {
+        const char* extraName = mExtraCursors[i]->getName();
+        if (!hasOldName || extraName == NULL || dStrncmp(extraName, oldName, oldNameLength) != 0)
+            continue;
+        dSprintf(nameBuffer, sizeof(nameBuffer), "%s%s", newName, extraName + oldNameLength);
+        PendingRename rename = { mExtraCursors[i], StringTable->insert(nameBuffer) };
         renames.push_back(rename);
     }
 
@@ -1487,6 +1771,31 @@ void GuiProfileTheme::restamp()
         if (categoryIndex >= 0)
             smProfileCategories[categoryIndex].stamp(this, mExtraProfiles[i]);
     }
+
+    // Cursors. fillCursorArt runs on every pass rather than only at creation:
+    // a theme usually learns where its cursor folder is after its members
+    // already exist (the editor names the folder once the theme has a name),
+    // and it is also what re-points a member whose art went missing.
+    for (S32 i = 0; i < smCursorCategoryCount; ++i)
+    {
+        if (mDefaultCursors[i] == NULL)
+            mDefaultCursors[i] = createMemberCursor(i, NULL);
+        if (mDefaultCursors[i] != NULL)
+        {
+            fillCursorArt(mDefaultCursors[i], i);
+            smCursorCategories[i].stamp(this, mDefaultCursors[i]);
+        }
+    }
+
+    for (S32 i = 0; i < mExtraCursors.size(); ++i)
+    {
+        const S32 categoryIndex = findCursorCategoryIndex(mExtraCursors[i]->mCategory);
+        if (categoryIndex >= 0)
+        {
+            fillCursorArt(mExtraCursors[i], categoryIndex);
+            smCursorCategories[categoryIndex].stamp(this, mExtraCursors[i]);
+        }
+    }
 }
 
 //-----------------------------------------------------------------------------
@@ -1499,11 +1808,17 @@ void GuiProfileTheme::restamp()
 
 U32 GuiProfileTheme::getTamlChildCount(void) const
 {
-    U32 count = (U32)mExtraProfiles.size() + (U32)mExtraBorders.size();
+    U32 count = (U32)mExtraProfiles.size() + (U32)mExtraBorders.size() + (U32)mExtraCursors.size();
 
     for (S32 i = 0; i < smBorderCategoryCount; ++i)
     {
         if (mDefaultBorders[i] != NULL)
+            ++count;
+    }
+
+    for (S32 i = 0; i < smCursorCategoryCount; ++i)
+    {
+        if (mDefaultCursors[i] != NULL)
             ++count;
     }
 
@@ -1534,6 +1849,22 @@ SimObject* GuiProfileTheme::getTamlChild(const U32 childIndex) const
     if (index < (U32)mExtraBorders.size())
         return mExtraBorders[index];
     index -= (U32)mExtraBorders.size();
+
+    // Cursors reference nothing and are referenced by nothing inside the file,
+    // so their position is free; they sit between the borders and the profiles
+    // to keep the written order stable and readable.
+    for (S32 i = 0; i < smCursorCategoryCount; ++i)
+    {
+        if (mDefaultCursors[i] == NULL)
+            continue;
+        if (index == 0)
+            return mDefaultCursors[i];
+        --index;
+    }
+
+    if (index < (U32)mExtraCursors.size())
+        return mExtraCursors[index];
+    index -= (U32)mExtraCursors.size();
 
     for (S32 i = 0; i < smProfileCategoryCount; ++i)
     {
@@ -1574,6 +1905,28 @@ void GuiProfileTheme::addTamlChild(SimObject* pSimObject)
         mDefaultBorders[categoryIndex] = border;
         border->setTheme(this, true);
         deleteNotify(border);
+        return;
+    }
+
+    GuiCursor* cursor = dynamic_cast<GuiCursor*>(pSimObject);
+    if (cursor != NULL)
+    {
+        const S32 categoryIndex = findCursorCategoryIndex(cursor->mCategory);
+        if (categoryIndex < 0)
+        {
+            Con::warnf("GuiProfileTheme::addTamlChild() - cursor child with unknown category '%s' left unattached.", cursor->mCategory);
+            return;
+        }
+
+        // First one in a category is that category's default; the rest are the
+        // extras the user added. Same rule as profiles.
+        if (mDefaultCursors[categoryIndex] == NULL)
+            mDefaultCursors[categoryIndex] = cursor;
+        else
+            mExtraCursors.push_back(cursor);
+
+        cursor->setTheme(this, true);
+        deleteNotify(cursor);
         return;
     }
 

@@ -20,6 +20,7 @@ function smokeCheck(%label, %condition)
 	echo(%condition ? ("SMOKE PASS: " @ %label) : ("SMOKE FAIL: " @ %label));
 }
 
+createPath(testRoot("shots/"));
 schedule(4000, 0, "planetXSmoke");
 
 function planetXSmoke()
@@ -28,6 +29,37 @@ function planetXSmoke()
 	smokeCheck("AppCore no longer creates GuiButtonProfile", !isObject(GuiButtonProfile));
 	smokeCheck("AppCore no longer creates GuiWindowProfile", !isObject(GuiWindowProfile));
 	smokeCheck("AppCore still creates its cursors", isObject(DefaultCursor) && isObject(EditCursor));
+
+	// Cursors come from the theme now. The canonical names still answer -- the
+	// engine hard-codes them for any control that names no cursor of its own --
+	// but what they hold is a copy of the theme's member, art and tint included.
+	smokeCheck("the theme owns a cursor per category",
+		isObject(PlanetXDefaultCursor) && isObject(PlanetXEditCursor) && isObject(PlanetXNWSECursor));
+	// Either the recipe's tint or one the project chose. Asserting it always
+	// equals colorForeground would forbid the override the pane exists to make;
+	// that the tint tracks the palette when NOT overridden is covered by
+	// GuiProfileThemeTests and smoke/cursorPane.
+	smokeCheck("cursor tint is the palette's, or a deliberate override",
+		PlanetX.isFieldOverridden(PlanetXDefaultCursor, "color") ||
+		PlanetXDefaultCursor.color $= PlanetX.colorForeground);
+	smokeCheck("theme cursors have their own art",
+		strstr(PlanetXDefaultCursor.bitmapName, "themes/cursors/PlanetX") >= 0);
+	smokeCheck("the art was seeded beside the theme",
+		isDirectory(testRoot("PlanetX/themes/cursors/PlanetX")));
+	smokeCheck("the canonical names carry the theme's cursors",
+		DefaultCursor.bitmapName $= PlanetXDefaultCursor.bitmapName &&
+		DefaultCursor.hotSpot $= PlanetXDefaultCursor.hotSpot &&
+		DefaultCursor.color $= PlanetXDefaultCursor.color);
+	smokeCheck("an installed copy is not mistaken for a theme member", DefaultCursor.category $= "");
+
+	// Counted relative to what the project's own theme file holds, which is the
+	// user's to change: PlanetX already ships an extra Default cursor of its own.
+	%before = getWordCount(PlanetX.getCursors("Default"));
+	%extra = PlanetX.createCursor("Default");
+	%extra.bitmapName = "unitTestArt/other.png";
+	smokeCheck("a category can hold another cursor", getWordCount(PlanetX.getCursors("Default")) == (%before + 1));
+	PlanetX.removeCursor(%extra);
+	smokeCheck("an extra cursor can be removed again", getWordCount(PlanetX.getCursors("Default")) == %before);
 
 	smokeCheck("the PlanetX theme loaded", isObject(PlanetX));
 	smokeCheck("theme button profile", isObject(PlanetXButtonProfile));
@@ -50,6 +82,21 @@ function planetXSmoke()
 
 	smokeCheck("the title screen is up", isObject(PlanetXTitle));
 	smokeCheck("title wears a theme profile", PlanetXTitle.getFieldValue("Profile") $= "PlanetXEmptyProfile");
+
+	// The upgrade catalog is named, not classed: a name IS a namespace, so onAdd
+	// and every method reach upgrades.cs through it. Saying the same word again as
+	// a class would only ask the namespace to become its own parent.
+	smokeCheck("the upgrade catalog is up", isObject(PlanetXUpgrades));
+	smokeCheck("its onAdd ran through the name", getWordCount(PlanetXUpgrades.keys) > 0);
+	smokeCheck("its methods resolve by name", PlanetXUpgrades.isEligible("damage", 1));
+
+	// One module namespace holds every asset family, so a sound and a particle
+	// cannot both be "playerDeath" - whichever is scanned second is dropped, and
+	// the id then answers with the wrong kind of asset entirely.
+	smokeCheck("the death sound is an audio asset",
+		AssetDatabase.getAssetType("PlanetXGame:playerDeathBurst") $= "AudioAsset");
+	smokeCheck("the death effect is still a particle asset",
+		AssetDatabase.getAssetType("PlanetXGame:playerDeath") $= "ParticleAsset");
 
 	screenShot(testRoot("shots/planetXThemeSmoke.png"), "PNG");
 	schedule(1000, 0, "planetXSmokeDone");

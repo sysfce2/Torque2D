@@ -11,7 +11,8 @@
     colorAccent="33 191 132 255"
     colorHighlight="234 72 72 255"
     colorWarning="166 38 70 255"
-    borderSize="2">
+    borderSize="2"
+    cursorDirectory="PlanetX/themes/cursors/PlanetX">
     <GuiBorderProfile
         Name="PlanetXEmptyBorder"
         category="empty" />
@@ -57,6 +58,65 @@
     <GuiBorderProfile
         Name="PlanetXCondenserDarkBorder"
         category="CondenserDark" />
+    <GuiBorderProfile
+        Name="PlanetXSelectedInsetBorder"
+        category="SelectedInset" />
+    <GuiCursor
+        Name="PlanetXDefaultCursor"
+        hotSpot="1 1"
+        renderOffset="0.000 0.000"
+        bitmapName="PlanetX/themes/cursors/PlanetX/defaultCursor.png"
+        Color="33 191 132 255"
+        category="Default"
+        themeOverrides="Color" />
+    <GuiCursor
+        Name="PlanetXEditCursor"
+        hotSpot="0 0"
+        renderOffset="0.500 0.500"
+        bitmapName="PlanetX/themes/cursors/PlanetX/ibeam.png"
+        Color="33 191 132 255"
+        category="Edit"
+        themeOverrides="Color" />
+    <GuiCursor
+        Name="PlanetXMoveCursor"
+        hotSpot="0 0"
+        renderOffset="0.500 0.500"
+        bitmapName="PlanetX/themes/cursors/PlanetX/move.png"
+        Color="33 191 132 255"
+        category="Move"
+        themeOverrides="Color" />
+    <GuiCursor
+        Name="PlanetXLeftRightCursor"
+        hotSpot="0 -1"
+        renderOffset="0.500 0.500"
+        bitmapName="PlanetX/themes/cursors/PlanetX/leftRight.png"
+        Color="33 191 132 255"
+        category="LeftRight"
+        themeOverrides="Color" />
+    <GuiCursor
+        Name="PlanetXUpDownCursor"
+        hotSpot="0 -1"
+        renderOffset="0.500 0.500"
+        bitmapName="PlanetX/themes/cursors/PlanetX/upDown.png"
+        Color="33 191 132 255"
+        category="UpDown"
+        themeOverrides="Color" />
+    <GuiCursor
+        Name="PlanetXNWSECursor"
+        hotSpot="0 0"
+        renderOffset="0.500 0.500"
+        bitmapName="PlanetX/themes/cursors/PlanetX/NWSE.png"
+        Color="33 191 132 255"
+        category="NWSE"
+        themeOverrides="Color" />
+    <GuiCursor
+        Name="PlanetXNESWCursor"
+        hotSpot="0 0"
+        renderOffset="0.500 0.500"
+        bitmapName="PlanetX/themes/cursors/PlanetX/NESW.png"
+        Color="33 191 132 255"
+        category="NESW"
+        themeOverrides="Color" />
     <GuiControlProfile
         Name="PlanetXEmptyProfile"
         category="empty" />
@@ -121,7 +181,7 @@
         category="WindowContent" />
     <GuiControlProfile
         Name="PlanetXWindowButtonProfile"
-        category="WindowButton" />
+        category="windowButton" />
     <GuiControlProfile
         Name="PlanetXWindowCloseButtonProfile"
         category="WindowCloseButton" />
@@ -148,7 +208,7 @@
         category="TreeView" />
     <GuiControlProfile
         Name="PlanetXFrameSetProfile"
-        category="FrameSet" />
+        category="frameSet" />
     <GuiControlProfile
         Name="PlanetXFrameSetDropButtonProfile"
         category="FrameSetDropButton" />

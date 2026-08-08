@@ -85,6 +85,12 @@ private:
 
    RectI                   mPageRect;        ///< Rectangle of the tab page portion of the control
    RectI                   mTabRect;         ///< Rectangle of the tab portion of the control
+
+   /// The editor-only "+" tab that follows the last real one, in the same
+   /// coordinates as TabHeaderInfo::TabRect - local to the tab strip's content,
+   /// which is what getTabLocalCoord converts a mouse point into. Empty whenever
+   /// the book is not being authored, which is how everything tests for it.
+   RectI                   mAddTabRect;
    Vector<TabHeaderInfo>   mPages;           ///< Vector of pages contained by the control
    GuiTabPageCtrl*         mActivePage;      ///< Pointer to the active (selected) tab page child control
    GuiTabPageCtrl*         mHoverTab;        ///< Pointer to the tab page that currently has the mouse positioned ontop of its tab
@@ -134,6 +140,7 @@ private:
    /// @{
    void onChildRemoved( GuiControl* child );
    void onChildAdded( GuiControl *child );
+   void childrenReordered();
    /// @}
 
    /// @name Rendering methods
@@ -147,6 +154,12 @@ private:
    /// @param   tabRect   the rectangle to render the tab into
    /// @param   tab   pointer to the tab page control for which to render the tab
    void renderTab( RectI tabRect, GuiTabPageCtrl* tab );
+
+   /// Draw the editor-only "+" tab. Ghosted rather than drawn as a real tab,
+   /// because it is an affordance and not a page - the same treatment
+   /// GuiChainCtrl gives the space it keeps at the end of itself.
+   /// @param   tabRect   the rectangle to render into, in global coordinates
+   void renderAddTab( RectI tabRect );
    /// @}
 
    /// @name Page Management
@@ -157,6 +170,13 @@ private:
    /// Pages created are not titled and appear with no text on their tab when created.
    /// This may change in the future.
    void addNewPage();
+
+   /// Ask the Gui Editor for a page, because the "+" tab was clicked.
+   ///
+   /// The book draws the affordance; it does not make the page. A page created
+   /// while authoring has to be themed, recorded for undo and announced to the
+   /// Explorer tree, none of which a control knows how to do.
+   void requestNewPage();
 
    U32 getSelectedPage();
 
@@ -182,6 +202,14 @@ private:
 
    /// @name Internal Utility Functions
    /// @{
+
+   /// Show the active page and hide the rest.
+   ///
+   /// The quiet half of selectPage: no script callback, so it is safe to call
+   /// while a child is arriving or leaving. selectPage ends in onTabSelected,
+   /// and EditorCore's handler opens the editor a page belongs to - which is not
+   /// something a book can afford to trigger from inside addObject.
+   void syncPageVisibility();
 
    /// Update ourselves by hooking common GuiControl functionality.
    void setUpdate();
@@ -211,6 +239,13 @@ private:
 
    /// Changes a local point to a point in the inner rect of the tab section.
    Point2I getTabLocalCoord(const Point2I &src);
+
+   /// The "+" tab in global coordinates, or an empty rect when there is none.
+   ///
+   /// The explicit inverse of getTabLocalCoord, worked out on demand rather than
+   /// remembered from the last render: script asks about a book the moment it is
+   /// dropped, which is before the book has drawn a frame.
+   RectI getAddTabGlobalRect();
 
    /// @}
 

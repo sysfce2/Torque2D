@@ -9,10 +9,10 @@
 #
 # A test passes when it logs no FAIL lines and exits on its own.
 #
-# The two input-driven suites (tooltipProfile, textClick) have Win32-only
-# companion scripts (*.input.ps1) that post real mouse/keyboard; there is no
-# equivalent here, so those are skipped by default. Pass --with-input to run
-# them anyway (they will get no synthetic input and may under-count).
+# The input-driven suites -- the ones with a Win32-only *.input.ps1 companion
+# posting real mouse/keyboard -- have no equivalent here, so they are skipped by
+# default. Pass --with-input to run them anyway (they will get no synthetic input
+# and will report their clicks as failures).
 #
 # Usage:
 #   tests/run.sh                 every pass/fail suite
@@ -63,14 +63,22 @@ fi
 KEEP_PROJECT=(bitmapPathRead)
 
 # Order matters for one pair only: bitmapPathWrite before bitmapPathRead. The
-# input-driven pair is listed so ordering holds when --with-input is passed.
+# input-driven suites are listed so ordering holds when --with-input is passed.
 ORDER=(profileEditor profileForm border borderPane standalone \
        headerPane colorPopup themeApply font assetPicker \
        tooltipProfile textClick bitmapPathWrite bitmapPathRead \
        toybox planetX)
 
-# Tests whose input path is Win32-only; skipped unless --with-input.
-INPUT_ONLY=(tooltipProfile textClick)
+# Tests whose input path is Win32-only; skipped unless --with-input. Derived from
+# the companion scripts actually on disk rather than named here, because a
+# hardcoded list goes stale the moment a suite gains one -- which it had: six
+# input-driven suites were running without a driver and reporting their clicks as
+# engine failures.
+INPUT_ONLY=()
+for f in "$SCRIPT_DIR/smoke"/*.input.ps1; do
+    [[ -e "$f" ]] || continue
+    INPUT_ONLY+=("$(basename "$f" .input.ps1)")
+done
 
 contains() { local n="$1"; shift; for e in "$@"; do [[ "$e" == "$n" ]] && return 0; done; return 1; }
 

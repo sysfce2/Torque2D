@@ -129,6 +129,11 @@ enum VertAlignmentType
 	DefaultVAlign
 };
 
+/// The pointer the canvas draws. A control names one through a TypeGuiCursor
+/// field (a text edit's editCursor, a window's resize cursors); anything that
+/// names none falls back to the canonical name for its kind - "EditCursor",
+/// "LeftRightCursor" and the rest - which is what a GuiProfileTheme's cursor
+/// members are installed under. See GuiProfileTheme::smCursorCategories.
 class GuiCursor : public SimObject
 {
 private:
@@ -140,9 +145,28 @@ private:
    Point2I mExtent;
    TextureHandle mTextureHandle;
 
+   GuiThemeMembership mThemeMembership;   ///< Theme membership and per-field override tracking.
+
 public:
+   /// Multiplied into the bitmap as it is drawn. The stock art is grayscale -
+   /// black outline, white body - so a tint colors the body and leaves the
+   /// outline alone, which is what lets a theme skin the stock cursors without
+   /// anyone drawing new ones. White is the identity (dglClearBitmapModulation
+   /// is exactly white), so a cursor that never sets this renders as it always did.
+   ColorI mColor;
+
+   StringTableEntry mCategory;            ///< The theme category this cursor belongs to. See GuiProfileTheme.
+
    Point2I getHotSpot() { return mHotSpot; }
    Point2I getExtent() { return mExtent; }
+   Point2F getRenderOffset() { return mRenderOffset; }
+
+   // Used by GuiProfileTheme when it creates a member from the cursor table,
+   // and by the hot-spot editor. Neither is derived from the theme's values, so
+   // neither goes through the stamping path.
+   void setHotSpot(const Point2I& hotSpot) { mHotSpot = hotSpot; }
+   void setRenderOffset(const Point2F& renderOffset) { mRenderOffset = renderOffset; }
+   inline StringTableEntry getBitmapName() const { return mBitmapName; }
 
    DECLARE_CONOBJECT(GuiCursor);
    GuiCursor(void);
@@ -152,6 +176,39 @@ public:
    bool onAdd(void);
    void onRemove();
    void render(const Point2I &pos);
+
+   /// Load the bitmap now and answer its real size. render() does this on its
+   /// first pass, so until a cursor has been drawn once its extent is (1,1) -
+   /// no use to an editor that has to lay out and measure before drawing.
+   const Point2I& resolve();
+
+   /// The bitmap path as it should be written down: relative to the game root
+   /// when it points inside the game, and unchanged when it does not. As with
+   /// GuiControlProfile's bitmap, mBitmapName itself is always absolute -
+   /// TypeFilename expands whatever it is given the moment it is set - and an
+   /// absolute path in a saved theme names a folder on one machine only.
+   StringTableEntry getRelativeBitmapName( void ) const;
+
+   // Theme membership. A cursor stamped by a GuiProfileTheme tracks which
+   // fields were explicitly overridden; standalone cursors are unaffected.
+   // preserveOverrides keeps an override set loaded before attachment (Taml).
+   void setTheme(GuiProfileTheme* theme, bool preserveOverrides = false);
+   inline GuiProfileTheme* getTheme() const { return mThemeMembership.mTheme; }
+   bool isThemeFieldOverridden(StringTableEntry field) const { return mThemeMembership.isOverridden(field); }
+   void clearThemeFieldOverride(StringTableEntry field) { mThemeMembership.clearOverride(field); }
+   void clearAllThemeOverrides() { mThemeMembership.clearAll(); }
+
+   virtual void onStaticModified(const char* slotName, const char* newValue = NULL);
+   virtual bool writeField(StringTableEntry fieldname, const char* value);
+   virtual void onDeleteNotify(SimObject* object);
+
+protected:
+   static bool setThemeOverrides(void* obj, const char* data) { static_cast<GuiCursor*>(obj)->mThemeMembership.parseOverrideList(data); return false; }
+   static const char* getThemeOverrides(void* obj, const char* data) { return static_cast<GuiCursor*>(obj)->mThemeMembership.formatOverrideList(); }
+
+   // Set is left to TypeFilename, which expands the path; only the read-back is
+   // ours, so that what gets written stays portable.
+   static const char* getBitmapName(void* obj, const char* data) { return static_cast<GuiCursor*>(obj)->getRelativeBitmapName(); }
 };
 DefineConsoleType(TypeGuiCursor)
 

@@ -102,6 +102,10 @@ function GuiProfileEditorPreview::refresh(%this)
 	{
 		%this.showBorder(%theme, %member);
 	}
+	else if(%kind $= "cursor")
+	{
+		%this.showCursor(%theme, %member);
+	}
 }
 
 // Size the stage to the bounding box of the current samples and center it
@@ -242,6 +246,14 @@ function GuiProfileEditorPreview::reskin(%this, %ctrl, %theme)
 	%this.reskinSlot(%ctrl, %theme, "listBoxProfile", "DropDownItem");
 	%this.reskinSlot(%ctrl, %theme, "backgroundProfile", "Overlay");
 
+	// The four cursor slots the engine has, so hovering the sample's text box or
+	// a window edge shows this theme's own cursors rather than whichever set is
+	// installed globally.
+	%this.reskinCursorSlot(%ctrl, %theme, "editCursor", "Edit");
+	%this.reskinCursorSlot(%ctrl, %theme, "leftRightCursor", "LeftRight");
+	%this.reskinCursorSlot(%ctrl, %theme, "upDownCursor", "UpDown");
+	%this.reskinCursorSlot(%ctrl, %theme, "nWSECursor", "NWSE");
+
 	%this.fillSampleContent(%ctrl);
 
 	for(%i = 0; %i < %ctrl.getCount(); %i++)
@@ -283,6 +295,23 @@ function GuiProfileEditorPreview::reskinSlot(%this, %ctrl, %theme, %field, %cate
 	if(isObject(%profile))
 	{
 		%ctrl.setEditFieldValue(%field, %profile);
+	}
+}
+
+// The cursor equivalent, and it cannot use the same test: an unset cursor field
+// reads back as "" exactly like a field the control does not have, and sample
+// controls never set one. So ask the type system whether the field exists
+// rather than asking whether it holds anything.
+function GuiProfileEditorPreview::reskinCursorSlot(%this, %ctrl, %theme, %field, %category)
+{
+	if(%ctrl.getFieldType(%field) !$= "GuiCursor")
+	{
+		return;
+	}
+	%cursor = %theme.getCursor(%category);
+	if(isObject(%cursor))
+	{
+		%ctrl.setEditFieldValue(%field, %cursor);
 	}
 }
 
@@ -639,6 +668,128 @@ function GuiProfileEditorPreview::showBorder(%this, %theme, %border)
 	%disabled.setActive(false);
 
 	%this.layoutStage();
+}
+
+//-----------------------------------------------------------------------------
+// Cursors. The only preview in this pane that is not something to look at: a
+// cursor is judged by using it, so this is a range to move the pointer through
+// with targets small enough that a hot spot a few pixels out is obvious.
+//
+// The canvas cursor is swapped on entry and put back on exit, which is why the
+// buttons inside show it too -- a button does not override getCursor, so what
+// the canvas holds is what it displays.
+//-----------------------------------------------------------------------------
+
+function GuiProfileEditorPreview::showCursor(%this, %theme, %cursor)
+{
+	%this.clearSamples();
+	if(!isObject(%cursor))
+	{
+		return;
+	}
+	%this.lastKind = "cursor";
+	%this.lastTheme = %theme;
+	%this.lastMember = %cursor;
+
+	// Dressed in the theme being edited rather than the editor's own chrome, like
+	// every other sample in this pane. That is also what gives the targets a
+	// hover state: the editor's button profile has no highlight fill, so targets
+	// wearing it sat dead under the pointer -- and a target you cannot see
+	// yourself hit is no test of a hot spot.
+	%range = new GuiControl()
+	{
+		class = "GuiProfileEditorCursorRange";
+		Position = "0 0";
+		Extent = "280 220";
+		preview = %this;
+		cursor = %cursor;
+	};
+	%panel = isObject(%theme) ? %theme.getProfile("Panel") : 0;
+	if(isObject(%panel))
+	{
+		%range.setEditFieldValue("Profile", %panel);
+	}
+	else
+	{
+		ThemeManager.setProfile(%range, "displayBoxProfile");
+	}
+	%this.addSample(%range);
+
+	// Laid out by sizing flags rather than by numbers, because the range wears a
+	// profile from the theme being edited and a theme is free to give its panels
+	// however much padding it likes -- PlanetX does, and hard-coded positions
+	// slid out from under it. GuiControl::onChildAdded parentResizes each child
+	// against the parent's INNER rect, so "fill" and "center" resolve against
+	// the padded area the moment the child is added.
+	%hint = new GuiControl()
+	{
+		HorizSizing = "fill";
+		VertSizing = "anchorTop";
+		Position = "0 0";
+		Extent = "280 40";
+		Text = "Move in here to try the cursor. The target is small on purpose.";
+		align = "center";
+		vAlign = "top";
+		textWrap = true;
+		textExtend = true;
+	};
+	ThemeManager.setProfile(%hint, "labelProfile");
+	%range.add(%hint);
+
+	// One target, centred. Six scattered ones needed absolute coordinates to be
+	// scattered *within*, which is exactly what a padded panel takes away; a
+	// single centred button says the same thing and cannot drift.
+	%target = new GuiButtonCtrl()
+	{
+		HorizSizing = "center";
+		VertSizing = "center";
+		Position = "128 98";
+		Extent = "24 24";
+		Text = "+";
+	};
+	%button = isObject(%theme) ? %theme.getProfile("Button") : 0;
+	if(isObject(%button))
+	{
+		%target.setEditFieldValue("Profile", %button);
+	}
+	else
+	{
+		ThemeManager.setProfile(%target, "buttonProfile");
+	}
+	%range.add(%target);
+
+	%this.layoutStage();
+}
+
+// Entering swaps the canvas cursor for the one being edited; leaving puts back
+// the editor's own. Both are needed: the canvas cursor is global, so a preview
+// that only set it would leave the whole editor wearing a half-finished cursor.
+function GuiProfileEditorCursorRange::onMouseEnter(%this)
+{
+	if(isObject(%this.cursor))
+	{
+		Canvas.setCursor(%this.cursor);
+	}
+}
+
+function GuiProfileEditorCursorRange::onMouseLeave(%this)
+{
+	%this.restoreCursor();
+}
+
+function GuiProfileEditorCursorRange::onRemove(%this)
+{
+	// Deleted while the pointer is inside it -- selecting another node rebuilds
+	// the stage -- and onMouseLeave never arrives.
+	%this.restoreCursor();
+}
+
+function GuiProfileEditorCursorRange::restoreCursor(%this)
+{
+	if(isObject(ThemeManager.activeTheme.defaultCursor))
+	{
+		Canvas.setCursor(ThemeManager.activeTheme.defaultCursor);
+	}
 }
 
 //-----------------------------------------------------------------------------

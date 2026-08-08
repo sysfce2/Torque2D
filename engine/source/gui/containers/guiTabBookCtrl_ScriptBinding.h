@@ -60,3 +60,38 @@ ConsoleMethodWithDocs(GuiTabBookCtrl, setTabProfile, ConsoleVoid, 3, 3, (GuiCont
 	if (Sim::findObject(argv[2], profile))
 		object->setControlTabProfile(profile);
 }
+
+/*! Appends an untitled page to the book.
+
+	The raw form: it names the page itself, puts it on GuiTabPageProfile and
+	tells nobody. The Gui Editor does not use this - a page made there has to be
+	themed, recorded for undo and announced to the Explorer tree, so the editor
+	builds its own from GuiEditorBrain::newTabPage. This is for building a book
+	from script or from C++, which is what GuiFrameSetCtrl does when it docks a
+	window.
+	@return No return value
+*/
+ConsoleMethodWithDocs(GuiTabBookCtrl, addPage, ConsoleVoid, 2, 2, ())
+{
+	object->addNewPage();
+}
+
+/*! Returns the bounds of the editor-only "+" tab as "x y width height", in
+	global coordinates.
+
+	Empty - "0 0 0 0" - unless the book is inside the Gui being authored, which
+	is the only time the "+" is drawn. A book with no pages at all still reports
+	one; that is what stops an emptied book from being unrecoverable.
+	@return The rectangle the "+" occupies on screen.
+*/
+ConsoleMethodWithDocs(GuiTabBookCtrl, getAddPageTabRect, ConsoleString, 2, 2, ())
+{
+	RectI rect = object->getAddTabGlobalRect();
+
+	char* buffer = Con::getReturnBuffer(64);
+	dSprintf(buffer, 64, "%d %d %d %d", rect.point.x, rect.point.y, rect.extent.x, rect.extent.y);
+
+	return buffer;
+}
+
+ConsoleMethodGroupEndWithDocs(GuiTabBookCtrl)

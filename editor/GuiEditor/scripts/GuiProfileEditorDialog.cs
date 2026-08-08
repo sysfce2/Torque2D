@@ -35,15 +35,17 @@ function GuiProfileEditorDialog::init(%this, %width, %height)
 	ThemeManager.setProfile(%this.toolbar, "emptyProfile");
 	%content.add(%this.toolbar);
 
-	%this.toolbar.addButton("onNewTheme", 11, "New Theme", "");
-	%this.toolbar.addButton("onRename", 49, "Rename Theme or Stand Alone Profile", "getRootSelected");
-	%this.toolbar.addButton("onDelete", 23, "Delete Theme or Stand Alone Profile", "getRootSelected");
-	%this.toolbar.addButton("onNewProfile", 25, "New Profile in Category", "getCategorySelected");
-	%this.toolbar.addButton("onRemoveProfile", 23, "Remove Extra Profile", "getExtraSelected");
-	%this.toolbar.addButton("onNewStandalone", 25, "New Stand Alone Profile", "");
-	// Frame 22 is the circular revert arrow; frame 11 (a plus) was reading as
-	// another "new" button next to the three that really are.
-	%this.toolbar.addButton("onResetMember", 22, "Reset All Overrides on Member", "getMemberSelected");
+	%this.toolbar.addButton("onNewTheme", $EditorIcon::doc_plus, "New Theme", "");
+	%this.toolbar.addButton("onRename", $EditorIcon::doc_edit, "Rename Theme or Stand Alone Profile", "getRootSelected");
+	%this.toolbar.addButton("onDelete", $EditorIcon::round_delete, "Delete Theme or Stand Alone Profile", "getRootSelected");
+	// These two serve profiles and cursors alike, so their tips are answered per
+	// selection rather than fixed - see newInCategoryTip.
+	%this.toolbar.addButton("onNewProfile", $EditorIcon::round_plus, "New Profile in Category", "getCategorySelected", "newInCategoryTip");
+	%this.toolbar.addButton("onRemoveProfile", $EditorIcon::round_delete, "Remove Extra Profile", "getExtraSelected", "removeExtraTip");
+	%this.toolbar.addButton("onNewStandalone", $EditorIcon::round_plus, "New Stand Alone Profile", "");
+	// The circular revert arrow; a plain plus was reading as another "new"
+	// button next to the three that really are.
+	%this.toolbar.addButton("onResetMember", $EditorIcon::playback_reload, "Reset All Overrides on Member", "getMemberSelected");
 
 	%paneTop = 40;
 	%paneHeight = %height - 116;
@@ -273,6 +275,42 @@ function GuiProfileEditorDialog::init(%this, %width, %height)
 	%this.borderForm.build();
 	%this.borderFormScroller.add(%this.borderForm);
 
+	// The cursor pane, fourth of the forms sharing this window. It is the one
+	// that is not mostly field rows: a hot spot has to be placed by eye against
+	// magnified art, so the pane is built around the magnifier.
+	%this.cursorFormScroller = new GuiScrollCtrl()
+	{
+		HorizSizing = "fill";
+		VertSizing = "fill";
+		Position = "0 0";
+		Extent = "400" SPC %paneHeight;
+		hScrollBar = "alwaysOff";
+		vScrollBar = "dynamic";
+		constantThumbHeight = "0";
+		showArrowButtons = "1";
+		scrollBarThickness = "14";
+		Visible = false;
+	};
+	ThemeManager.setProfile(%this.cursorFormScroller, "emptyProfile");
+	ThemeManager.setProfile(%this.cursorFormScroller, "thumbProfile", "ThumbProfile");
+	ThemeManager.setProfile(%this.cursorFormScroller, "trackProfile", "TrackProfile");
+	ThemeManager.setProfile(%this.cursorFormScroller, "scrollArrowProfile", "ArrowProfile");
+	%this.memberWindow.add(%this.cursorFormScroller);
+
+	%this.cursorForm = new GuiChainCtrl()
+	{
+		class = "GuiProfileEditorCursorForm";
+		HorizSizing = "width";
+		Position = "0 0";
+		Extent = "386" SPC %paneHeight;
+		IsVertical = true;
+		ChildSpacing = 6;
+		formWidth = 386;
+		dialog = %this;
+	};
+	%this.cursorFormScroller.add(%this.cursorForm);
+	%this.cursorForm.build();
+
 	//--- Frame 3: the Borders pane -- a movable window of five border setters,
 	// shown only while a profile is selected (onTreeSelect toggles it). Added
 	// before the preview so it docks into the Borders frame.
@@ -399,6 +437,10 @@ function GuiProfileEditorDialog::onRemove(%this)
 	{
 		%this.borderForm.unbind();
 	}
+	if(isObject(%this.cursorForm))
+	{
+		%this.cursorForm.unbind();
+	}
 	if(isObject(%this.borderChain))
 	{
 		%this.unbindBorderSetters();
@@ -439,6 +481,16 @@ function GuiProfileEditorDialog::onTreeSelect(%this, %proxy)
 		%this.currentRoot = %proxy.theme;
 		%this.currentMember = %proxy.theme.getBorder(%proxy.category);
 	}
+	else if(%kind $= "cursorCategory")
+	{
+		%this.currentRoot = %proxy.theme;
+		%this.currentMember = %proxy.theme.getCursor(%proxy.category);
+	}
+	else if(%kind $= "cursorExtra")
+	{
+		%this.currentRoot = %proxy.theme;
+		%this.currentMember = %proxy.target;
+	}
 	else if(%kind $= "extra")
 	{
 		%this.currentRoot = %proxy.theme;
@@ -472,6 +524,12 @@ function GuiProfileEditorDialog::onTreeSelect(%this, %proxy)
 		%this.hideMemberPanes();
 		%this.borderFormScroller.setVisible(true);
 		%this.borderForm.bind(%this.currentMember, %proxy.treeLabel);
+	}
+	else if(%this.isCursorKind(%kind))
+	{
+		%this.hideMemberPanes();
+		%this.cursorFormScroller.setVisible(true);
+		%this.cursorForm.bind(%this.currentMember, %proxy.treeLabel);
 	}
 	else
 	{
@@ -519,6 +577,10 @@ function GuiProfileEditorDialog::updatePreview(%this)
 	else if(%kind $= "border")
 	{
 		%this.preview.showBorder(%proxy.theme, %this.currentMember);
+	}
+	else if(%this.isCursorKind(%kind))
+	{
+		%this.preview.showCursor(%proxy.theme, %this.currentMember);
 	}
 	else if(%kind $= "standalone")
 	{
@@ -578,6 +640,11 @@ function GuiProfileEditorDialog::isProfileKind(%this, %kind)
 	return %kind $= "category" || %kind $= "extra" || %kind $= "standalone";
 }
 
+function GuiProfileEditorDialog::isCursorKind(%this, %kind)
+{
+	return %kind $= "cursorCategory" || %kind $= "cursorExtra";
+}
+
 // The tree's grouping rows: the "Gui Themes" root and the "Stand Alone",
 // "Profiles" and "Borders" folders. They carry no editable target.
 function GuiProfileEditorDialog::isHeaderKind(%this, %kind)
@@ -585,7 +652,7 @@ function GuiProfileEditorDialog::isHeaderKind(%this, %kind)
 	return %kind $= "root" || %kind $= "folder";
 }
 
-// Drops all three member panes out of the Properties window. Each pane is also
+// Drops all four member panes out of the Properties window. Each pane is also
 // unbound so it stops tracking whatever it last showed.
 function GuiProfileEditorDialog::hideMemberPanes(%this)
 {
@@ -595,6 +662,8 @@ function GuiProfileEditorDialog::hideMemberPanes(%this)
 	%this.themeForm.unbind();
 	%this.borderFormScroller.setVisible(false);
 	%this.borderForm.unbind();
+	%this.cursorFormScroller.setVisible(false);
+	%this.cursorForm.unbind();
 }
 
 // Build the five setters into the pane chain: the default (no checkbox, full
@@ -782,14 +851,28 @@ function GuiProfileEditorDialog::selectedRoot(%this)
 	return (%this.currentProxy.kind $= "theme") ? %this.currentProxy.target : %this.currentProxy.root;
 }
 
+// The two "new in a category" buttons serve profiles and cursors alike: both
+// families are a category row that can hold extras, so one pair of buttons that
+// asks the selection what it is beats a second pair that would sit greyed out
+// nine tenths of the time.
 function GuiProfileEditorDialog::getCategorySelected(%this)
 {
-	return isObject(%this.currentProxy) && %this.currentProxy.kind $= "category";
+	if(!isObject(%this.currentProxy))
+	{
+		return false;
+	}
+	%kind = %this.currentProxy.kind;
+	return %kind $= "category" || %kind $= "cursorCategory";
 }
 
 function GuiProfileEditorDialog::getExtraSelected(%this)
 {
-	return isObject(%this.currentProxy) && %this.currentProxy.kind $= "extra";
+	if(!isObject(%this.currentProxy))
+	{
+		return false;
+	}
+	%kind = %this.currentProxy.kind;
+	return %kind $= "extra" || %kind $= "cursorExtra";
 }
 
 function GuiProfileEditorDialog::getMemberSelected(%this)
@@ -799,7 +882,23 @@ function GuiProfileEditorDialog::getMemberSelected(%this)
 		return false;
 	}
 	%kind = %this.currentProxy.kind;
-	return %kind $= "category" || %kind $= "border" || %kind $= "extra";
+	return %kind $= "category" || %kind $= "border" || %kind $= "extra" || %this.isCursorKind(%kind);
+}
+
+// What the two shared "in a category" buttons are about to do. A cursor
+// category and a profile category are both a row that can hold extras, so one
+// pair of buttons serves both - but a tip reading "Profile" while a cursor is
+// selected describes the wrong thing, which is worse than no tip.
+function GuiProfileEditorDialog::newInCategoryTip(%this)
+{
+	%kind = isObject(%this.currentProxy) ? %this.currentProxy.kind : "";
+	return (%kind $= "cursorCategory") ? "New Cursor in Category" : "New Profile in Category";
+}
+
+function GuiProfileEditorDialog::removeExtraTip(%this)
+{
+	%kind = isObject(%this.currentProxy) ? %this.currentProxy.kind : "";
+	return (%kind $= "cursorExtra") ? "Remove Extra Cursor" : "Remove Extra Profile";
 }
 
 //-----------------------------------------------------------------------------
@@ -929,8 +1028,20 @@ function GuiProfileEditorDialog::onNewProfile(%this)
 	{
 		return;
 	}
-	%profile = %this.library.createExtraProfile(%this.currentProxy.theme, %this.currentProxy.category);
-	if(isObject(%profile))
+
+	%theme = %this.currentProxy.theme;
+	%category = %this.currentProxy.category;
+
+	if(%this.currentProxy.kind $= "cursorCategory")
+	{
+		%member = %this.library.createExtraCursor(%theme, %category);
+	}
+	else
+	{
+		%member = %this.library.createExtraProfile(%theme, %category);
+	}
+
+	if(isObject(%member))
 	{
 		%this.tree.refresh();
 	}
@@ -943,17 +1054,53 @@ function GuiProfileEditorDialog::onRemoveProfile(%this)
 		return;
 	}
 	%theme = %this.currentProxy.theme;
-	%profile = %this.currentProxy.target;
+	%member = %this.currentProxy.target;
+	%isCursor = %this.currentProxy.kind $= "cursorExtra";
 
 	%this.preview.clearSamples();
-	%this.profileForm.unbind();
+	%this.hideMemberPanes();
 	%this.currentProxy = "";
 	%this.currentRoot = "";
 	%this.currentMember = "";
 
-	%this.library.removeExtraProfile(%theme, %profile);
+	%orphanedArt = "";
+	if(%isCursor)
+	{
+		%orphanedArt = %this.library.removeExtraCursor(%theme, %member);
+	}
+	else
+	{
+		%this.library.removeExtraProfile(%theme, %member);
+	}
+
 	%this.tree.refresh();
 	%this.toolbar.refreshEnabled();
+
+	// Removing a cursor leaves its picture behind. Deleting that as a side
+	// effect would be a file thrown away without being asked about, and keeping
+	// it always would litter the folder with the art of every cursor ever tried.
+	// So ask -- but only when the answer is not already obvious: the library
+	// hands back a path only for art it made, that nothing else is using, and
+	// that is really on disk.
+	if(%orphanedArt !$= "")
+	{
+		%this.doomedCursorArt = %orphanedArt;
+		%this.openConfirmDialog("Delete Image",
+			"The cursor is gone. Its image file, " @ fileName(%orphanedArt) @
+			", is not used by any other cursor. Delete it as well?",
+			"Delete Image", "doDeleteCursorArt");
+	}
+}
+
+// The confirm arm of the question above. Cancel is the other, and it does
+// nothing at all: the file stays where it is.
+function GuiProfileEditorDialog::doDeleteCursorArt(%this)
+{
+	if(%this.doomedCursorArt !$= "")
+	{
+		%this.library.deleteCursorArt(%this.doomedCursorArt);
+		%this.doomedCursorArt = "";
+	}
 }
 
 function GuiProfileEditorDialog::onNewStandalone(%this)
@@ -983,6 +1130,10 @@ function GuiProfileEditorDialog::onResetMember(%this)
 	if(%this.currentProxy.kind $= "border")
 	{
 		%this.borderForm.bind(%this.currentMember, %this.currentProxy.treeLabel);
+	}
+	else if(%this.isCursorKind(%this.currentProxy.kind))
+	{
+		%this.cursorForm.refresh();
 	}
 	else
 	{

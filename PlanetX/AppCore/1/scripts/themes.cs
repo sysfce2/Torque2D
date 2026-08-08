@@ -65,6 +65,83 @@ function AppCore::getThemesPath(%this)
 	return pathConcat(filePath(filePath(makeFullPath(%module.getModulePath(), getMainDotCsDir()))), "themes");
 }
 
+/// Where one theme keeps its cursor art. A folder per theme, because two themes
+/// in the same project may want cursors that look nothing alike - a menu
+/// pointer and a combat reticle - and sharing one folder would mean one
+/// overwriting the other.
+function AppCore::getThemeCursorsPath(%this, %theme)
+{
+	%path = %this.getThemesPath();
+	if(%path $= "" || !isObject(%theme) || %theme.getName() $= "")
+	{
+		return "";
+	}
+	return pathConcat(%path, "cursors", %theme.getName());
+}
+
+/// The stock cursor art every theme starts from, inside AppCore itself. It is
+/// grayscale on purpose so a theme's tint colors it.
+function AppCore::getStockCursorsPath(%this)
+{
+	%module = ModuleDatabase.findModule("AppCore", 1);
+	if(!isObject(%module))
+	{
+		return "";
+	}
+	return pathConcat(makeFullPath(%module.getModulePath(), getMainDotCsDir()), "gui/images/cursors");
+}
+
+/// Give %theme its own copy of the stock cursor art and point it at the folder.
+/// Idempotent: pathCopy is asked not to overwrite, so a theme whose art is
+/// already there (or has been edited) is left exactly as it is.
+///
+/// Only the folder being absent triggers the copy, which keeps boot down to one
+/// directory test per theme - and means Android, where pathCopy is unsupported,
+/// never reaches it in a project that shipped its art.
+function AppCore::seedThemeCursors(%this, %theme)
+{
+	%target = %this.getThemeCursorsPath(%theme);
+	if(%target $= "")
+	{
+		return false;
+	}
+
+	// isDirectory rather than isFile: isFile answers out of the resource
+	// manager, which knows nothing about files written after the last scan.
+	if(!isDirectory(%target))
+	{
+		%source = %this.getStockCursorsPath();
+		if(%source $= "" || !isDirectory(%source))
+		{
+			warn("AppCore::seedThemeCursors: no stock cursor art at " @ %source @ ".");
+			return false;
+		}
+
+		createPath(%target @ "/");
+
+		%categories = %theme.getCursorCategoryNames();
+		for(%i = 0; %i < getWordCount(%categories); %i++)
+		{
+			%file = %theme.getCursorStockFile(getWord(%categories, %i));
+			if(%file $= "")
+			{
+				continue;
+			}
+			pathCopy(pathConcat(%source, %file), pathConcat(%target, %file));
+		}
+	}
+
+	// Assigning the folder restamps the theme, which fills in the bitmap of any
+	// cursor that has none yet. A cursor already pointing at art keeps it.
+	%directory = makeRelativePath(%target, getMainDotCsDir());
+	if(%theme.cursorDirectory !$= %directory)
+	{
+		%theme.cursorDirectory = %directory;
+	}
+
+	return true;
+}
+
 function AppCore::loadThemes(%this)
 {
 	%path = %this.getThemesPath();
@@ -95,9 +172,10 @@ function AppCore::loadThemes(%this)
 }
 
 /// Reads one file from the themes folder. Alongside themes it may hold stand-alone
-/// profiles, which the Profile Editor writes as a one-profile bundle (and, from
-/// older versions, as a bare profile). Loading is all these need: a profile puts
-/// itself in the Gui data group under its own name, which is how a Gui finds it.
+/// profiles, which the Profile Editor writes as a one-profile bundle - a SimSet,
+/// or a SimGroup from older versions (and, older still, a bare profile). Loading
+/// is all these need: a profile registers under its own name, which is how a Gui
+/// finds it.
 function AppCore::loadTheme(%this, %file)
 {
 	%object = TAMLRead(%file);
@@ -118,10 +196,12 @@ function AppCore::loadTheme(%this, %file)
 		}
 
 		%this.repairFontDirectory(%object);
+		%this.seedThemeCursors(%object);
 		return true;
 	}
 
-	if(%class $= "ScriptGroup" || %class $= "GuiControlProfile")
+	// A bundle is a SimSet; SimGroup, which the older ones are, derives from it.
+	if(%object.isMemberOfClass("SimSet") || %class $= "GuiControlProfile")
 	{
 		return false;
 	}
@@ -170,6 +250,9 @@ function AppCore::createStockTheme(%this, %path)
 
 		borderSize = 1;
 	};
+
+	// Before the write, so the file records where the art went.
+	%this.seedThemeCursors(%theme);
 
 	%file = pathConcat(%path, "Base.taml");
 	TAMLWrite(%theme, %file);

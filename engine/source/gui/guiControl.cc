@@ -53,23 +53,32 @@
 
 IMPLEMENT_CONOBJECT_CHILDREN(GuiControl);
 
+/// Counts are 4, not 3: "default" is a real, reachable value.
+///
+/// It used to be excluded, and that was a bug rather than a choice. A control
+/// starts on DefaultAlign, which getAlignmentType resolves to the PROFILE's
+/// alignment -- so it is the setting that means "inherit", and every control
+/// has it until someone picks otherwise. Hiding it from the table meant
+/// ConsoleGetType could not name the value it found and answered with an empty
+/// string, so an untouched control's align read back as nothing, and there was
+/// no way to put a control back to inheriting once you had chosen a side.
 static EnumTable::Enums alignCtrlEnums[] =
 {
    { AlignmentType::LeftAlign,          "left"      },
    { AlignmentType::CenterAlign,        "center"    },
    { AlignmentType::RightAlign,         "right"     },
-   { AlignmentType::DefaultAlign,       "default"   }
+   { AlignmentType::DefaultAlign,       "default"   }   ///< Inherit the profile's alignment.
 };
-static EnumTable gAlignCtrlTable(3, &alignCtrlEnums[0]);
+static EnumTable gAlignCtrlTable(4, &alignCtrlEnums[0]);
 
 static EnumTable::Enums vAlignCtrlEnums[] =
 {
    { VertAlignmentType::TopVAlign,          "top"      },
    { VertAlignmentType::MiddleVAlign,        "middle"    },
    { VertAlignmentType::BottomVAlign,         "bottom"     },
-   { VertAlignmentType::DefaultVAlign,       "default"   }
+   { VertAlignmentType::DefaultVAlign,       "default"   }   ///< Inherit the profile's alignment.
 };
-static EnumTable gVAlignCtrlTable(3, &vAlignCtrlEnums[0]);
+static EnumTable gVAlignCtrlTable(4, &vAlignCtrlEnums[0]);
 
 //used to locate the next/prev responder when tab is pressed
 S32 GuiControl::smCursorChanged           = -1;
@@ -148,6 +157,22 @@ bool GuiControl::onAdd()
    mBounds.extent.x = getMax( mMinExtent.x, mBounds.extent.x );
    mBounds.extent.y = getMax( mMinExtent.y, mBounds.extent.y );
 
+   // Nothing below this class may be left without a profile. Most constructors
+   // setField one themselves, but several never did -- GuiChainCtrl,
+   // GuiTabPageCtrl, GuiSliderCtrl, GuiTextEditCtrl, GuiInputCtrl,
+   // GuiSpriteCtrl and SceneWindow among them -- and a control with a null
+   // mProfile is a crash waiting for the first thing that reads it. A chain
+   // does not even need to be rendered: adding a child runs calculateExtent,
+   // which asks the profile for its borders.
+   //
+   // Doing it here rather than in each constructor is the point: it is one
+   // place, it covers every class that already exists, and a class added later
+   // cannot forget. GuiDefaultProfile is created during engine start-up
+   // (defaultGame.cc) and is the same fallback the TypeGuiProfile setter uses,
+   // so this is the behaviour every named profile already had on a miss.
+   if( mProfile == NULL )
+      setField( "profile", "GuiDefaultProfile" );
+
 
    // Add to root group.
    Sim::getGuiGroup()->addObject(this);
@@ -179,27 +204,63 @@ void GuiControl::onChildRemoved(GuiControl* child)
 	}
 }
 
+/// The sizing names, and why there are two sets of them.
+///
+/// The original names describe the edge that MOVES; the field controls the edge
+/// that STAYS. So "right" pins the LEFT edge (parentResized has no branch for
+/// it, so nothing moves) and "left" pins the RIGHT one (newPosition.x += delta).
+/// Reading a Gui file meant inverting every one of them in your head, and
+/// picking one from a list was a memory test.
+///
+/// The anchor names say what actually happens. Ordering is load-bearing in two
+/// directions:
+///
+///   ConsoleGetType returns the FIRST label whose value matches, so whichever
+///   name is listed first is what a field reads back as and what TAML writes.
+///   The preferred names are therefore at the top.
+///
+///   ConsoleSetType accepts ANY label in the table, case-insensitively, so the
+///   deprecated names below still load. Every .gui.taml already on disk, and
+///   every script that spells a sizing flag the old way, keeps working.
+///
+/// Note that a Gui saved by this build writes the new names, which an older
+/// build cannot read -- its table has no "anchorLeft", and ConsoleSetType
+/// silently falls back to index 0 on a miss.
+///
+/// "width"/"height" (both edges pinned) and "center"/"fill" were never
+/// misleading and keep their names. "relative" gains "scale", which is what it
+/// does.
 static EnumTable::Enums horzEnums[] =
 {
-    { GuiControl::horizResizeRight,      "right"     },
-    { GuiControl::horizResizeWidth,      "width"     },
-    { GuiControl::horizResizeLeft,       "left"      },
-    { GuiControl::horizResizeCenter,      "center"   },
-    { GuiControl::horizResizeRelative,    "relative" },
-    { GuiControl::horizResizeFill,        "fill"     }
+    { GuiControl::horizResizeRight,       "anchorLeft"  },   ///< Left edge stays put.
+    { GuiControl::horizResizeLeft,        "anchorRight" },   ///< Right edge stays put.
+    { GuiControl::horizResizeWidth,       "width"       },   ///< Both edges stay; the width follows the parent.
+    { GuiControl::horizResizeCenter,      "center"      },   ///< Neither edge; stays centred.
+    { GuiControl::horizResizeRelative,    "scale"       },   ///< Both edges scale with the parent.
+    { GuiControl::horizResizeFill,        "fill"        },   ///< Fills the parent's inner rect.
+
+    // Deprecated. Accepted for reading; never written.
+    { GuiControl::horizResizeRight,       "right"       },   ///< \deprecated Use anchorLeft.
+    { GuiControl::horizResizeLeft,        "left"        },   ///< \deprecated Use anchorRight.
+    { GuiControl::horizResizeRelative,    "relative"    }    ///< \deprecated Use scale.
 };
-static EnumTable gHorizSizingTable(6, &horzEnums[0]);
+static EnumTable gHorizSizingTable(9, &horzEnums[0]);
 
 static EnumTable::Enums vertEnums[] =
 {
-    { GuiControl::vertResizeBottom,      "bottom"     },
-    { GuiControl::vertResizeHeight,      "height"     },
-    { GuiControl::vertResizeTop,         "top"        },
-    { GuiControl::vertResizeCenter,       "center"    },
-    { GuiControl::vertResizeRelative,     "relative"  },
-    { GuiControl::vertResizeFill,         "fill"      }
+    { GuiControl::vertResizeBottom,       "anchorTop"    },  ///< Top edge stays put.
+    { GuiControl::vertResizeTop,          "anchorBottom" },  ///< Bottom edge stays put.
+    { GuiControl::vertResizeHeight,       "height"       },  ///< Both edges stay; the height follows the parent.
+    { GuiControl::vertResizeCenter,       "center"       },  ///< Neither edge; stays centred.
+    { GuiControl::vertResizeRelative,     "scale"        },  ///< Both edges scale with the parent.
+    { GuiControl::vertResizeFill,         "fill"         },  ///< Fills the parent's inner rect.
+
+    // Deprecated. Accepted for reading; never written.
+    { GuiControl::vertResizeBottom,       "bottom"       },  ///< \deprecated Use anchorTop.
+    { GuiControl::vertResizeTop,          "top"          },  ///< \deprecated Use anchorBottom.
+    { GuiControl::vertResizeRelative,     "relative"     }   ///< \deprecated Use scale.
 };
-static EnumTable gVertSizingTable(6, &vertEnums[0]);
+static EnumTable gVertSizingTable(9, &vertEnums[0]);
 
 void GuiControl::initPersistFields()
 {
@@ -305,6 +366,30 @@ void GuiControl::addObject(SimObject *object)
    AssertFatal(!ctrl->isAwake(), "GuiControl::addObject: object is already awake before add");
    if(mAwake)
       ctrl->awaken();
+
+   // Two pieces of cached sizing state describe the parent the control has just
+   // left, and neither means anything here. Both are cleared before
+   // onChildAdded, which is the first thing to read them.
+   //
+   // mStoredRelativePos is the proportion of its parent a SCALED control
+   // occupies, cached so that a run of layout passes cannot round its edges away
+   // a pixel at a time. Writing a position is the moment it stops describing the
+   // control, which is why the Position and Extent field setters clear it -- and
+   // changing parent is that moment too. Left alone, onChildAdded applied the OLD
+   // parent's proportion to the NEW parent's extent: a button 200 wide at x=100
+   // in an 800-wide container arrived 50 wide at x=25 in a 200-wide one. Reset,
+   // the proportion is recaptured against the parent it has now, old and new
+   // extents are the same value in that call, and the arithmetic is the identity
+   // -- so a move keeps the size it moved, which is what every other sizing mode
+   // already did.
+   //
+   // mStoredExtent is extent given up to minExtent and owed back when there is
+   // room again. A debt run up under one parent is not the next one's to pay.
+   //
+   // Note this cannot fire on a re-add: addObject returns above when the object
+   // is already a child of this control.
+   ctrl->resetStoredRelPos();
+   ctrl->resetStoredExtent();
 
     onChildAdded( ctrl );
 }
@@ -606,24 +691,87 @@ void GuiControl::parentResized(const Point2I &oldParentExtent, const Point2I &ne
    resize(newPosition, newExtent);
 }
 
+// One axis of the rescue. Nothing of the control is visible when its far edge is
+// at or before the parent's near edge, or its near edge is at or past the
+// parent's far edge -- and a parent with no room at all shows nothing wherever
+// the control is put, which the second test catches on its own (pos >= 0).
+static S32 rescuedAxis(S32 pos, S32 extent, S32 parentInnerExtent)
+{
+    const bool offTheNearSide = (pos + extent) <= 0;
+    const bool offTheFarSide = pos >= parentInnerExtent;
+
+    return (offTheNearSide || offTheFarSide) ? 0 : pos;
+}
+
+Point2I GuiControl::rescuedPosition(const Point2I &pos, const Point2I &extent, const Point2I &parentInnerExtent)
+{
+    return Point2I(rescuedAxis(pos.x, extent.x, parentInnerExtent.x),
+        rescuedAxis(pos.y, extent.y, parentInnerExtent.y));
+}
+
+bool GuiControl::pullIntoView()
+{
+    GuiControl* parent = getParent();
+    if (parent == NULL)
+    {
+        return false;
+    }
+
+    const Point2I rescued = rescuedPosition(mBounds.point, mBounds.extent, parent->getInnerRect().extent);
+    if (rescued == mBounds.point)
+    {
+        return false;
+    }
+
+    // Through resize rather than a direct write to mBounds, so a container that
+    // places its own children hears about it -- and then reset the cached
+    // proportion, because a scaled control that has just been moved must measure
+    // from where it landed. resize() does not do that for its caller: it is what
+    // parentResized itself calls, and clearing the cache there would defeat it.
+    resize(rescued, mBounds.extent);
+    resetStoredRelPos();
+
+    return true;
+}
+
 void GuiControl::preventResizeModeFill()
+{
+	preventHorizResizeModeFill();
+	preventVertResizeModeFill();
+}
+
+void GuiControl::preventResizeModeCenter()
+{
+	preventHorizResizeModeCenter();
+	preventVertResizeModeCenter();
+}
+
+void GuiControl::preventHorizResizeModeFill()
 {
 	if (getHorizSizing() == horizResizeFill)
 	{
 		setHorizSizing(horizResizeRight);
 	}
+}
+
+void GuiControl::preventVertResizeModeFill()
+{
 	if (getVertSizing() == vertResizeFill)
 	{
 		setVertSizing(vertResizeBottom);
 	}
 }
 
-void GuiControl::preventResizeModeCenter()
+void GuiControl::preventHorizResizeModeCenter()
 {
 	if (getHorizSizing() == horizResizeCenter)
 	{
 		setHorizSizing(horizResizeRight);
 	}
+}
+
+void GuiControl::preventVertResizeModeCenter()
+{
 	if (getVertSizing() == vertResizeCenter)
 	{
 		setVertSizing(vertResizeBottom);
@@ -849,6 +997,90 @@ GuiControlProfile* GuiControl::resolveDefaultTooltipProfile()
 	return dynamic_cast<GuiControlProfile*>(Sim::findObject("GuiDefaultProfile"));
 }
 
+// Wrap one paragraph of tooltip text to maxWidth, appending to lines and
+// returning the new line count. This is the word wrapping renderTooltip has
+// always done, lifted out so it can run once per paragraph -- a tooltip splits
+// on line breaks first now, which is what lets one carry a heading and an
+// explanation of what it means on separate lines.
+//
+// Not GuiControl::getLineList: that wraps only when the CONTROL wraps, and a
+// tooltip has to wrap whatever the control it belongs to does.
+static S32 wrapTooltipParagraph(const char* paragraph, GFont* font, const S32 maxWidth,
+    const S32 spaceWidth, FrameTemp<StringBuffer>& lines, S32 lineCount,
+    const S32 maxLines, S32& widestLine)
+{
+    const S32 wordCount = StringUnit::getUnitCount( paragraph, " " );
+    S32 lineWidth = 0;
+    S32 wordStartIndex = 0;
+    S32 wordEndIndex = 0;
+
+    while( true )
+    {
+        // Do we have any words left?
+        if ( wordEndIndex < wordCount )
+        {
+            // Yes, so fetch the word.
+            const char* pWord = StringUnit::getUnit( paragraph, wordEndIndex, " " );
+
+            // Add word length.
+            const S32 wordLength = (S32)font->getStrWidth( pWord ) + spaceWidth;
+
+            // Do we still have room?
+            if ( (lineWidth + wordLength) < maxWidth )
+            {
+                // Yes, so add word length.
+                lineWidth += wordLength;
+
+                // Next word.
+                wordEndIndex++;
+
+                continue;
+            }
+
+            // Do we have any lines left?
+            if ( lineCount < maxLines )
+            {
+                // Yes, so insert line.
+                lines[lineCount++] = StringUnit::getUnits( paragraph, wordStartIndex, wordEndIndex-1, " " );
+
+                // Update horizontal text bounds.
+                if ( lineWidth > widestLine )
+                    widestLine = lineWidth;
+            }
+
+            // Set new line length.
+            lineWidth = wordLength;
+
+            // Set word start.
+            wordStartIndex = wordEndIndex;
+
+            // Next word.
+            wordEndIndex++;
+
+            continue;
+        }
+
+        // Do we have any words left?
+        if ( wordStartIndex < wordCount )
+        {
+            // Yes, so do we have any lines left?
+            if ( lineCount < maxLines )
+            {
+                // Yes, so insert line.
+                lines[lineCount++] = StringUnit::getUnits( paragraph, wordStartIndex, wordCount-1, " " );
+
+                // Update horizontal text bounds.
+                if ( lineWidth > widestLine )
+                    widestLine = lineWidth;
+            }
+        }
+
+        break;
+    }
+
+    return lineCount;
+}
+
 bool GuiControl::renderTooltip(Point2I &cursorPos, const char* tipText )
 {
 #if !defined(TORQUE_OS_IOS) && !defined(TORQUE_OS_ANDROID) && !defined(TORQUE_OS_EMSCRIPTEN)
@@ -915,83 +1147,31 @@ bool GuiControl::renderTooltip(Point2I &cursorPos, const char* tipText )
     // Fetch the maximum allowed tooltip extent.
     const S32 maxTooltipWidth = mTooltipWidth;
 
-    // Fetch word count.
-    const S32 wordCount = StringUnit::getUnitCount( renderTip, " " );
-
     // Reset line storage.
     const S32 tooltipLineStride = (S32)font->getHeight() + 4;
     const S32 maxTooltipLines = 20;
     S32 tooltipLineCount = 0;
-    S32 tooltipLineWidth = 0;
     FrameTemp<StringBuffer> tooltipLines( maxTooltipLines );
 
-    // Reset word indexing.
-    S32 wordStartIndex = 0;
-    S32 wordEndIndex = 0;
-
-    // Search for end word.
-    while( true )
+    // Paragraph by paragraph, wrapping each to the tooltip width. Breaking on
+    // newlines first is what lets a tip say what a thing is on one line and
+    // what it does on the next.
+    const string tip(renderTip);
+    string::size_type paragraphStart = 0;
+    while ( paragraphStart <= tip.length() )
     {
-        // Do we have any words left?
-        if ( wordEndIndex < wordCount )
-        {
-            // Yes, so fetch the word.
-            const char* pWord = StringUnit::getUnit( renderTip, wordEndIndex, " " );
+        const string::size_type breakAt = tip.find('\n', paragraphStart);
+        const string paragraph = (breakAt == string::npos)
+            ? tip.substr(paragraphStart)
+            : tip.substr(paragraphStart, breakAt - paragraphStart);
 
-            // Add word length.
-            const S32 wordLength = (S32)font->getStrWidth( pWord ) + spaceWidth;
+        tooltipLineCount = wrapTooltipParagraph( paragraph.c_str(), font, maxTooltipWidth,
+            spaceWidth, tooltipLines, tooltipLineCount, maxTooltipLines, textBounds.x );
 
-            // Do we still have room?
-            if ( (tooltipLineWidth + wordLength) < maxTooltipWidth )
-            {
-                // Yes, so add word length.
-                tooltipLineWidth += wordLength;
+        if ( breakAt == string::npos )
+            break;
 
-                // Next word.
-                wordEndIndex++;
-
-                continue;
-            }
-
-            // Do we have any lines left?
-            if ( tooltipLineCount < maxTooltipLines )
-            {
-                // Yes, so insert line.
-                tooltipLines[tooltipLineCount++] = StringUnit::getUnits( renderTip, wordStartIndex, wordEndIndex-1, " " );
-
-                // Update horizontal text bounds.
-                if ( tooltipLineWidth > textBounds.x )
-                    textBounds.x = tooltipLineWidth;
-            }
-
-            // Set new line length.
-            tooltipLineWidth = wordLength;
-
-            // Set word start.
-            wordStartIndex = wordEndIndex;
-
-            // Next word.
-            wordEndIndex++;
-
-            continue;
-        }
-
-        // Do we have any words left?
-        if ( wordStartIndex < wordCount )
-        {
-            // Yes, so do we have any lines left?
-            if ( tooltipLineCount < maxTooltipLines )
-            {
-                // Yes, so insert line.
-                tooltipLines[tooltipLineCount++] = StringUnit::getUnits( renderTip, wordStartIndex, wordCount-1, " " );
-
-                // Update horizontal text bounds.
-                if ( tooltipLineWidth > textBounds.x )
-                    textBounds.x = tooltipLineWidth;
-            }
-        }
-
-        break;
+        paragraphStart = breakAt + 1;
     }
 
     // Controls the size of the inside (gutter) tooltip region.
@@ -1053,7 +1233,7 @@ void GuiControl::renderChildControls(const Point2I& offset, const RectI& content
 			  Con::errorf( "GuiControl::renderChildControls() object %i is NULL", count );
 			continue;
 		  }
-		  if (ctrl->mVisible && (!isEditMode() || !ctrl->isHidden()))
+		  if (ctrl->mVisible && !isHiddenInEditor(ctrl))
 		  {
 			 renderChild(ctrl, offset, content, clipRect);
 		  }
@@ -1492,6 +1672,10 @@ bool GuiControl::pointInControl(const Point2I& parentCoordPoint)
 }
 
 
+// A hidden child is skipped here and not descended into, which is what takes its
+// whole subtree with it - the same thing renderChildControls does, and it has to
+// be the same thing, or the Gui Editor's eye would take a control out of sight
+// while leaving it in the way of every click aimed at what is behind it.
 GuiControl* GuiControl::findHitControl(const Point2I &pt, S32 initialLayer, const bool ignoreUseInput, const bool ignoreEditSelected)
 {
    iterator i = end(); // find in z order (last to first)
@@ -1503,9 +1687,10 @@ GuiControl* GuiControl::findHitControl(const Point2I &pt, S32 initialLayer, cons
       {
          continue;
       }
-      else if (ctrl->pointInControl(pt - ctrl->mRenderInsetLT) && 
-		ctrl->mVisible && 
-		(ignoreUseInput || ctrl->mUseInput) && 
+      else if (ctrl->pointInControl(pt - ctrl->mRenderInsetLT) &&
+		ctrl->mVisible &&
+		!isHiddenInEditor(ctrl) &&
+		(ignoreUseInput || ctrl->mUseInput) &&
 		(ignoreEditSelected || (isEditMode() && !ctrl->isEditSelected())))
       {
          Point2I ptemp = pt - (ctrl->mBounds.point + ctrl->mRenderInsetLT);
@@ -2355,6 +2540,41 @@ void GuiControl::renderLineList(const Point2I& offset, const Point2I& extent, co
 	}
 }
 
+// Split on newlines by hand rather than with getline, which cannot tell an
+// empty string from no string: it fails immediately on "", so an empty control
+// produced NO lines at all. A line block is what draws a GuiTextEditCtrl's
+// caret, which is why an empty multi-line box had no cursor in it. getline also
+// drops the empty paragraph a trailing newline creates, so pressing return at
+// the end of the text left the caret with no line to sit on.
+//
+// The newline stays on the end of its paragraph, for the same reason the
+// wrapping in getLineList re-appends the space it consumed: GuiTextEditCtrl
+// finds the character offset of a line by summing the lengths of the lines
+// above it (renderLineList), so a character dropped here moves the caret.
+// Nothing draws or measures it -- dglDrawText and GFont::getStrWidth both skip
+// a line break, which GFont::isValidChar answers false for.
+//
+// Kept apart from the wrapping below because it needs no font: measuring text
+// loads one, and a font registers a texture, which cannot be done in the C++
+// unit tests -- they run with no canvas. See guiTextEditTests.cc.
+vector<string> GuiControl::splitParagraphs(const char* text)
+{
+    vector<string> paragraphList = vector<string>();
+    string paragraphBuffer;
+    for (const char* c = text; *c != '\0'; c++)
+    {
+        paragraphBuffer += *c;
+        if (*c == '\n')
+        {
+            paragraphList.push_back(paragraphBuffer);
+            paragraphBuffer.clear();
+        }
+    }
+    paragraphList.push_back(paragraphBuffer);
+
+    return paragraphList;
+}
+
 vector<string> GuiControl::getLineList(const char* text, GuiControlProfile* profile, S32 totalWidth)
 {
     GFont* font = profile->getFont(mFontSizeAdjust);
@@ -2366,12 +2586,7 @@ vector<string> GuiControl::getLineList(const char* text, GuiControlProfile* prof
     }
     else
     {
-        vector<string> paragraphList = vector<string>();
-        istringstream f(text);
-        string s;
-        while (getline(f, s)) {
-            paragraphList.push_back(s);
-        }
+        vector<string> paragraphList = splitParagraphs(text);
 
         for (string& paragraph : paragraphList)
         {
@@ -2409,7 +2624,10 @@ vector<string> GuiControl::getLineList(const char* text, GuiControlProfile* prof
                     line = word;
                 }
             }
-            if (paragraph.back() == ' ')
+            // back() on an empty string is undefined behaviour, and an empty
+            // paragraph is ordinary now: it is what a blank line between two
+            // others is made of.
+            if (!paragraph.empty() && paragraph.back() == ' ')
             {
                 line += " ";
             }

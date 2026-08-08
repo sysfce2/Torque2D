@@ -56,7 +56,7 @@ function AssetInspector::onAdd(%this)
 	{
 		HorizSizing = "left";
 		Class = "EditorIconButton";
-		Frame = 48;
+		Frame = $EditorIcon::trash;
 		Position = "660 5";
 		Command = %this.getId() @ ".deleteAsset();";
 		Tooltip = "Delete Asset";
@@ -77,10 +77,10 @@ function AssetInspector::onAdd(%this)
 	};
 	ThemeManager.setProfile(%this.emitterButtonBar, "emptyProfile");
 	%this.add(%this.emitterButtonBar);
-	%this.emitterButtonBar.addButton("AddEmitter", 25, "Add Emitter", "");
-	%this.emitterButtonBar.addButton("MoveEmitterBackward", 27, "Move Emitter Backward", "getMoveEmitterBackwardEnabled");
-	%this.emitterButtonBar.addButton("MoveEmitterForward", 28, "Move Emitter Forward", "getMoveEmitterForwardEnabled");
-	%this.emitterButtonBar.addButton("RemoveEmitter", 23, "Remove Emitter", "getRemoveEmitterEnabled");
+	%this.emitterButtonBar.addButton("AddEmitter", $EditorIcon::round_plus, "Add Emitter", "");
+	%this.emitterButtonBar.addButton("MoveEmitterBackward", $EditorIcon::rnd_br_up, "Move Emitter Backward", "getMoveEmitterBackwardEnabled");
+	%this.emitterButtonBar.addButton("MoveEmitterForward", $EditorIcon::rnd_br_down, "Move Emitter Forward", "getMoveEmitterForwardEnabled");
+	%this.emitterButtonBar.addButton("RemoveEmitter", $EditorIcon::round_delete, "Remove Emitter", "getRemoveEmitterEnabled");
 
 	%this.tabBook = new GuiTabBookCtrl()
 	{

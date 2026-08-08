@@ -22,6 +22,10 @@
 
 function EditorCore::create( %this )
 {
+	// First, and before any editor builds a control: every icon in every editor
+	// is a frame index into the shared sheets, and these are the names for them.
+	exec("./EditorIcons.cs");
+
 	%this.editorKeyMap = new ActionMap();
 	if(!isObject(AppCore))
 	{
@@ -83,14 +87,22 @@ function EditorCore::initGui(%this)
 				Command = "EditorCore.close();";
 			};
 
+			// Both go through the Gui Editor's guard, because both throw away a
+			// Gui that is being authored and neither is undoable. GuiEditor is
+			// named directly, as it is by every item in the File, Edit, Layout
+			// and Select menus below; the isObject test is what keeps quitting
+			// working if the Gui Editor module ever fails to load.
+			//
+			// The window's own X cannot be guarded this way. It posts the quit
+			// from the window procedure with no script in between.
 			new GuiMenuItemCtrl() {
 				Text = "Close Project";
-				Command = "restartInstance();";
+				Command = "EditorCore.guardedCommand(\"restartInstance();\");";
 			};
 
 			new GuiMenuItemCtrl() {
 				Text = "Exit";
-				Command = "quit();";
+				Command = "EditorCore.guardedCommand(\"quit();\");";
 			};
 		};
 		new GuiMenuItemCtrl() {
@@ -117,6 +129,16 @@ function EditorCore::initGui(%this)
 				Text = "Save Gui As...";
 				Command = "GuiEditor.SaveGuiAs();";
 				Accelerator = "Ctrl-Shift S";
+			};
+			new GuiMenuItemCtrl() { Text = "-"; };
+			// Offered only once the Gui has a file to go back to; GuiEditor
+			// keeps that up to date in refreshFileMenu. No accelerator - it
+			// throws away everything since the last save, and that is not a
+			// thing to have a shortcut for.
+			new GuiMenuItemCtrl() {
+				Text = "Revert";
+				Command = "GuiEditor.Revert();";
+				Active = "0";
 			};
 		};
 		new GuiMenuItemCtrl() {
@@ -148,6 +170,27 @@ function EditorCore::initGui(%this)
 				Text = "Paste";
 				Command = "GuiEditor.Paste();";
 				Accelerator = "Ctrl V";
+			};
+			new GuiMenuItemCtrl() {
+				Text = "Duplicate";
+				Command = "GuiEditor.Duplicate();";
+				Accelerator = "Ctrl D";
+			};
+			new GuiMenuItemCtrl() { Text = "-"; };
+			// DeleteSelection, not Delete: delete is a console method on every
+			// SimObject, so GuiEditor.Delete() would quietly destroy the editor
+			// rather than the selection.
+			//
+			// The accelerator cannot double-fire with the Delete key the canvas
+			// and the Explorer tree already handle themselves. The canvas
+			// consults accelerators only once the first responder has passed on
+			// the key -- the same thing that lets a text box in the properties
+			// pane keep Ctrl+C. What it adds is Delete working while focus is in
+			// a tool window.
+			new GuiMenuItemCtrl() {
+				Text = "Delete";
+				Command = "GuiEditor.DeleteSelection();";
+				Accelerator = "Delete";
 			};
 		};
 		new GuiMenuItemCtrl() {
@@ -198,46 +241,46 @@ function EditorCore::initGui(%this)
 			new GuiMenuItemCtrl() { Text = "-"; };
 			new GuiMenuItemCtrl() {
 				Text = "Align Top";
-				Command = "GuiEditor.brain.Justify(3);";
+				Command = "GuiEditor.Justify(3);";
 				Accelerator = "Ctrl T";
 			};
 			new GuiMenuItemCtrl() {
 				Text = "Align Bottom";
-				Command = "GuiEditor.brain.Justify(4);";
+				Command = "GuiEditor.Justify(4);";
 				Accelerator = "Ctrl B";
 			};
 			new GuiMenuItemCtrl() {
 				Text = "Align Left";
-				Command = "GuiEditor.brain.Justify(0);";
+				Command = "GuiEditor.Justify(0);";
 				Accelerator = "Ctrl L";
 			};
 			new GuiMenuItemCtrl() {
 				Text = "Align Right";
-				Command = "GuiEditor.brain.Justify(2);";
+				Command = "GuiEditor.Justify(2);";
 				Accelerator = "Ctrl R";
 			};
 			new GuiMenuItemCtrl() { Text = "-"; };
 			new GuiMenuItemCtrl() {
 				Text = "Center Horizontally";
-				Command = "GuiEditor.brain.Justify(1);";
+				Command = "GuiEditor.Justify(1);";
 			};
 			new GuiMenuItemCtrl() {
 				Text = "Space Vertically";
-				Command = "GuiEditor.brain.Justify(5);";
+				Command = "GuiEditor.Justify(5);";
 			};
 			new GuiMenuItemCtrl() {
 				Text = "Space Horizontally";
-				Command = "GuiEditor.brain.Justify(6);";
+				Command = "GuiEditor.Justify(6);";
 			};
 			new GuiMenuItemCtrl() { Text = "-"; };
 			new GuiMenuItemCtrl() {
 				Text = "Bring to Front";
-				Command = "GuiEditor.brain.BringToFront();";
+				Command = "GuiEditor.BringToFront();";
 				Accelerator = "Ctrl-Shift Up";
 			};
 			new GuiMenuItemCtrl() {
 				Text = "Push to Back";
-				Command = "GuiEditor.brain.PushToBack();";
+				Command = "GuiEditor.PushToBack();";
 				Accelerator = "Ctrl-Shift Down";
 			};
 			new GuiMenuItemCtrl() { Text = "-"; };
@@ -264,10 +307,13 @@ function EditorCore::initGui(%this)
 				Command = "GuiEditor.brain.SelectAll();";
 				Accelerator = "Ctrl A";
 			};
+			// Ctrl-Shift A rather than Ctrl D, which Duplicate has: this is what
+			// deselect is bound to nearly everywhere else, and it pairs with
+			// Ctrl A above.
 			new GuiMenuItemCtrl() {
 				Text = "Deselect";
 				Command = "GuiEditor.brain.clearSelection();";
-				Accelerator = "Ctrl D";
+				Accelerator = "Ctrl-Shift A";
 			};
 		};
 		new GuiMenuItemCtrl() {
@@ -412,6 +458,24 @@ function EditorCore::close(%this)
 	{
 		Canvas.setCursor(defaultCursor);
 	}
+}
+
+// Run %command, unless there is a Gui being authored with changes in it - in
+// which case the Gui Editor asks about those first and runs it afterwards, or
+// not at all. Used by Close Project and Exit, which are the two commands in this
+// menu that discard a document without being able to give it back.
+//
+// The Gui Editor is the only editor with a document to lose. If another ever
+// grows one, this is where it joins in.
+function EditorCore::guardedCommand(%this, %command)
+{
+	if(isObject(GuiEditor))
+	{
+		GuiEditor.guardDocument(%command);
+		return;
+	}
+
+	eval(%command);
 }
 
 function EditorCore::RegisterEditor(%this, %name, %editor)

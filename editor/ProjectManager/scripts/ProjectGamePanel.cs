@@ -3,8 +3,8 @@ function ProjectGamePanel::onAdd(%this)
 {
 	%this.init("Project");
 
-	%this.buttonBar.addButton("createNewModule", 11, "Create Module", "");
-	%this.buttonBar.addButton("editModule", 49, "Edit Module", "editModuleAvailable");
+	%this.buttonBar.addButton("createNewModule", $EditorIcon::doc_plus, "Create Module", "");
+	%this.buttonBar.addButton("editModule", $EditorIcon::doc_edit, "Edit Module", "editModuleAvailable");
 }
 
 function ProjectGamePanel::onOpen(%this, %allModules)

@@ -11,7 +11,13 @@ Torque2D 4.0: Rocket Edition is currently in progress. The major change with 4.0
 
 The managers can be reached by opening the console using the console button in the Toybox or by pressing Tilde(~) + Ctrl. You will then notice tabs along that top for the various tools currently available.
 
-Early Access 3 introduces a **full GUI Editor** built from the ground up, replacing the previous Gui Editor Toy. The new editor includes an inspector, tree view, menus, save/load dialogs, frame set layouts, color picker, and control reordering. It provides a complete visual workflow for creating and editing GUI layouts within the engine.
+Early Access 3 introduces a **full GUI Editor**, built from the ground up to replace the previous Gui Editor Toy. You build a screen by dragging controls from an illustrated palette onto the canvas, or by clicking one to have it placed for you, and arrange them by dragging, by the arrow keys, or through the Layout menu's align and spacing commands. There is undo and redo, and cut, copy and paste work within a Gui and between them.
+
+Around the canvas sit two more panels. The **Explorer** shows the whole control tree, with a picture of each control's class, columns for hiding and locking, and drag-to-reparent. The **properties pane** shows only the fields the selected control's class actually reads — a chain never draws its own text, so it is not offered nine text fields it will ignore — and gives the common ones purpose-built editors rather than text boxes: an anchor picker for sizing, color swatches, an image picker you choose by looking at it, and editors for the things that used to be unreachable from an editor at all, such as a list box's rows and a menu bar's items.
+
+Guis are saved as either the classic `.gui` script or TAML, and the editor says which one loses what before you pick. A Gui you have changed is not thrown away without being asked about.
+
+Controls take their appearance from a **theme** rather than from profiles you wire up by hand. The **Gui Profile Editor** is where a theme is authored — profiles, borders, fonts and colors, against a live preview — and a control dropped onto the canvas arrives already wearing the right one. Set Theme re-skins an entire Gui.
 
 The Rocket Edition also features a revamped Gui System! Until now it has been a common practice among those seriously using T2D to avoid the Gui System as much as possible. We aim to fix that with the Rocket Edition. Explanation of how to use the updated Gui System can be found in the wiki in the [Gui Guide](https://github.com/TorqueGameEngines/Torque2D/wiki/GUI-Guide).
 

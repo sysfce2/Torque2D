@@ -175,6 +175,19 @@ public:
 	virtual bool isEditMode();
 	virtual bool isEditSelected();
 
+	/// Whether a child of this control must be treated as though it were not
+	/// there: the eye in the Gui Editor's Explorer is off for it.
+	///
+	/// The paint and the hit test both ask this, and they have to agree. A
+	/// control the editor does not draw must not be a target either, or the eye
+	/// takes it out of sight while leaving it in the way - which is the one
+	/// thing hiding is for.
+	///
+	/// Cheap test first: isHidden is a bit, isEditMode walks the parent chain,
+	/// and the answer for almost every control on almost every mouse move is no.
+	inline bool isHiddenInEditor(GuiControl* child)
+		{ return child->isHidden() && isEditMode(); }
+
     /// @name Keyboard Input
     /// @{
     GuiControl* mFirstResponder;
@@ -378,6 +391,7 @@ public:
     /// @param   value   True if object should be visible
     virtual void setVisible(bool value);
     inline bool isVisible() { return mVisible; } ///< Returns true if the object is visible
+	inline bool rendersChildren() { return mRendersChildren; } ///< True if the control draws its children, which is what makes it able to be a container.
 	static bool writeVisibleFn(void* obj, const char* data) { GuiControl* ctrl = static_cast<GuiControl*>(obj); return !ctrl->isVisible(); }
 	static bool writeUseInputFn(void* obj, const char* data) { GuiControl* ctrl = static_cast<GuiControl*>(obj); return !ctrl->mUseInput; }
 	static bool writeIsContainerFn(void* obj, const char* data) { GuiControl* ctrl = static_cast<GuiControl*>(obj); return ctrl->mRendersChildren && !ctrl->mIsContainer; }
@@ -485,11 +499,47 @@ public:
     /// @param   newParentExtent   The new size of the parent object
     virtual void parentResized(const Point2I &oldParentExtent, const Point2I &newParentExtent);
     
+    /// Where a control goes when a move has stranded it outside its parent.
+    ///
+    /// Reparenting in the Explorer tree is a gesture with no pointer in it, so
+    /// nothing supplies a position and the control keeps the local one it held
+    /// in its old parent. Dropped into something smaller that can put it
+    /// entirely outside: not clipped, not partly visible, gone.
+    ///
+    /// Per axis, because a placement that is still valid should be kept -- a
+    /// control that was 20 pixels down and 400 across is still 20 pixels down.
+    /// Only when it is ENTIRELY outside on that axis, because a control the user
+    /// can see is a control the user can drag, and moving one that merely
+    /// overhangs the edge would be undoing a placement rather than rescuing it.
+    ///
+    /// Static and taking everything it uses, so the arithmetic can be tested
+    /// without a canvas -- as GuiScrollCtrl::subtractScrollBars is.
+    static Point2I rescuedPosition(const Point2I &pos, const Point2I &extent, const Point2I &parentInnerExtent);
+
+    /// The same against the parent this control actually has, resizing it if it
+    /// had to move. Answers whether it did.
+    ///
+    /// A no-op for a control that is even partly visible, and for one with no
+    /// parent at all, so a caller can ask about a whole selection without
+    /// working out which members need it.
+    bool pullIntoView();
+
 	/// Removes the resize mode of fill and changes it to right or bottom
 	void preventResizeModeFill();
 
 	/// Removes the resize mode of center and changes it to right or bottom
 	void preventResizeModeCenter();
+
+	/// The same, one axis at a time.
+	///
+	/// A container that can only offer a child a fixed size in ONE direction --
+	/// a scroll control, whose other axis is as long as its content wants to be
+	/// -- has to be able to refuse fill across without refusing it down. See
+	/// GuiScrollCtrl::preventUnsizedModes.
+	void preventHorizResizeModeFill();
+	void preventVertResizeModeFill();
+	void preventHorizResizeModeCenter();
+	void preventVertResizeModeCenter();
 	/// @}
 
     /// @name Rendering
@@ -683,6 +733,30 @@ public:
     /// @param   offset   the offset which is representative of the units x and y that the editor takes up on screen
     virtual bool onMouseDraggedEditor(const GuiEvent &event, const Point2I& offset) { return false; };
 
+    /// Whether this control is allowed to become a child of the given container.
+    ///
+    /// The Gui Editor asks before it reparents anything - a drag in the Explorer
+    /// tree, a drag across the canvas, a paste - and leaves the control where it
+    /// is when the answer is no. Nothing else in the engine asks: SimGroup::addObject
+    /// cannot refuse, so this is advice the editor takes, not an invariant the
+    /// object model enforces.
+    ///
+    /// A control that only means something inside one particular parent overrides
+    /// this. GuiTabPageCtrl is the one that does.
+    virtual bool canBeChildOf(GuiControl* parent) { return true; };
+
+    /// Whether the Gui Editor may move or resize this control.
+    ///
+    /// False where the PARENT dictates the geometry and the control's own
+    /// Position and Extent are written over the moment anything re-lays it out -
+    /// a tab page, a menu item. The editor draws such a control the way it draws
+    /// a locked one: an outline rather than eight sizing handles, which would
+    /// otherwise be handles you can drag to no effect at all.
+    ///
+    /// This is the control's own nature, not the user's padlock; isLocked is
+    /// that, and the editor honours both.
+    virtual bool isGeometryEditable() { return true; };
+
     /// @}
 
     /// @name Tabs
@@ -817,6 +891,10 @@ public:
     /// @note This should move into the graphics library at some point
     void renderText(const Point2I &offset, const Point2I &extent, const char *text, GuiControlProfile *profile, TextRotationOptions rot = tRotateNone);
     virtual void renderLineList(const Point2I& offset, const Point2I& extent, const S32 startOffsetY, const vector<string> lineList, GuiControlProfile* profile, const TextRotationOptions rot = tRotateNone);
+    /// Splits text into paragraphs on its line breaks. The measuring half of
+    /// getLineList needs a font; this half does not, which is what lets it be
+    /// tested on its own.
+    static vector<string> splitParagraphs(const char* text);
     virtual vector<string> getLineList(const char* text, GuiControlProfile* profile, S32 totalWidth);
     virtual void renderTextLine(const Point2I& startPoint, const string line, GuiControlProfile* profile, F32 rotationInDegrees, U32 ibeamPosAtLineStart, U32 lineNumber);
 

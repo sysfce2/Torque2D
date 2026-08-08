@@ -94,6 +94,7 @@ struct GuiThemeMembership
 
 class GuiControlProfile;
 class GuiBorderProfile;
+class GuiCursor;
 
 //-----------------------------------------------------------------------------
 /// A set of theme-wide values (fonts, palette colors, border size) from which
@@ -117,6 +118,7 @@ private:
 public:
     typedef void (*StampProfileFn)(GuiProfileTheme* theme, GuiControlProfile* profile);
     typedef void (*StampBorderFn)(GuiProfileTheme* theme, GuiBorderProfile* border);
+    typedef void (*StampCursorFn)(GuiProfileTheme* theme, GuiCursor* cursor);
 
     /// One entry of the engine-defined category table: the mCategory value,
     /// the member-name suffix, and the recipe deriving the member's fields
@@ -135,12 +137,35 @@ public:
         StampBorderFn stamp;
     };
 
+    /// One entry of the cursor table. Unlike a profile or a border, a cursor is
+    /// a bitmap, which no recipe can derive from a palette - so the table also
+    /// carries the stock art a new member starts from and the placement values
+    /// that art wants. Those three are written once when the member is created
+    /// and never stamped again; the recipe derives only the tint.
+    ///
+    /// The suffixes deliberately match the canonical cursor names the engine
+    /// looks up when a control names none ("EditCursor", "LeftRightCursor" and
+    /// the rest), so installing a theme's cursors under those names is a matter
+    /// of dropping the theme's own name from the front.
+    struct CursorCategory
+    {
+        const char* name;
+        const char* suffix;
+        const char* stockFile;      ///< Art seeded into the theme's cursor folder.
+        S32 hotSpotX;
+        S32 hotSpotY;
+        F32 renderOffsetX;          ///< A fraction of the bitmap's own size, so it
+        F32 renderOffsetY;          ///< anchors the same way whatever the art measures.
+        StampCursorFn stamp;
+    };
+
 private:
     // Theme-wide values, the inputs to every category recipe.
     StringTableEntry mFontBody;         ///< Font for body text; the most common font.
     StringTableEntry mFontTitle;        ///< Font for titles and headers.
     StringTableEntry mFontCode;         ///< Monospace font for code and console text.
     StringTableEntry mFontDirectory;    ///< Directory searched for the fonts.
+    StringTableEntry mCursorDirectory;  ///< Directory holding this theme's own cursor art.
     S32 mFontSize;                      ///< Base font size; recipes may offset it.
     ColorI mColorBackground;            ///< Deepest background color.
     ColorI mColorSurface;               ///< Raised surface/control background color.
@@ -156,16 +181,27 @@ private:
     Vector<GuiControlProfile*> mExtraProfiles;
     Vector<GuiBorderProfile*> mDefaultBorders;
     Vector<GuiBorderProfile*> mExtraBorders;    ///< User-authored single-use "custom" borders owned by the theme (not category members).
+    Vector<GuiCursor*> mDefaultCursors;
+    Vector<GuiCursor*> mExtraCursors;           ///< Extra cursors, each one within a category (the profile pattern, not the border one).
 
     static const ProfileCategory smProfileCategories[];
     static const BorderCategory smBorderCategories[];
+    static const CursorCategory smCursorCategories[];
     static const S32 smProfileCategoryCount;
     static const S32 smBorderCategoryCount;
+    static const S32 smCursorCategoryCount;
 
     bool mTamlReading;      ///< Suppresses auto-creation/stamping while Taml populates the theme.
 
     GuiControlProfile* createMemberProfile(S32 categoryIndex, const char* objectName);
     GuiBorderProfile* createMemberBorder(S32 categoryIndex);
+    GuiCursor* createMemberCursor(S32 categoryIndex, const char* objectName);
+
+    /// Point a cursor at this theme's copy of its category's stock art. Only
+    /// ever fills an EMPTY bitmapName: art is the user's, and a restamp must
+    /// never overwrite what they chose. Does nothing until the theme knows a
+    /// cursor directory, which is why it is retried on every restamp.
+    void fillCursorArt(GuiCursor* cursor, S32 categoryIndex);
 
 public:
     DECLARE_CONOBJECT(GuiProfileTheme);
@@ -192,17 +228,33 @@ public:
     static S32 getBorderCategoryCount() { return smBorderCategoryCount; }
     static StringTableEntry getBorderCategoryName(S32 index);
     static S32 findBorderCategoryIndex(StringTableEntry categoryName);
+    static S32 getCursorCategoryCount() { return smCursorCategoryCount; }
+    static StringTableEntry getCursorCategoryName(S32 index);
+    static S32 findCursorCategoryIndex(StringTableEntry categoryName);
+
+    /// The stock art file name for a cursor category ("defaultCursor.png"). The
+    /// editor asks so it can seed a theme's cursor folder; the theme itself
+    /// never copies files.
+    static const char* getCursorStockFile(S32 index);
+
+    /// The name the engine falls back to for a cursor category ("EditCursor").
+    /// Also the member-name suffix, which is why a member is findable both ways.
+    static const char* getCursorCanonicalName(S32 index);
 
     // Members.
     S32 getProfileCount() const;
     inline const Vector<GuiControlProfile*>& getExtraProfiles() const { return mExtraProfiles; }
     inline const Vector<GuiBorderProfile*>& getExtraBorders() const { return mExtraBorders; }
+    inline const Vector<GuiCursor*>& getExtraCursors() const { return mExtraCursors; }
     GuiControlProfile* getProfile(StringTableEntry categoryName) const;   ///< The category's default member.
     GuiBorderProfile* getBorder(StringTableEntry categoryName) const;     ///< The border category's default member.
+    GuiCursor* getCursor(StringTableEntry categoryName) const;            ///< The cursor category's default member.
     GuiControlProfile* createProfile(const char* categoryName, const char* objectName);  ///< Create an extra profile in a category.
     bool removeProfile(GuiControlProfile* profile);                       ///< Delete an extra; defaults are refused.
     GuiBorderProfile* createBorder(const char* objectName);               ///< Create a single-use custom border owned by the theme.
     bool removeBorder(GuiBorderProfile* border);                          ///< Delete a custom border.
+    GuiCursor* createCursor(const char* categoryName, const char* objectName);  ///< Create an extra cursor in a category.
+    bool removeCursor(GuiCursor* cursor);                                 ///< Delete an extra; defaults are refused.
 
     /// Create any missing default members and re-derive every non-overridden
     /// field of every member from the current theme values.
@@ -220,6 +272,7 @@ public:
     inline StringTableEntry getFontTitle() const { return mFontTitle; }
     inline StringTableEntry getFontCode() const { return mFontCode; }
     inline StringTableEntry getFontDirectory() const { return mFontDirectory; }
+    inline StringTableEntry getCursorDirectory() const { return mCursorDirectory; }
     inline S32 getFontSize() const { return mFontSize; }
     inline const ColorI& getColorBackground() const { return mColorBackground; }
     inline const ColorI& getColorSurface() const { return mColorSurface; }

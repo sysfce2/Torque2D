@@ -98,6 +98,35 @@ function Send-EngineClick {
     [TorqueInput]::PostMessage($Hwnd, $script:WM_LBUTTONUP,   [IntPtr]0,                  $lp) | Out-Null
 }
 
+# A press, a run of moves and a release, for a gesture a single click cannot
+# reach: a rubber band, a control dragged across the canvas.
+#
+# The moves carry MK_LBUTTON in wParam, which is what the window proc sees from a
+# real drag, and they are stepped rather than jumped: a control that acts on the
+# distance covered rather than on the end point would otherwise see one enormous
+# move and clamp it.
+function Send-EngineDrag {
+    param([IntPtr]$Hwnd, [int]$FromX, [int]$FromY, [int]$ToX, [int]$ToY, [int]$Steps = 8)
+
+    $from = [IntPtr](($FromY -shl 16) -bor $FromX)
+    [TorqueInput]::PostMessage($Hwnd, $script:WM_MOUSEMOVE,   [IntPtr]0,                  $from) | Out-Null
+    Start-Sleep -Milliseconds 200
+    [TorqueInput]::PostMessage($Hwnd, $script:WM_LBUTTONDOWN, [IntPtr]$script:MK_LBUTTON, $from) | Out-Null
+    Start-Sleep -Milliseconds 150
+
+    for ($i = 1; $i -le $Steps; $i++) {
+        $x  = $FromX + [int]((($ToX - $FromX) * $i) / $Steps)
+        $y  = $FromY + [int]((($ToY - $FromY) * $i) / $Steps)
+        $lp = [IntPtr](($y -shl 16) -bor $x)
+        [TorqueInput]::PostMessage($Hwnd, $script:WM_MOUSEMOVE, [IntPtr]$script:MK_LBUTTON, $lp) | Out-Null
+        Start-Sleep -Milliseconds 60
+    }
+
+    Start-Sleep -Milliseconds 150
+    $to = [IntPtr](($ToY -shl 16) -bor $ToX)
+    [TorqueInput]::PostMessage($Hwnd, $script:WM_LBUTTONUP, [IntPtr]0, $to) | Out-Null
+}
+
 function Send-EngineKey {
     param([IntPtr]$Hwnd, [string]$Key)
 

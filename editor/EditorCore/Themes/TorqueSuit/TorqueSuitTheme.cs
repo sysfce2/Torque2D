@@ -61,6 +61,9 @@ function TorqueSuitTheme::makeIconButtonProfile(%this)
 		paddingHL = 2;
 		paddingSL = 2;
 		paddingNA = 2;
+
+		borderColorSL = %this.color5;
+		borderSL = 2;
 	};
 
 	%this.iconButtonProfile = new GuiControlProfile()

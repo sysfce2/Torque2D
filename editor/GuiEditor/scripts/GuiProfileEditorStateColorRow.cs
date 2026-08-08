@@ -112,12 +112,12 @@ function GuiProfileEditorStateColorRow::build(%this)
 		%this.caption[%i] = %caption;
 	}
 
-	// Frame 22 of EditorCore:editorIcons16 is the circular revert arrow. "left"
-	// sizing pins the button to the cell's right edge as the grid widens.
+	// The circular revert arrow. "left" sizing pins the button to the cell's
+	// right edge as the grid widens.
 	%this.resetButton = new GuiButtonCtrl()
 	{
 		class = "EditorIconButton";
-		Frame = 22;
+		Frame = $EditorIcon::playback_reload;
 		HorizSizing = "left";
 		Position = (%w - %resetW - %pad) SPC (%swatchY - 1);
 		Tooltip = "Reset this row's overridden states to the theme's values";

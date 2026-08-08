@@ -80,6 +80,7 @@ GuiScrollCtrl::GuiScrollCtrl()
    mEventBubbled = false;
    mCalcGuard = false;
    mResizeGuard = false;
+   mNotifyGuard = false;
 }
 
 void GuiScrollCtrl::initPersistFields()
@@ -110,21 +111,18 @@ void GuiScrollCtrl::resize(const Point2I &newPos, const Point2I &newExt)
 		mCalcGuard = false;
 		computeSizes();
 
+		// The bar appearing or going away is now announced by computeSizes, which
+		// is where it is actually decided -- and which catches the far more
+		// common case of a bar arriving because a child grew, nowhere near a
+		// resize of this control. All that is left here is to settle the
+		// rectangles against the size the children have just been given.
+		//
+		// What stood here instead adjusted each child's mRenderInsetRB and then
+		// called parentResized with the same extent for old AND new, so every
+		// sizing mode that works from a delta computed zero and did nothing; the
+		// inset it wrote was overwritten by the next renderChild anyway.
 		if (hasH != mHasHScrollBar || hasV != mHasVScrollBar)
 		{
-			S32 deltaY = hasH != mHasHScrollBar ? (mHasHScrollBar ? mScrollBarThickness : -mScrollBarThickness) : 0;
-			S32 deltaX = hasV != mHasVScrollBar ? (mHasVScrollBar ? mScrollBarThickness : -mScrollBarThickness) : 0;
-
-			iterator i;
-			for (i = begin(); i != end(); i++)
-			{
-				GuiControl* ctrl = static_cast<GuiControl*>(*i);
-				ctrl->mRenderInsetRB = Point2I(ctrl->mRenderInsetRB.x + deltaX, ctrl->mRenderInsetRB.y + deltaY);
-				ctrl->preventResizeModeFill();
-				ctrl->preventResizeModeCenter();
-				ctrl->parentResized(mBounds.extent - (ctrl->mRenderInsetLT + ctrl->mRenderInsetRB), mBounds.extent - (ctrl->mRenderInsetLT + ctrl->mRenderInsetRB));
-			}
-
 			mCalcGuard = true;
 			Parent::resize(newPos, newExt);
 			mCalcGuard = false;
@@ -140,17 +138,57 @@ void GuiScrollCtrl::childResized(GuiControl *child)
    computeSizes();
 }
 
+RectI GuiScrollCtrl::getInnerRect(Point2I &offset, Point2I &extent, GuiControlState currentState, GuiControlProfile *profile)
+{
+	// The margins, borders and padding first, then whatever the bars are using.
+	// A child asking this control how big it is has to be told what it can
+	// actually see, or it lays its last column out underneath the bar.
+	RectI inner = Parent::getInnerRect(offset, extent, currentState, profile);
+	inner.extent = subtractScrollBars(inner.extent, mHasHScrollBar, mHasVScrollBar, mScrollBarThickness);
+
+	return inner;
+}
+
+void GuiScrollCtrl::preventUnsizedModes(GuiControl *child)
+{
+	// Fill and center both mean "put me where the parent's size says", and in an
+	// axis this control can scroll there is no such size: the content is as long
+	// as it wants to be and this is a window onto it. Filling there would clamp
+	// the content to what is visible and leave nothing to scroll.
+	//
+	// An axis whose bar is alwaysOff is a different thing entirely. Nothing
+	// scrolls across it, the room is exactly the inner rect less any bar on the
+	// other axis, and fill is the honest way for a child to ask for it. Refusing
+	// it there is what forced callers to compute widths in script.
+	if (canScrollHorizontally())
+	{
+		child->preventHorizResizeModeFill();
+		child->preventHorizResizeModeCenter();
+	}
+
+	if (canScrollVertically())
+	{
+		child->preventVertResizeModeFill();
+		child->preventVertResizeModeCenter();
+	}
+}
+
 void GuiScrollCtrl::addObject(SimObject* object)
 {
-	//Fill is not supported inside a scroll control
 	GuiControl* child = dynamic_cast<GuiControl*>(object);
 	if (child)
 	{
-		child->preventResizeModeFill();
-		child->preventResizeModeCenter();
+		preventUnsizedModes(child);
 	}
 	Parent::addObject(object);
 	computeSizes();
+
+	// A child that fills wants its size now rather than at whatever resize
+	// happens to come next -- the same reason GuiControl::applySizing exists.
+	if (child)
+	{
+		child->parentResized(mContentExt, mContentExt);
+	}
 }
 
 bool GuiScrollCtrl::onWake()
@@ -293,11 +331,60 @@ GuiScrollCtrl::Region GuiScrollCtrl::findHitRegion(const Point2I& pt)
 }
 
 #pragma region CalculationFunctions
+Point2I GuiScrollCtrl::subtractScrollBars(const Point2I &extent, const bool hasHBar, const bool hasVBar, const S32 barThickness)
+{
+	// A vertical bar stands down the side and so costs WIDTH; a horizontal one
+	// costs height. Getting that pair the wrong way round is the easiest
+	// mistake here, which is most of why this is one function and not four.
+	return Point2I(extent.x - (hasVBar ? barThickness : 0),
+		extent.y - (hasHBar ? barThickness : 0));
+}
+
+void GuiScrollCtrl::calcBarPresence(const S32 forceHBar, const S32 forceVBar, const Point2I &childExtent,
+	const Point2I &contentExtent, const S32 barThickness, bool &outHasHBar, bool &outHasVBar)
+{
+	outHasHBar = (forceHBar == ScrollBarAlwaysOn);
+	outHasVBar = (forceVBar == ScrollBarAlwaysOn);
+
+	// Every test below is against the room that actually REMAINS, which is what
+	// lets one bar call the other into being. The old code compared both against
+	// the un-narrowed extent, so its second look at the horizontal bar asked a
+	// question it had already answered and could never say yes.
+	Point2I room = subtractScrollBars(contentExtent, outHasHBar, outHasVBar, barThickness);
+
+	if (!outHasHBar && forceHBar == ScrollBarDynamic && childExtent.x > room.x)
+	{
+		outHasHBar = true;
+		room.y -= barThickness;
+	}
+
+	if (!outHasVBar && forceVBar == ScrollBarDynamic && childExtent.y > room.y)
+	{
+		outHasVBar = true;
+		room.x -= barThickness;
+
+		// The vertical bar just narrowed the content, and that can be what
+		// pushes it wide enough to need a horizontal one after all.
+		if (!outHasHBar && forceHBar == ScrollBarDynamic && childExtent.x > room.x)
+		{
+			outHasHBar = true;
+		}
+	}
+}
+
 void GuiScrollCtrl::computeSizes()
 {
 	if (!mCalcGuard)//Prevent needless calcuations
 	{
+		const bool hadHBar = mHasHScrollBar;
+		const bool hadVBar = mHasVScrollBar;
+
 		calcContentExtents();
+
+		// What there would be with no bars at all. Kept because the bars are
+		// decided from it and then taken off it, and because a child that has to
+		// be told the room changed needs both answers.
+		const Point2I barFreeExtent = mContentExt;
 
 		mHBarEnabled = false;
 		mVBarEnabled = false;
@@ -306,28 +393,21 @@ void GuiScrollCtrl::computeSizes()
 
 		setUpdate();
 
-		if (calcChildExtents())
+		const bool hasChildren = calcChildExtents();
+		if (hasChildren)
 		{
-			if (mChildExt.x > mContentExt.x && (mForceHScrollBar == ScrollBarDynamic))
-			{
-				mHasHScrollBar = true;
-			}
-			if (mChildExt.y > mContentExt.y && (mForceVScrollBar == ScrollBarDynamic))
-			{
-				mHasVScrollBar = true;
+			calcBarPresence(mForceHScrollBar, mForceVScrollBar, mChildExt, barFreeExtent,
+				mScrollBarThickness, mHasHScrollBar, mHasVScrollBar);
+		}
 
-				// If Extent X Changed, check Horiz Scrollbar.
-				if (mChildExt.x > mContentExt.x && !mHasHScrollBar && (mForceHScrollBar == ScrollBarDynamic))
-				{
-					mHasHScrollBar = true;
-				}
-			}
+		// Outside the children test, unlike before: a bar forced alwaysOn takes
+		// its space whether or not anything has been put in the control yet, and
+		// a scroller that reported its whole width until its first child arrived
+		// would hand that width to the child.
+		mContentExt = subtractScrollBars(barFreeExtent, mHasHScrollBar, mHasVScrollBar, mScrollBarThickness);
 
-			if (mHasVScrollBar)
-				mContentExt.x -= mScrollBarThickness;
-			if (mHasHScrollBar)
-				mContentExt.y -= mScrollBarThickness;
-
+		if (hasChildren)
+		{
 			// enable needed scroll bars
 			if (mChildExt.x > mContentExt.x)
 				mHBarEnabled = true;
@@ -337,6 +417,15 @@ void GuiScrollCtrl::computeSizes()
 			//Are we now over-scrolled?
 			calcScrollOffset();
 		}
+
+		// The bars appearing is a change in how much room the children have, and
+		// this is the only place that knows it happened -- most of the time the
+		// bar arrives from childResized, nowhere near a resize of this control.
+		if (hadHBar != mHasHScrollBar || hadVBar != mHasVScrollBar)
+		{
+			notifyChildrenOfBarChange(barFreeExtent, hadHBar, hadVBar);
+		}
+
 		// build all the rectangles and such...
 		Point2I zero = mBounds.point.Zero;
 		RectI ctrlRect = applyMargins(zero, mBounds.extent, NormalState, mProfile);
@@ -344,6 +433,32 @@ void GuiScrollCtrl::computeSizes()
 		calcScrollRects(fillRect);
 		calcThumbs();
 	}
+}
+
+void GuiScrollCtrl::notifyChildrenOfBarChange(const Point2I &barFreeExtent, const bool hadHBar, const bool hadVBar)
+{
+	// Resizing a child calls back into childResized and so into here again. The
+	// re-entered pass does its own arithmetic and settles; what it must not do
+	// is announce this same change a second time.
+	if (mNotifyGuard)
+	{
+		return;
+	}
+	mNotifyGuard = true;
+
+	// Both extents measured from the SAME bar-free rect, so the difference
+	// between them is the bars and nothing else. Any change to the control's own
+	// size has already been passed down by GuiControl::resize.
+	const Point2I before = subtractScrollBars(barFreeExtent, hadHBar, hadVBar, mScrollBarThickness);
+	const Point2I after = subtractScrollBars(barFreeExtent, mHasHScrollBar, mHasVScrollBar, mScrollBarThickness);
+
+	for (iterator i = begin(); i != end(); i++)
+	{
+		GuiControl *ctrl = static_cast<GuiControl *>(*i);
+		ctrl->parentResized(before, after);
+	}
+
+	mNotifyGuard = false;
 }
 
 void GuiScrollCtrl::calcContentExtents()
@@ -931,8 +1046,10 @@ void GuiScrollCtrl::onRender(Point2I offset, const RectI &updateRect)
 
 	renderUniversalRect(ctrlRect, mProfile, NormalState);
 
-	RectI fillRect = applyBorders(ctrlRect.point, ctrlRect.extent, NormalState, mProfile);
-	RectI contentRect = applyScrollBarSpacing(fillRect.point, fillRect.extent);
+	// The same rect the children were SIZED against -- getInnerRect is now the
+	// one definition of it. Two separate subtractions were how the visible area
+	// and the laid-out area came to disagree in the first place.
+	RectI contentRect = getInnerRect(offset, mBounds.extent, NormalState, mProfile);
 	mChildArea.set(contentRect.point, contentRect.extent);
 
 	renderVScrollBar(offset);
@@ -946,23 +1063,10 @@ void GuiScrollCtrl::onRender(Point2I offset, const RectI &updateRect)
 
 RectI GuiScrollCtrl::applyScrollBarSpacing(Point2I offset, Point2I extent)
 {
-	RectI contentRect = RectI(offset, extent);
-
-	if (mHasVScrollBar && mHasHScrollBar)
-	{
-		contentRect.extent.x -= mScrollBarThickness;
-		contentRect.extent.y -= mScrollBarThickness;
-	}
-	else if (mHasVScrollBar)
-	{
-		contentRect.extent.x -= mScrollBarThickness;
-	}
-	else if (mHasHScrollBar)
-	{
-		contentRect.extent.y -= mScrollBarThickness;
-	}
-
-	return contentRect;
+	// Kept for anything overriding or calling it, but no longer a second copy of
+	// the arithmetic: getInnerRect and this both go through subtractScrollBars,
+	// so they cannot come to disagree about what a bar costs.
+	return RectI(offset, subtractScrollBars(extent, mHasHScrollBar, mHasVScrollBar, mScrollBarThickness));
 }
 
 GuiControlState GuiScrollCtrl::getRegionCurrentState(GuiScrollCtrl::Region region)

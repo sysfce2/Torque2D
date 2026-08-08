@@ -340,53 +340,44 @@ function fStep6()
 }
 
 //-----------------------------------------------------------------------------
-// The other caller: the native inspector's browse button. This is the path the
-// engine change opened up -- GuiInspectorTypeAsset builds a "..." button and
-// bakes a call to EditorCore.openAssetPicker into its Command.
+// The other caller: the Find button on an asset field in the Gui Editor's
+// properties pane.
+//
+// This block used to drive the native GuiInspector, whose GuiInspectorTypeAsset
+// baked an EditorCore.openAssetPicker call straight into a "..." button's
+// Command. The Gui Editor no longer builds an inspector -- GuiEditorInspectorPane
+// replaced it -- so the path under test is now GuiProfileEditorFieldRow's
+// "asset" kind, which routes the click through onFindAssetClicked instead of a
+// baked-in command string. Same promise, one indirection later.
+//
+// GuiInspectorTypeAsset itself is still live: editor/AssetAdmin/AssetInspector.cs
+// builds a GuiInspector. Nothing covers that one, which is a gap this change
+// created rather than closed.
 //-----------------------------------------------------------------------------
-
-function fFindBrowseButton(%ctrl)
-{
-	if(strstr(%ctrl.Command, "openAssetPicker") != -1)
-	{
-		return %ctrl;
-	}
-	for(%i = 0; %i < %ctrl.getCount(); %i++)
-	{
-		%found = fFindBrowseButton(%ctrl.getObject(%i));
-		if(isObject(%found))
-		{
-			return %found;
-		}
-	}
-	return 0;
-}
 
 function fStep7()
 {
-	// A Sprite's Image field is a TypeImageAssetPtr, which is what gets the
-	// browse button. Driven through the Gui Editor's own inspector rather than a
-	// fresh one: a detached inspector never wakes, and an unwoken control does
-	// not build its field editors, so there would be no button to find.
-	$fSprite = new Sprite();
-	$fInspector = GuiEditor.inspectorWindow.inspector;
-	fCheck("the editor's inspector is available", isObject($fInspector));
-	$fInspector.inspect($fSprite);
+	// A GuiSpriteCtrl's Image field is a TypeAssetId, which is what gets the
+	// Find button. It has to be a Gui control now rather than a Sprite: the
+	// pane binds controls, and a scene object was only ever usable here because
+	// the old inspector took any SimObject.
+	$fSprite = new GuiSpriteCtrl();
+	GuiEditor.rootGui.add($fSprite);
 
-	%browse = fFindBrowseButton($fInspector);
-	fCheck("inspector built a browse button for the asset field", isObject(%browse));
-	fCheck("browse button calls the editor's picker",
-		strstr(%browse.Command, "EditorCore.openAssetPicker(") != -1);
-	fCheck("browse button passes the asset type",
-		strstr(%browse.Command, "ImageAsset") != -1);
-	fCheck("browse button passes apply as the callback method",
-		strstr(%browse.Command, "\"apply\"") != -1);
+	$fPane = GuiEditor.inspectorWindow.pane;
+	fCheck("the editor's properties pane is available", isObject($fPane));
+	$fPane.bind($fSprite);
+
+	%row = $fPane.row["Image"];
+	fCheck("pane built a row for the asset field", isObject(%row));
+	fCheck("the asset field got an asset row", isObject(%row) && %row.kind $= "asset");
+	fCheck("asset row has a Find button", isObject(%row) && isObject(%row.findButton));
 
 	// Run exactly what a click would run.
-	eval(%browse.Command);
+	eval(%row.findButton.Command);
 
 	%picker = fPicker();
-	fCheck("the browse button opened the picker", isObject(%picker));
+	fCheck("the Find button opened the picker", isObject(%picker));
 	fCheck("the picker opened on the right asset type", %picker.assetType $= "ImageAsset");
 
 	%item = %picker.grid.getObject(0);
@@ -399,11 +390,11 @@ function fStep7()
 
 function fStep8()
 {
-	fCheck("choosing wrote the asset onto the inspected object",
+	fCheck("choosing wrote the asset onto the bound control",
 		$fSprite.Image $= $fInspectorChoice);
-	fCheck("the inspector's picker closed", !isObject(fPicker()));
+	fCheck("the pane's picker closed", !isObject(fPicker()));
 
-	$fInspector.clear();
+	$fPane.unbind();
 	$fSprite.delete();
 
 	// Land on a border node before quitting. Quitting with a profile node

@@ -142,6 +142,64 @@ void GuiDropDownCtrl::initPersistFields()
    endGroup("Drop Down");
 }
 
+//-----------------------------------------------------------------------------
+// Static rows. All four of these belong to the list box; a drop down only has to
+// find it, because mListBox is not a child of anything a writer or a clone
+// walks. It writes <GuiDropDownCtrl.Items> rather than <GuiListBoxCtrl.Items>
+// with nothing extra to do: TamlXmlWriter::compileCustomElements names the
+// section after the element it is writing.
+//-----------------------------------------------------------------------------
+
+void GuiDropDownCtrl::onTamlCustomWrite(TamlCustomNodes& customNodes)
+{
+	Parent::onTamlCustomWrite(customNodes);
+
+	if (mListBox != NULL)
+	{
+		mListBox->onTamlCustomWrite(customNodes);
+	}
+}
+
+void GuiDropDownCtrl::onTamlCustomRead(const TamlCustomNodes& customNodes)
+{
+	Parent::onTamlCustomRead(customNodes);
+
+	if (mListBox != NULL)
+	{
+		mListBox->onTamlCustomRead(customNodes);
+	}
+}
+
+const char* GuiDropDownCtrl::getItemList()
+{
+	return (mListBox != NULL) ? mListBox->getItemList() : "";
+}
+
+void GuiDropDownCtrl::setItemList(const char* itemList)
+{
+	if (mListBox != NULL)
+	{
+		mListBox->setItemList(itemList);
+	}
+
+	// The button draws the selected row's caption, so a list arriving with one
+	// already on changes what the drop down itself reads.
+	setUpdate();
+}
+
+void GuiDropDownCtrl::deepCloneChildren(SimObject* clone)
+{
+	Parent::deepCloneChildren(clone);
+
+	GuiDropDownCtrl* pDropDown = dynamic_cast<GuiDropDownCtrl*>(clone);
+	if (pDropDown == NULL)
+	{
+		return;
+	}
+
+	pDropDown->setItemList(getItemList());
+}
+
 void GuiDropDownCtrl::onTouchUp(const GuiEvent &event)
 {
 	if (!mActive)

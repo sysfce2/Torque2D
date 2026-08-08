@@ -115,4 +115,38 @@ ConsoleMethodWithDocs(GuiTreeViewCtrl, refreshItemText, ConsoleVoid, 3, 3, "(S32
 	object->setItemText(index, object->getObjectText(sub));
 }
 
+/*! Refreshes both the text and the icon of the item based on the inspected
+	object. A control's picture can change without the row moving - re-profiling
+	a bare GuiControl from a panel to a label is still the same object in the
+	same place - so prefer this over refreshItemText.
+	@param index The zero-based index of the item that will be updated.
+	@return No return value.
+*/
+ConsoleMethodWithDocs(GuiTreeViewCtrl, refreshItem, ConsoleVoid, 3, 3, "(S32 index)")
+{
+	S32 index = dAtoi(argv[2]);
+	if (index < 0 || index >= object->mItems.size())
+	{
+		Con::warnf("GuiTreeViewCtrl::refreshItem() - Invalid index given.");
+		return;
+	}
+	object->refreshItem(index);
+}
+
+/*! Gets the icon frame the given item is wearing, or -1 if it has none.
+	@param index The zero-based index of the item.
+	@return The frame index into the tree's IconImage sheet.
+*/
+ConsoleMethodWithDocs(GuiTreeViewCtrl, getItemIcon, ConsoleInt, 3, 3, "(S32 index)")
+{
+	S32 index = dAtoi(argv[2]);
+	if (index < 0 || index >= object->mItems.size())
+	{
+		Con::warnf("GuiTreeViewCtrl::getItemIcon() - Invalid index given.");
+		return -1;
+	}
+	GuiTreeViewCtrl::TreeItem* treeItem = dynamic_cast<GuiTreeViewCtrl::TreeItem*>(object->mItems[index]);
+	return treeItem ? treeItem->iconFrame : -1;
+}
+
 ConsoleMethodGroupEndWithDocs(GuiTreeViewCtrl)

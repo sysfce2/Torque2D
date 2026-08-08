@@ -26,9 +26,11 @@ function AppCore::create( %this )
     exec("./scripts/constants.cs");
     exec("./scripts/defaultPreferences.cs");
 	exec("./gui/guiCursors.cs");
-	%this.createGuiCursors();
 	exec("./scripts/themes.cs");
 	%this.loadThemes();
+	// After the themes, not before: the cursors a project uses are its theme's,
+	// and this installs them under the names the engine looks up.
+	%this.installThemeCursors(%this.cursorTheme());
     exec("./scripts/canvas.cs");
 
     // Initialize the canvas

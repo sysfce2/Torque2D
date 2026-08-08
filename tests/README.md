@@ -2,18 +2,29 @@
 
 These drive the **real engine** — a real canvas, the real editor, the real input
 path — and check that it behaves. They are the counterpart to the GoogleTest C++
-unit tests (`main.runAllUnitTests.cs`, see the repo README): those test functions,
-these test the thing a person actually uses.
+unit tests: those test functions, these test the thing a person actually uses.
 
 ```
 tests\run.ps1                 every pass/fail suite
 tests\run.ps1 colorPopup      one of them (wildcards allowed)
 tests\run.ps1 -Shots          the screenshot harnesses instead
 tests\run.ps1 -List           what would run
+
+tests\run-unit.ps1            the C++ unit tests -- seconds, not minutes
 ```
 
 The runner exits non-zero if anything came out other than expected. Build first:
 `cmake --build build --config Debug --target Torque2D`.
+
+**Reach for `run-unit.ps1` first.** A suite here costs its own process and gets a
+90 second timeout; the whole unit run takes seconds. What belongs here is what
+genuinely needs a canvas: rendering, real input, first responder, tooltips,
+anything that measures text, and anything involving the rows of a list box or a
+tree — adding one calls `updateSize()`, which loads a font, which registers a
+texture, which asserts with no GL context. Arithmetic does not belong here. The
+established move is to pull it out into a `static` that takes everything it uses
+and test that: `GuiScrollCtrl::subtractScrollBars`, `GuiTreeViewCtrl::resolveIndent`,
+`GuiEditorExplorerTree::columnAt`.
 
 ## Layout
 
@@ -110,6 +121,12 @@ sequence; otherwise it is picked up automatically and run last, alphabetically.
   exit code is 0 — so a test that "does nothing" is usually a test that did not
   compile. TorqueScript has no comma operator and no method chaining on a call
   result (`Canvas.getContent().add(%x)` is a parse error; take the two steps).
+- **`screenShot` does not create its folder, and it fails by logging.** `shots/` is
+  gitignored, so a tree that has never run a shot does not have one — a fresh clone,
+  or a git worktree. The harness then runs green all the way to `SHOTS DONE` and
+  writes nothing, and the runner reports `0 shots` with no reason given. Every test
+  that screenshots calls `createPath(testRoot("shots/"))` before its first
+  `schedule` for this reason; keep doing it in new ones.
 - **A debug-build `AssertFatal` is a modal message box.** A test that trips one
   hangs rather than crashing, which is why the runner kills on a timeout. If a
   test "hangs", suspect an undismissed assert before suspecting a loop.

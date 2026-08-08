@@ -29,25 +29,47 @@ function EditorIconButton::onAdd(%this)
 	}
 }
 
+// Every hover and press handler below is guarded on isActive(), because the
+// engine still delivers touch events to a disabled control: GuiControl::
+// findHitControl tests mVisible and mUseInput and never mActive. Without the
+// guard, moving the pointer over a disabled button repainted its icon in the
+// enabled hover color and the disabled look was gone until something else
+// forced it back -- the button read as clickable when it was not.
 function EditorIconButton::onTouchEnter(%this)
 {
+	if(!%this.isActive())
+	{
+		return;
+	}
 	%this.icon.fadeTo(ThemeManager.activeTheme.iconButtonProfile.fontColorHL, 200, "EaseInOut");
 	%this.icon.growTo("18 18", 200, "EaseInOut");
 }
 
 function EditorIconButton::onTouchLeave(%this)
 {
+	if(!%this.isActive())
+	{
+		return;
+	}
 	%this.icon.fadeTo(ThemeManager.activeTheme.iconButtonProfile.fontColor, 200, "EaseInOut");
 	%this.icon.growTo("16 16", 200, "EaseInOut");
 }
 
 function EditorIconButton::onTouchDown(%this)
 {
+	if(!%this.isActive())
+	{
+		return;
+	}
 	%this.icon.fadeTo(ThemeManager.activeTheme.iconButtonProfile.fontColorSL, 200, "EaseInOut");
 }
 
 function EditorIconButton::onTouchUp(%this)
 {
+	if(!%this.isActive())
+	{
+		return;
+	}
 	%this.icon.fadeTo(ThemeManager.activeTheme.iconButtonProfile.fontColorHL, 200, "EaseInOut");
 }
 

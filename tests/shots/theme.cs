@@ -10,6 +10,7 @@ AssetDatabase.EchoInfo = false;
 
 testExec("editor/main.cs");
 // The splash animates for ~2.8s before the project selector appears; give it room.
+createPath(testRoot("shots/"));
 schedule(7000, 0, "shot1");
 
 function shot1()

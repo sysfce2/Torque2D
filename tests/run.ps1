@@ -73,8 +73,8 @@ $KeepProject = @('bitmapPathRead')
 $Order = @(
     'profileEditor', 'profileForm', 'border', 'borderPane', 'standalone',
     'headerPane', 'colorPopup', 'themeApply', 'font', 'assetPicker',
-    'tooltipProfile', 'textClick', 'bitmapPathWrite', 'bitmapPathRead',
-    'toybox', 'planetX'
+    'tooltipProfile', 'textClick', 'undo', 'clipboard', 'bitmapPathWrite',
+    'bitmapPathRead', 'toybox', 'planetX'
 )
 
 if (-not (Test-Path $Exe)) {
@@ -184,8 +184,8 @@ foreach ($test in $tests) {
     }
 
     $summary = if ($Shots) { "$wrote shot$(if ($wrote -ne 1) { 's' })" } else { "$pass passed" }
-    $colour  = if ($ok) { 'Green' } else { 'Red' }
-    Write-Host ("{0,-14} {1}" -f $summary, $note) -ForegroundColor $colour
+    $color  = if ($ok) { 'Green' } else { 'Red' }
+    Write-Host ("{0,-14} {1}" -f $summary, $note) -ForegroundColor $color
 
     if (-not $ok) {
         $lines | Select-String 'FAIL:' | Select-Object -First 6 | ForEach-Object {

@@ -1,0 +1,7 @@
+<ImageAsset
+    AssetName="spaceBarStates"
+    ImageFile="spaceBarStates.png"
+    CellCountX="4"
+    CellCountY="1"
+    CellWidth="343"
+    CellHeight="62"/>

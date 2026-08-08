@@ -44,15 +44,22 @@ There are two suites, and they test different things.
 
 ### C++ unit tests (GoogleTest)
 
-Vendored at `engine/source/testing/googleTest`. Tests live in `engine/source/testing/tests/` (e.g. `platformFileIoTests.cc`, `platformStringTests.cc`) and as `TEST(...)` blocks throughout the engine.
+Vendored at `engine/source/testing/googleTest`. **Every test lives in `engine/source/testing/tests/`** (e.g. `guiTreeRowLayoutTests.cc`, `platformStringTests.cc`); each file is listed explicitly in `cmake/EngineSources.cmake`, so a new one needs a CMake edit and a re-configure to be compiled at all.
 
-- Run **all** tests by launching the engine with the alternate boot script: `main.runAllUnitTests.cs`, which calls the `runAllUnitTests()` console function and quits. Point the executable at this script (or `exec` it) instead of the default `main.cs`.
-- From the in-engine console you can invoke `runAllUnitTests()` directly, or run a subset via the test-name filter argument (forwarded to GoogleTest).
+```
+tests\run-unit.ps1                        all of them
+tests\run-unit.ps1 GuiTreeRowLayoutTests.*  one suite (a GoogleTest filter)
+```
+
+- Under the hood that launches the engine with the alternate boot script `main.runAllUnitTests.cs`, which calls `runAllUnitTests()` and quits. You can also invoke `runAllUnitTests()` from the in-engine console.
+- **`runAllUnitTests()` takes no arguments.** It hands `InitGoogleTest` an empty argv, so a subset is selected with the `GTEST_FILTER` environment variable — which is what `run-unit.ps1`'s parameter sets.
+- **What a unit test can reach.** The engine boots far enough to give it `Con`, `Sim`, the string table, the resource manager and `GuiDefaultProfile`, so it can `new` and `registerObject()` a control, read and write fields, run script via `Con::evaluate`, and round-trip TAML. It has **no canvas and no GL context**, so it must never wake a control or measure text: a font registers a texture and `TextureManager::refresh` asserts — which in a debug build is a modal box, so the failure arrives as a *hang*. Note this rules out adding rows to a list box or tree, since that calls `updateSize()` → `getFont()`.
+- The established move when GUI logic is worth testing is to extract the arithmetic into a `static` that takes everything it uses, then test the static — see `GuiScrollCtrl::subtractScrollBars`, `GuiControl::splitParagraphs`, `GuiTreeViewCtrl::resolveIndent`.
 - Tests are compiled out of shipping builds (`TORQUE_SHIPPING` guards `unitTesting.h`).
 
 ### TorqueScript integration tests
 
-`tests/` drives the real engine — a real canvas, the real editor, real posted mouse and keyboard input — and checks that it behaves. This is what covers the editors, which the unit tests do not reach.
+`tests/` drives the real engine — a real canvas, the real editor, real posted mouse and keyboard input — and checks that it behaves. This is what covers the editors, which the unit tests do not reach. It is also much slower: one process per suite with a 90 second timeout each, against seconds for the whole unit run. **Prefer a unit test where the thing under test can be reached without a canvas**, and keep these for what genuinely needs one.
 
 ```
 tests\run.ps1                 every pass/fail suite (exits non-zero on a change)

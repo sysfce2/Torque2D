@@ -18,7 +18,7 @@ function VirtualKeyboard::resetState(%this)
 }
 function VirtualKeyboard::push(%this, %targetGui, %textBox, %showClose)
 {
-   Sandbox.add( TamlRead("./gui/keyboardGui.taml") );
+   Sandbox.add( TamlRead("./gui/keyboardGui.gui.taml") );
    %textBox.setText("");
 
    %this.targetGui = %targetGui;
@@ -182,42 +182,58 @@ function VirtualKeyboard::DeleteCommand(%this)
       %this.textBox.setText(getSubStr(%this.textBox.getText(), 0, %len - 1));
 }
 
-if(!isObject(GuiKeyboardProfile)) new GuiControlProfile (GuiKeyboardProfile)
+//-----------------------------------------------------------------------------
+// The key caps.
+//
+// A profile's imageAsset is indexed by control state, so one four frame strip
+// carries a whole button: 0 normal, 1 hover, 2 pressed, 3 disabled. That is the
+// whole reason these are profiles rather than fields on the buttons - the keys
+// share four looks between thirty seven of them.
+//
+// No colors here. renderUniversalRect only reaches fillColor when there is no
+// image to draw, and these buttons carry no text, so the font fields would go
+// unread as well. The click comes from soundButtonDown, which GuiButtonCtrl
+// plays for us.
+//-----------------------------------------------------------------------------
+
+if(!isObject(GuiKeyboardKeyProfile)) new GuiControlProfile (GuiKeyboardKeyProfile)
 {
     tab = false;
     canKeyFocus = false;
-    hasBitmapArray = false;
     mouseOverSelected = false;
 
-    // fill color
-    fillColor = "211 211 211 255";
-    fillColorHL = "244 244 244 255";
-    fillColorSL = "244 244 244 255";
-    fillColorNA = "244 244 244 255";
-
-    // border color
-    border = 0;
-    borderColor   = "100 100 100 255";
-    borderColorHL = "128 128 128 255";
-    borderColorSL = "128 128 128 255";
-    borderColorNA = "64 64 64 255";
-
-    // font
-    fontType = $platformFontType;
-    fontSize = $platformFontSize;
-
-    fontColor = "0 0 0";
-    fontColorHL = "32 100 100";
-    fontColorSL= "10 10 10";
-    fontColorNA = "0 0 0";
-
-    // used by guiTextControl
-    align = "left";
-    returnTab = false;
-    numbersOnly = false;
-    cursorColor = "0 0 0 255";
-
-    // sounds
+    imageAsset = "VirtualKeyboard:keyStates";
     soundButtonDown = "VirtualKeyboard:keypress";
-    //soundButtonOver = "Sandbox:mouseOver";
+};
+
+if(!isObject(GuiKeyboardSpaceProfile)) new GuiControlProfile (GuiKeyboardSpaceProfile)
+{
+    tab = false;
+    canKeyFocus = false;
+    mouseOverSelected = false;
+
+    imageAsset = "VirtualKeyboard:spaceBarStates";
+    soundButtonDown = "VirtualKeyboard:keypress";
+};
+
+if(!isObject(GuiKeyboardCloseProfile)) new GuiControlProfile (GuiKeyboardCloseProfile)
+{
+    tab = false;
+    canKeyFocus = false;
+    mouseOverSelected = false;
+
+    imageAsset = "VirtualKeyboard:closeStates";
+    soundButtonDown = "VirtualKeyboard:keypress";
+};
+
+// Caps lock is shown by a button that wears the pressed cap in every state, so
+// it reads as held down for as long as the lock is on.
+if(!isObject(GuiKeyboardLatchedProfile)) new GuiControlProfile (GuiKeyboardLatchedProfile)
+{
+    tab = false;
+    canKeyFocus = false;
+    mouseOverSelected = false;
+
+    imageAsset = "VirtualKeyboard:keyLatched";
+    soundButtonDown = "VirtualKeyboard:keypress";
 };

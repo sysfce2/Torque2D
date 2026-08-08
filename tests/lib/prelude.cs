@@ -24,3 +24,32 @@ function testExec(%relativePath)
 {
 	exec(testRoot(%relativePath));
 }
+
+//-----------------------------------------------------------------------------
+// Answer the Gui Editor's unsaved-changes prompt with Discard, if it is up.
+//
+// New Gui, Open Gui and Revert ask before throwing a modified document away, so
+// a test that uses one of them to get to a clean canvas has to answer. Returns
+// whether there was anything to answer -- a document with no edits in it is
+// taken away without a word, and callers that arrive clean are not doing
+// anything wrong.
+//
+// Here rather than copied into each suite because three of them need it, and
+// because a harness that does NOT answer does not fail: it screenshots the
+// dialog, or carries on against the document it thought it had cleared.
+//-----------------------------------------------------------------------------
+
+function discardUnsavedPrompt()
+{
+	for(%i = Canvas.getCount() - 1; %i >= 0; %i--)
+	{
+		%dialog = Canvas.getObject(%i);
+		if(%dialog.class $= "GuiEditorConfirmSaveDialog")
+		{
+			%dialog.onDiscard();
+			return true;
+		}
+	}
+
+	return false;
+}

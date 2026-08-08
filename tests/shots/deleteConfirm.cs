@@ -12,6 +12,7 @@ AssetDatabase.EchoInfo = false;
 
 testExec("editor/main.cs");
 
+createPath(testRoot("shots/"));
 schedule(2500, 0, "shotStep1");
 
 function shotStep1()

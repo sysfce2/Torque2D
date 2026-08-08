@@ -49,8 +49,10 @@ function PlanetXGame::create(%this)
 
 	// The weapon-upgrade catalog and this run's upgrade state. A named session
 	// singleton (like PlanetXWindow/PlanetXScene) so any file can reach it; reset()
-	// at the start of each run clears it back to the stock blaster.
-	new ScriptObject(PlanetXUpgrades) { class = "PlanetXUpgrades"; };
+	// at the start of each run clears it back to the stock blaster. Naming it is
+	// all it needs - the name is already the namespace upgrades.cs writes its
+	// methods in, so a class saying the same word again would say nothing.
+	new ScriptObject(PlanetXUpgrades);
 
 	// Two-player co-op starts off; the title's "START 2 PLAYERS" turns it on.
 	$PlanetX::twoPlayer = false;
@@ -362,7 +364,7 @@ function PlanetXGame::onPlayerDown(%this, %player)
 	}
 
 	// Co-op: take this player out of play.
-	Audio.PlaySound("PlanetXGame:playerDeath");
+	Audio.PlaySound("PlanetXGame:playerDeathBurst");
 	%player.playDeathFx();
 	%player.goDown();
 
@@ -392,7 +394,7 @@ function PlanetXGame::onPlayerDeath(%this, %player)
 	// ghost bolts off-screen during the hold before the dialog.
 	if (isObject(%player) && !%player.downed)
 	{
-		Audio.PlaySound("PlanetXGame:playerDeath");
+		Audio.PlaySound("PlanetXGame:playerDeathBurst");
 		%player.playDeathFx();
 		%player.stopFiring();
 		%player.setLinearVelocity(0, 0);

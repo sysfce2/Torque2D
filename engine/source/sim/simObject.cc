@@ -286,6 +286,30 @@ void SimObject::assignDynamicFieldsFrom(SimObject* parent)
 
 void SimObject::assignFieldsFrom(SimObject *parent)
 {
+   copyFieldsFrom(parent, 0);
+}
+
+void SimObject::copyFieldsFrom(SimObject *parent, const U32 flags)
+{
+   // What the caller asked to be left out. Every one of these is an ordinary
+   // persist field, so without this they would be copied like any other - and
+   // each does something no copy wants:
+   //
+   //   name         two objects answering to one name, which is the same bug
+   //                whether or not the Sim is currently registering them.
+   //   parentGroup  setParentGroup() calls parent->addObject(), so copying the
+   //                field does not record where the object lives, it MOVES it
+   //                there - into the group the original is in.
+   //   class        setClass()/setSuperClass() link the object's namespaces, so
+   //   superclass   writing either one makes the object's script class live from
+   //                that moment. A deep clone leaves both to copyTo, at the very
+   //                end, so that nothing it does on the way can find a script
+   //                callback to run.
+   static StringTableEntry nameField = StringTable->insert("name");
+   static StringTableEntry parentGroupField = StringTable->insert("parentGroup");
+   static StringTableEntry classField = StringTable->insert("class");
+   static StringTableEntry superClassField = StringTable->insert("superclass");
+
    // only allow field assigns from objects of the same class:
    if(getClassRep() == parent->getClassRep())
    {
@@ -295,10 +319,28 @@ void SimObject::assignFieldsFrom(SimObject *parent)
       for(U32 i = 0; i < (U32)list.size(); i++)
       {
          const AbstractClassRep::Field* f = &list[i];
+
+         if((flags & CopyFields_SkipName) && f->pFieldname == nameField)
+            continue;
+
+         if((flags & CopyFields_SkipParentGroup) && f->pFieldname == parentGroupField)
+            continue;
+
+         if((flags & CopyFields_SkipScriptClass) &&
+            (f->pFieldname == classField || f->pFieldname == superClassField))
+            continue;
+
          S32 lastField = f->elementCount - 1;
          for(S32 j = 0; j <= lastField; j++)
          {
-             const char* fieldVal = (*f->getDataFn)( this,  Con::getData(f->type, (void *) (((const char *)parent) + f->offset), j, f->table, f->flag));
+             // Read through the SOURCE, not through this object. A protected
+             // field's get function is free to ignore the raw data it is handed
+             // and answer from the object instead - GuiControl's "text" does
+             // exactly that (getTextProperty returns obj->getText()) - so asking
+             // this object for the value read back what the copy already held and
+             // wrote it straight back: nothing was ever copied. Every such field
+             // silently did not copy until now, a caption among them.
+             const char* fieldVal = (*f->getDataFn)( parent,  Con::getData(f->type, (void *) (((const char *)parent) + f->offset), j, f->table, f->flag));
             //if(fieldVal)
             //   Con::setData(f->type, (void *) (((const char *)this) + f->offset), j, 1, &fieldVal, f->table);
             if(fieldVal)
@@ -1186,6 +1228,70 @@ SimObject* SimObject::clone( const bool copyDynamicFields )
     return pCloneObject;
 }
 
+//-----------------------------------------------------------------------------
+// A copy of an object, everything in it, and everything below it.
+//
+// The contract is that a deep clone is data: it holds what the original held,
+// and no script lifecycle callback fires while it is being built. Two orderings
+// are what deliver that, and both are load-bearing - see cloneInto below.
+//-----------------------------------------------------------------------------
+
+SimObject* SimObject::deepClone()
+{
+    SimObject* pCloneObject = allocClone();
+
+    if ( pCloneObject == NULL )
+        return NULL;
+
+    cloneInto( pCloneObject );
+
+    return pCloneObject;
+}
+
+// A registered but empty object of this object's class. getClassName() is the
+// class rep's name - the C++ class - so this works for an object carrying a
+// script class too; the script class itself is copied by copyTo, later.
+SimObject* SimObject::allocClone()
+{
+    SimObject* pCloneObject = dynamic_cast<SimObject*>( ConsoleObject::create(getClassName()) );
+    if (!pCloneObject)
+    {
+        Con::errorf("SimObject::deepClone() - Unable to create cloned object of class '%s'.", getClassName());
+        return NULL;
+    }
+
+    if ( !pCloneObject->registerObject() )
+    {
+        Con::warnf("SimObject::deepClone() - Unable to register cloned object.");
+        delete pCloneObject;
+        return NULL;
+    }
+
+    return pCloneObject;
+}
+
+void SimObject::cloneInto(SimObject* pCloneObject)
+{
+    // Not the name and not the parent group: the clone is nameless and belongs to
+    // nothing until whoever asked for it puts it somewhere. And not the script
+    // class, which is left to copyTo below.
+    pCloneObject->copyFieldsFrom( this,
+        CopyFields_SkipName | CopyFields_SkipParentGroup | CopyFields_SkipScriptClass );
+
+    deepCloneChildren( pCloneObject );
+
+    // Last, and this is the point. copyTo is what sets the script class and links
+    // the namespaces, so until now the clone had no script class for anything to
+    // find a callback on: registerObject fires script onAdd, and adding a child
+    // fires the parent's script onChildAdded (guiControl.cc). A class whose onAdd
+    // or onChildAdded builds children would otherwise build a second set of them
+    // on top of the ones being copied - which is exactly what a copy must not do.
+    //
+    // Skipping the class in the field copy above is half of the same rule: class
+    // and superclass are ordinary persist fields, and their setters link the
+    // namespaces too, so copying them early would defeat this entirely.
+    copyTo( pCloneObject );
+}
 
 //-----------------------------------------------------------------------------
 
