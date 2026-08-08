@@ -3,7 +3,7 @@
 // cursor node is selected, the seeded per-theme art, the hot-spot magnifier and
 // its drag arithmetic, extras within a category, and the theme rename that has
 // to take the art folder with it.
-// Run: tests/run.ps1 cursorPane  ; grep CURSMOKE in console.log.
+// Run: tests/run.ps1 cursorPane  ; grep CURSMOKE in tests/logs/.
 
 setLogMode(2);
 $Scripts::ignoreDSOs = true;

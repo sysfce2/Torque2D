@@ -2,7 +2,7 @@
 // (GuiProfileEditorBorderForm) that replaces the inspector when a border node is
 // selected: it verifies the three-way Properties toggle, that the shared grid
 // binds/edits the selected border in place, and that underfill commits.
-// Run: tests/run.ps1 borderPane  ; grep PBSMOKE in console.log.
+// Run: tests/run.ps1 borderPane  ; grep PBSMOKE in tests/logs/.
 
 setLogMode(2);
 $Scripts::ignoreDSOs = true;

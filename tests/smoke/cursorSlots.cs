@@ -6,7 +6,7 @@
 // the theme holds a second cursor for that job and there is a choice to make.
 // Detaching a theme has to move them somewhere real as well: a GuiCursor* is as
 // raw a pointer as a profile's.
-// Run: tests/run.ps1 cursorSlots  ; grep CSSMOKE in console.log.
+// Run: tests/run.ps1 cursorSlots  ; grep CSSMOKE in tests/logs/.
 
 setLogMode(1);
 $Scripts::ignoreDSOs = true;

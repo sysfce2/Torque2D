@@ -10,7 +10,7 @@
 // built on getUndoCount reads clean there, which is the one direction that must
 // never happen, so that case has a check of its own below.
 //
-// Run: tests/run.ps1 unsaved ; grep SAVE in console.log.
+// Run: tests/run.ps1 unsaved ; grep SAVE in tests/logs/.
 //-----------------------------------------------------------------------------
 
 setLogMode(2);

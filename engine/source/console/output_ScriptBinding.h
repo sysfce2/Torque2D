@@ -139,6 +139,19 @@ ConsoleFunctionWithDocs(setLogMode, ConsoleVoid, 2, 2, ( mode ))
    Con::setLogMode(dAtoi(argv[1]));
 }
 
+/*! Use the setLogFileName function to write the console log somewhere other than console.log.
+    The path is relative to the working directory, and the folders in it must already exist. Call this BEFORE setLogMode, or the opening lines land in the old file.
+    Every copy of the engine started from the same folder shares one log, so two running at once either interleave their output or, in mode 2, leave the second unable to open it at all. A test harness wanting its own log is the reason this exists.
+    @param fileName A string naming the file to log to. Pass "" to go back to console.log.
+    @return No return value.
+    @sa setLogMode
+*/
+ConsoleFunctionWithDocs(setLogFileName, ConsoleVoid, 2, 2, ( fileName ))
+{
+   TORQUE_UNUSED( argc );
+   Con::setLogFileName(argv[1]);
+}
+
 /*! Use the setEchoFileLoads function to enable/disable echoing of file loads (to console).
     This does not completely disable message, but rather adds additional methods when echoing is set to true. File loads will always echo a compile statement if compiling is required, and an exec statement at all times
     @param enable A boolean value. If this value is true, extra information will be dumped to the console when files are loaded.

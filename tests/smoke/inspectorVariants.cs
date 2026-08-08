@@ -14,7 +14,7 @@
 // So an "Any" standalone can be picked in a row that exists, but can never be
 // the reason one appears -- otherwise a single uncategorised profile would put
 // a row on every slot of every control.
-// Run: tests/run.ps1 inspectorVariants  ; grep IVSMOKE in console.log.
+// Run: tests/run.ps1 inspectorVariants  ; grep IVSMOKE in tests/logs/.
 
 setLogMode(1);
 $Scripts::ignoreDSOs = true;

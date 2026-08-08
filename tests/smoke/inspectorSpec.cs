@@ -5,7 +5,7 @@
 //
 // The checks are deliberately weighted toward the surprising entries: the ones
 // where the field name suggests the opposite of what the render path does.
-// Run: tests/run.ps1 inspectorSpec  ; grep ISSMOKE in console.log.
+// Run: tests/run.ps1 inspectorSpec  ; grep ISSMOKE in tests/logs/.
 
 setLogMode(1);
 $Scripts::ignoreDSOs = true;

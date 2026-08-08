@@ -7,7 +7,7 @@
 // both, and checks the one control that must NOT take them: a GuiTreeViewCtrl
 // generates its rows from a root object, so a written-out set would be stale.
 //
-// Run: tests/run.ps1 listItems ; grep LISTITEMS in console.log.
+// Run: tests/run.ps1 listItems ; grep LISTITEMS in tests/logs/.
 //-----------------------------------------------------------------------------
 
 setLogMode(2);

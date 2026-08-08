@@ -11,7 +11,7 @@
 // So: the Category row exists where the class is ambiguous and nowhere else,
 // picking one moves the control onto that category's profile, and every field
 // GuiControl::renderText reads has a home.
-// Run: tests/run.ps1 inspectorText  ; grep ITSMOKE in console.log.
+// Run: tests/run.ps1 inspectorText  ; grep ITSMOKE in tests/logs/.
 
 setLogMode(1);
 $Scripts::ignoreDSOs = true;

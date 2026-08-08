@@ -48,7 +48,13 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $exe = Join-Path $repo ($Release ? 'Torque2D.exe' : 'Torque2D_DEBUG.exe')
 $boot = Join-Path $repo 'main.runAllUnitTests.cs'
-$log = Join-Path $repo 'console.log'
+
+# Its own log, not the console.log at the repo root that every engine started
+# from this folder shares. main.runAllUnitTests.cs names the same path; the two
+# have to agree.
+$logDir = Join-Path $PSScriptRoot 'logs'
+New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+$log = Join-Path $logDir 'unit.log'
 
 if (-not (Test-Path $exe)) {
     Write-Host "No $([IO.Path]::GetFileName($exe)) at the repo root. Build first:" -ForegroundColor Red
@@ -60,7 +66,7 @@ if (-not (Test-Path $boot)) {
     exit 1
 }
 
-# The boot script sets logMode 2, which truncates console.log on open -- so a
+# The boot script sets logMode 2, which truncates the log on open -- so a
 # stale log cannot be mistaken for this run's. Removing it first also means a
 # process that dies before opening the log leaves no results at all, rather than
 # the previous run's.
@@ -91,7 +97,7 @@ finally {
 }
 
 if (-not (Test-Path $log)) {
-    Write-Host '  the run wrote no console.log' -ForegroundColor Red
+    Write-Host '  the run wrote no log' -ForegroundColor Red
     exit 1
 }
 

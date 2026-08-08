@@ -2,7 +2,7 @@
 // Editor's Image Asset row: the new "asset" row kind, the one-shot asset query,
 // live substring filtering, the grid re-flow that filtering depends on,
 // selection, choosing, cancelling and dialog cleanup.
-// Run: tests/run.ps1 assetPicker  ; grep APSMOKE in console.log.
+// Run: tests/run.ps1 assetPicker  ; grep APSMOKE in tests/logs/.
 
 // Mode 1 rather than the usual 2: it opens, appends and closes the log on every
 // write, so a crash mid-run still leaves every line that got as far as being

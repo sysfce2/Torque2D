@@ -3,7 +3,7 @@
 // is selected: it verifies the pane toggle, the category-driven field filter in
 // its four shapes, state greying, Show All, commits, per-field reset, and the
 // standalone category picker.
-// Run: tests/run.ps1 profileForm  ; grep PFSMOKE in console.log.
+// Run: tests/run.ps1 profileForm  ; grep PFSMOKE in tests/logs/.
 
 // Mode 1 rather than the usual 2: it opens, appends and closes the log on every
 // write, so a crash mid-run still leaves every line that got as far as being
