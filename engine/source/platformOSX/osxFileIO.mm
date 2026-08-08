@@ -389,7 +389,7 @@ U32 File::getSize() const
     if ( Ok == currentStatus || EOS == currentStatus )
     {
         struct stat statData;
-        
+
         if(fstat(fileno((FILE*)handle), &statData) != 0)
             return 0;
         
@@ -687,6 +687,12 @@ bool Platform::createPath(const char *file)
         return false;
     }
     char* pFinalSlash = dStrrchr(pathBuffer, '/');
+    if ( pFinalSlash == NULL )
+    {
+        // A bare file name in the working directory names no directory, so
+        // there is nothing to create. Windows and Linux both no-op here.
+        return true;
+    }
     if ( pFinalSlash != pathBuffer+pathLength-1 )
     {
         pFinalSlash[1] = 0;
