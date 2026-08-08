@@ -153,14 +153,14 @@ function GuiEditorItemRow::build(%this)
 		"Remove this row.", ".onRemoveClicked();");
 }
 
-// A checkbox wearing an icon, the same GuiEditorToggleIcon the header's flags
+// A checkbox wearing an icon, the same EditorToggleIcon the header's flags
 // use. frameOn is optional: where there is one picture for the idea, the tint
 // alone carries the state.
 function GuiEditorItemRow::makeToggle(%this, %x, %name, %label, %frameOn, %frameOff, %tipOn, %tipOff)
 {
 	%toggle = new GuiCheckBoxCtrl()
 	{
-		class = "GuiEditorToggleIcon";
+		class = "EditorToggleIcon";
 		HorizSizing = "left";
 		Position = %x SPC 1;
 		Extent = "24 24";

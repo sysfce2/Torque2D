@@ -136,7 +136,7 @@ function GuiEditorHeaderBlock::makeIconToggle(%this, %row, %x, %field, %label, %
 {
 	%button = new GuiCheckBoxCtrl()
 	{
-		class = "GuiEditorToggleIcon";
+		class = "EditorToggleIcon";
 		Position = %x SPC 2;
 		Extent = "24 24";
 		frameOn = %frameOn;

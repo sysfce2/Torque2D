@@ -20,10 +20,94 @@
 // IN THE SOFTWARE.
 //-----------------------------------------------------------------------------
 
+// One asset in the library: a picture and the asset's name, arranged as a tile
+// or as a row depending on the library's view mode.
+//
+// The picture is whatever the asset can show of itself -- the image, the running
+// animation -- falling back to a flat icon for the kinds that have no likeness.
+// The name is drawn as well as being the tooltip, because the library can now be
+// searched and sorted by it and an order you cannot read is not an order.
+
+$AssetDictionaryButton::gridArt = 50;
+
+// The band at the bottom of a tile the caption is allowed to fill.
+$AssetDictionaryButton::gridCaption = 34;
+
+$AssetDictionaryButton::rowArt = 28;
+$AssetDictionaryButton::rowTextLeft = 36;
+
 function AssetDictionaryButton::onAdd(%this)
 {
+	%this.buildSearchKey();
+	%this.buildCaption();
+
 	%this.call("load" @ %this.type, %this.assetID);
+
+	if(%this.viewMode $= "")
+	{
+		%this.viewMode = "grid";
+	}
+	%this.setViewMode(%this.viewMode);
 }
+
+// Everything the library asks about this asset, worked out once.
+//
+// The name, description and category all come off the AssetDefinition without
+// loading anything, and any of the three may be empty -- most assets carry no
+// description and no category at all. They are lowercased here rather than in
+// the filter because the filter walks every tile on every keystroke, and strstr
+// is case sensitive (unlike $=, which is not).
+function AssetDictionaryButton::buildSearchKey(%this)
+{
+	%name = AssetDatabase.getAssetName(%this.assetID);
+	%description = AssetDatabase.getAssetDescription(%this.assetID);
+	%category = AssetDatabase.getAssetCategory(%this.assetID);
+
+	%this.assetName = %name;
+	%this.assetCategory = %category;
+
+	%this.sortName = strlwr(%name);
+	%this.sortCategory = strlwr(%category);
+
+	// Trimmed, because two of the three are usually empty: without it an asset
+	// with neither a description nor a category ends up keyed "name  ", and one
+	// with nothing at all ends up keyed "  " -- which a needle of a single space
+	// would match. (The needle is trimmed too, so that case cannot arise today;
+	// the key should not depend on that staying true.)
+	%this.searchKey = trim(strlwr(%name SPC %description SPC %category));
+}
+
+// The three fields are editable in the inspector, so what was worked out once
+// has to be worked out again when they change. Everything the tile shows or is
+// found by comes from here.
+function AssetDictionaryButton::refreshKeys(%this)
+{
+	%this.buildSearchKey();
+
+	%this.caption.setText(%this.assetName);
+	%this.Tooltip = %this.assetName;
+}
+
+function AssetDictionaryButton::buildCaption(%this)
+{
+	%this.caption = new GuiControl()
+	{
+		Position = "0 0";
+		Extent = "60 20";
+		MinExtent = "0 0";
+		Text = %this.assetName;
+		align = "center";
+		vAlign = "bottom";
+		textWrap = true;
+		UseInput = false;
+	};
+	ThemeManager.setProfile(%this.caption, "labelProfile");
+	%this.add(%this.caption);
+}
+
+//-----------------------------------------------------------------------------
+// The picture, one loader per asset kind.
+//-----------------------------------------------------------------------------
 
 function AssetDictionaryButton::loadImageAsset(%this, %assetID)
 {
@@ -111,23 +195,91 @@ function AssetDictionaryButton::loadSpineAsset(%this, %assetID)
 	%this.add(%texture);
 }
 
+// MinExtent is deliberately tiny: setViewMode drives this down to the row art
+// size, and a minimum of the tile size would silently refuse.
 function AssetDictionaryButton::buildIcon(%this)
 {
-	%texture = new GuiSpriteCtrl()
+	%this.icon = new GuiSpriteCtrl()
 	{
 		class = "AssetDictionarySprite";
-		HorizSizing="center";
-		VertSizing="center";
-		Extent = "50 50";
-		minExtent = "50 50";
+		HorizSizing = "center";
+		VertSizing = "center";
+		Extent = $AssetDictionaryButton::gridArt SPC $AssetDictionaryButton::gridArt;
+		minExtent = "8 8";
 		Position = "0 0";
 		constrainProportions = "1";
 		fullSize = "1";
 		UseInput = false;
 	};
-	ThemeManager.setProfile(%texture, "spriteProfile");
-	return %texture;
+	ThemeManager.setProfile(%this.icon, "spriteProfile");
+	return %this.icon;
 }
+
+//-----------------------------------------------------------------------------
+// View mode.
+//-----------------------------------------------------------------------------
+
+// The picture and the caption swap places rather than the tile being rebuilt.
+// The sprite scales itself (constrainProportions and fullSize), so only its
+// extent and position change -- the image it holds, and an animation part way
+// through, are untouched.
+function AssetDictionaryButton::setViewMode(%this, %mode)
+{
+	%this.viewMode = %mode;
+
+	if(!isObject(%this.icon) || !isObject(%this.caption))
+	{
+		return;
+	}
+
+	%w = getWord(%this.getExtent(), 0);
+	%h = getWord(%this.getExtent(), 1);
+
+	if(%mode $= "rows")
+	{
+		%art = $AssetDictionaryButton::rowArt;
+		%left = $AssetDictionaryButton::rowTextLeft;
+
+		%this.icon.HorizSizing = "anchorLeft";
+		%this.icon.VertSizing = "center";
+		%this.icon.setExtent(%art, %art);
+		%this.icon.setPosition(4, (%h - %art) / 2);
+
+		%this.caption.HorizSizing = "width";
+		%this.caption.VertSizing = "center";
+		%this.caption.setExtent(%w - %left - 4, %art);
+		%this.caption.setPosition(%left, (%h - %art) / 2);
+		%this.caption.align = "left";
+		%this.caption.vAlign = "middle";
+		%this.caption.textWrap = false;
+	}
+	else
+	{
+		%art = $AssetDictionaryButton::gridArt;
+		%band = $AssetDictionaryButton::gridCaption;
+
+		%this.caption.HorizSizing = "fill";
+		%this.caption.VertSizing = "fill";
+		%this.caption.align = "center";
+		%this.caption.vAlign = "bottom";
+		%this.caption.textWrap = true;
+		%this.caption.applySizing();
+
+		// And that fill is how the button's own border inset gets measured: what
+		// the caption reports back after filling IS the content rect.
+		%innerH = getWord(%this.caption.getExtent(), 1);
+
+		%this.icon.HorizSizing = "center";
+		%this.icon.VertSizing = "anchorTop";
+		%this.icon.setExtent(%art, %art);
+		%this.icon.setPosition(0, (%innerH - %band - %art) / 2);
+		%this.icon.applySizing();
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Selection.
+//-----------------------------------------------------------------------------
 
 function AssetDictionaryButton::onClick(%this)
 {

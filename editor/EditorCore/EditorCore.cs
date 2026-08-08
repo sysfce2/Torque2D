@@ -51,10 +51,22 @@ function EditorCore::create( %this )
 	exec("./EditorForm.cs");
 	exec("./EditorIconButton.cs");
 	exec("./EditorButtonBar.cs");
+
+	// The segmented toggle row. It lives here rather than in the Gui Editor that
+	// first grew it because editor/main.cs loads AssetAdmin FIRST, so anything the
+	// Asset Manager builds at create time cannot come out of a module loaded after
+	// it. Nothing in either file was ever Gui-Editor specific.
+	exec("./EditorToggleIcon.cs");
+	exec("./EditorChoiceRow.cs");
+
 	exec("./EditorAssetPickerDialog.cs");
 	exec("./EditorAssetPickerItem.cs");
+	exec("./EditorPreferences.cs");
 
 	new ScriptObject(ThemeManager);
+
+	// Before any editor builds a control that wants to remember how it was left.
+	new ScriptObject(EditorPreferences);
 
 	%this.initGui();
 	%this.editorKeyMap.push();
@@ -64,6 +76,10 @@ function EditorCore::create( %this )
 
 function EditorCore::destroy( %this )
 {
+	if(isObject(EditorPreferences))
+	{
+		EditorPreferences.delete();
+	}
 }
 
 function EditorCore::initGui(%this)

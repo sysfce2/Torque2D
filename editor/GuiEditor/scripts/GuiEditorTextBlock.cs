@@ -104,7 +104,7 @@ function GuiEditorTextBlock::makeIcon(%this, %row, %x, %size, %field, %label, %f
 {
 	%button = new GuiCheckBoxCtrl()
 	{
-		class = "GuiEditorToggleIcon";
+		class = "EditorToggleIcon";
 		HorizSizing = "left";
 		Position = %x SPC 1;
 		Extent = %size SPC %size;
@@ -229,7 +229,7 @@ function GuiEditorTextBlock::makeChoiceRow(%this, %grid, %field, %label, %choice
 {
 	%row = new GuiControl()
 	{
-		class = "GuiEditorChoiceRow";
+		class = "EditorChoiceRow";
 		Position = "0 0";
 		labelText = %label;
 		labelWidth = 24;

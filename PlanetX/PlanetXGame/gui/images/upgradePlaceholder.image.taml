@@ -1,3 +1,4 @@
 <ImageAsset
     AssetName="upgradePlaceholder"
-    ImageFile="upgradePlaceholder.png"/>
+    AssetCategory="card"
+    ImageFile="@assetFile=upgradePlaceholder.png" />

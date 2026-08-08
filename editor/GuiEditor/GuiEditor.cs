@@ -55,8 +55,6 @@ function GuiEditor::create( %this )
 
     // The properties pane that replaced the native GuiInspector.
     exec("./scripts/GuiEditorControlSpec.cs");
-    exec("./scripts/GuiEditorToggleIcon.cs");
-    exec("./scripts/GuiEditorChoiceRow.cs");
     exec("./scripts/GuiEditorAnchorPicker.cs");
     exec("./scripts/GuiEditorTextBlock.cs");
     exec("./scripts/GuiEditorMenuItemBlock.cs");

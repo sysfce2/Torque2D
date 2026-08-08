@@ -22,9 +22,12 @@
 
 function AssetAdmin::create(%this)
 {
+	exec("./AssetLibraryWindow.cs");
 	exec("./AssetDictionary.cs");
 	exec("./AssetWindow.cs");
 	exec("./AssetDictionaryButton.cs");
+	exec("./AssetDictionarySprite.cs");
+	exec("./AssetBase.cs");
 	exec("./AssetInspector.cs");
 	exec("./AssetAudioPlayButton.cs");
 	exec("./NewAssetButton.cs");
@@ -80,10 +83,14 @@ function AssetAdmin::createFrameSet(%this)
 	return %content;
 }
 
+// Everything inside the library -- the toolbar, the scroller, the chain and the
+// groups -- belongs to AssetLibraryWindow, which builds it in its own onAdd. All
+// this has to decide is where the window goes.
 function AssetAdmin::buildLibrary(%this)
 {
 	%this.libWindow = new GuiWindowCtrl()
     {
+        Class = "AssetLibraryWindow";
         HorizSizing = "right";
         VertSizing = "bottom";
         Position = "0 0";
@@ -104,62 +111,10 @@ function AssetAdmin::buildLibrary(%this)
     ThemeManager.setProfile(%this.libWindow, "windowButtonProfile", "MaxButtonProfile");
     %this.content.add(%this.libWindow);
 
-	%this.libScroller = new GuiScrollCtrl()
-	{
-        HorizSizing = "width";
-        VertSizing = "height";
-		Position="0 0";
-		Extent="324 356";
-		MinExtent="0 0";
-		hScrollBar="dynamic";
-		vScrollBar="alwaysOn";
-		constantThumbHeight="0";
-		showArrowButtons="1";
-		scrollBarThickness="14";
-	};
-	ThemeManager.setProfile(%this.libScroller, "scrollingPanelProfile");
-	ThemeManager.setProfile(%this.libScroller, "scrollingPanelThumbProfile", ThumbProfile);
-	ThemeManager.setProfile(%this.libScroller, "scrollingPanelTrackProfile", TrackProfile);
-	ThemeManager.setProfile(%this.libScroller, "scrollingPanelArrowProfile", ArrowProfile);
-	%this.libWindow.add(%this.libScroller);
-
-	%this.dictionaryList = new GuiChainCtrl()
-	{
-		HorizSizing="width";
-		VertSizing="height";
-		Position="0 0";
-		Extent="310 768";
-		MinExtent="220 200";
-	};
-	ThemeManager.setProfile(%this.dictionaryList, "emptyProfile");
-	%this.libScroller.add(%this.dictionaryList);
-
-	%this.dictionaryList.add(%this.buildDictionary("Images", "ImageAsset"));
-	%this.dictionaryList.add(%this.buildDictionary("Animations", "AnimationAsset"));
-	%this.dictionaryList.add(%this.buildDictionary("Particle Effects", "ParticleAsset"));
-	%this.dictionaryList.add(%this.buildDictionary("Fonts", "FontAsset"));
-	%this.dictionaryList.add(%this.buildDictionary("Audio", "AudioAsset"));
-	//%this.dictionaryList.add(%this.buildDictionary("Spines", "SpineAsset"));
-}
-
-function AssetAdmin::buildDictionary(%this, %title, %type)
-{
-	%this.Dictionary[%type] = new GuiPanelCtrl()
-	{
-		Class = AssetDictionary;
-		Text=%title;
-		command="";
-		HorizSizing="width";
-		VertSizing="bottom";
-		Position="0 0";
-		Extent="306 22";
-		MinExtent="80 22";
-		Type = %type;
-	};
-	%this.Dictionary[%type].setExpandEase("EaseInOut", 1000);
-	ThemeManager.setProfile(%this.Dictionary[%type], "panelProfile");
-
-	return %this.Dictionary[%type];
+    // Measure again. The window sized its own contents in onAdd, which is before
+    // any of the five profiles above were on it and before the frame set gave it
+    // its real extent -- so that pass was against GuiDefaultProfile's title bar.
+    %this.libWindow.fitScroller();
 }
 
 function AssetAdmin::buildInspector(%this)
@@ -281,12 +236,7 @@ function AssetAdmin::destroy(%this)
 
 function AssetAdmin::open(%this)
 {
-	%this.Dictionary["ImageAsset"].load();
-	%this.Dictionary["AnimationAsset"].load();
-	%this.Dictionary["ParticleAsset"].load();
-	%this.Dictionary["FontAsset"].load();
-	%this.Dictionary["AudioAsset"].load();
-	//%this.Dictionary["SpineAsset"].load();
+	%this.libWindow.loadAssets();
 
 	%this.assetScene.setScenePause(false);
 	%this.isOpen = true;
@@ -294,21 +244,8 @@ function AssetAdmin::open(%this)
 
 function AssetAdmin::close(%this)
 {
-	%this.Dictionary["ImageAsset"].unload();
-	%this.Dictionary["AnimationAsset"].unload();
-	%this.Dictionary["ParticleAsset"].unload();
-	%this.Dictionary["FontAsset"].unload();
-	%this.Dictionary["AudioAsset"].unload();
-	//%this.Dictionary["SpineAsset"].unload();
+	%this.libWindow.unloadAssets();
 
 	%this.assetScene.setScenePause(true);
 	%this.isOpen = false;
-}
-
-function AssetBase::onRefresh(%this)
-{
-	if(AssetAdmin.isOpen  && isObject(AssetAdmin.chosenButton))
-	{
-		AssetAdmin.chosenButton.onClick();
-	}
 }

@@ -104,7 +104,7 @@ function GuiEditorAnchorPicker::makePin(%this, %x, %y, %edge, %frame, %tip)
 {
 	%pin = new GuiCheckBoxCtrl()
 	{
-		class = "GuiEditorToggleIcon";
+		class = "EditorToggleIcon";
 		Position = %x SPC %y;
 		Extent = "24 24";
 		frameOff = %frame;

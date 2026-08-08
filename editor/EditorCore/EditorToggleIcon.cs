@@ -34,7 +34,7 @@
 // inline. Clicks arrive at owner.onToggleIconChanged(%this).
 //-----------------------------------------------------------------------------
 
-function GuiEditorToggleIcon::onAdd(%this)
+function EditorToggleIcon::onAdd(%this)
 {
 	// Field assignment, not setBoxOffset/setBoxExtent: those bindings document
 	// one argument and read two (argv[2] and argv[3]), so a single "0 0" string
@@ -77,7 +77,7 @@ function GuiEditorToggleIcon::onAdd(%this)
 	%this.refresh();
 }
 
-function GuiEditorToggleIcon::onThemeChange(%this, %theme)
+function EditorToggleIcon::onThemeChange(%this, %theme)
 {
 	%this.refresh();
 }
@@ -85,7 +85,7 @@ function GuiEditorToggleIcon::onThemeChange(%this, %theme)
 // GuiCheckBoxCtrl has already flipped mStateOn by the time the Command runs, so
 // the owner is told what the value became rather than being asked to work it
 // out.
-function GuiEditorToggleIcon::onToggled(%this)
+function EditorToggleIcon::onToggled(%this)
 {
 	%this.refresh();
 
@@ -96,20 +96,20 @@ function GuiEditorToggleIcon::onToggled(%this)
 }
 
 // Set the state without telling the owner, for loading a value in.
-function GuiEditorToggleIcon::setValue(%this, %on)
+function EditorToggleIcon::setValue(%this, %on)
 {
 	%this.setStateOn(%on);
 	%this.refresh();
 }
 
-function GuiEditorToggleIcon::getValue(%this)
+function EditorToggleIcon::getValue(%this)
 {
 	return %this.getStateOn();
 }
 
 // The single place the icon's look is decided: which frame, which tooltip, and
 // which of the profile's font colors tints it.
-function GuiEditorToggleIcon::refresh(%this)
+function EditorToggleIcon::refresh(%this)
 {
 	%on = %this.getStateOn();
 	%profile = ThemeManager.activeTheme.iconButtonProfile;
@@ -119,7 +119,7 @@ function GuiEditorToggleIcon::refresh(%this)
 	%frame = (%on && %this.frameOn !$= "") ? %this.frameOn : %this.frameOff;
 
 	// So is frameOff. A button with no icon at all is a deliberate shape: it is
-	// how GuiEditorChoiceRow spells the "unset" end of a segmented control,
+	// how EditorChoiceRow spells the "unset" end of a segmented control,
 	// where the absence of a picture is the meaning.
 	%this.icon.setVisible(%frame !$= "");
 	if(%frame !$= "")
@@ -149,7 +149,7 @@ function GuiEditorToggleIcon::refresh(%this)
 // buttons are choices rather than switches -- "Centre text - On" would be a
 // worse caption than "Centre text" -- so those pass no label and keep the one
 // line they had.
-function GuiEditorToggleIcon::buildTip(%this, %on)
+function EditorToggleIcon::buildTip(%this, %on)
 {
 	%tip = %on ? %this.tipOn : %this.tipOff;
 
@@ -163,12 +163,12 @@ function GuiEditorToggleIcon::buildTip(%this, %on)
 }
 
 // setActive does not repaint on its own, and the disabled tint is ours to draw.
-function GuiEditorToggleIcon::onActive(%this)
+function EditorToggleIcon::onActive(%this)
 {
 	%this.refresh();
 }
 
-function GuiEditorToggleIcon::onInactive(%this)
+function EditorToggleIcon::onInactive(%this)
 {
 	%this.refresh();
 }

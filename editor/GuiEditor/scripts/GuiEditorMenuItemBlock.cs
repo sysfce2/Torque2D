@@ -106,7 +106,7 @@ function GuiEditorMenuItemBlock::buildKind(%this)
 {
 	%row = new GuiControl()
 	{
-		class = "GuiEditorChoiceRow";
+		class = "EditorChoiceRow";
 		labelText = "Kind";
 		labelWidth = 76;
 		fieldName = "kind";

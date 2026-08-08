@@ -6,7 +6,7 @@
 // each have a picture, and seeing which one is set matters more than reading
 // its name.
 //
-// The buttons are GuiEditorToggleIcon, the same checkbox-as-button the header
+// The buttons are EditorToggleIcon, the same checkbox-as-button the header
 // and the anchor picker use, so a choice looks pressed and a disabled row
 // refuses to act. Exclusivity is this row's job rather than the button's: a
 // click turns the others off, and clicking the chosen one again does nothing --
@@ -22,16 +22,16 @@
 // owner.onChoiceRowChanged(%row).
 //-----------------------------------------------------------------------------
 
-function GuiEditorChoiceRow::onAdd(%this)
+function EditorChoiceRow::onAdd(%this)
 {
 	ThemeManager.setProfile(%this, "emptyProfile");
 	%this.choiceCount = 0;
 	%this.value = "";
 }
 
-// %icon may be "" for the entry that means "unset" -- GuiEditorToggleIcon draws
+// %icon may be "" for the entry that means "unset" -- EditorToggleIcon draws
 // nothing when its frame is empty, leaving a plain button.
-function GuiEditorChoiceRow::addChoice(%this, %value, %icon, %tip)
+function EditorChoiceRow::addChoice(%this, %value, %icon, %tip)
 {
 	%i = %this.choiceCount;
 	%this.choiceValue[%i] = %value;
@@ -40,7 +40,7 @@ function GuiEditorChoiceRow::addChoice(%this, %value, %icon, %tip)
 	%this.choiceCount = %i + 1;
 }
 
-function GuiEditorChoiceRow::build(%this)
+function EditorChoiceRow::build(%this)
 {
 	// Wide enough for a caption by default. The text block asks for a narrow one:
 	// its two rows sit side by side under the text box and are labelled "H:" and
@@ -66,7 +66,7 @@ function GuiEditorChoiceRow::build(%this)
 	{
 		%button = new GuiCheckBoxCtrl()
 		{
-			class = "GuiEditorToggleIcon";
+			class = "EditorToggleIcon";
 			Position = (%labelW + (%i * (%size + %gap))) SPC 2;
 			Extent = %size SPC %size;
 			frameOn = %this.choiceIcon[%i];
@@ -87,7 +87,7 @@ function GuiEditorChoiceRow::build(%this)
 // absolutely, so this leaves a gap where the choice was rather than reflowing the
 // row -- which is the right trade for a choice that comes and goes with the
 // selection: the ones that stay do not move under the cursor.
-function GuiEditorChoiceRow::setChoiceVisible(%this, %value, %visible)
+function EditorChoiceRow::setChoiceVisible(%this, %value, %visible)
 {
 	for(%i = 0; %i < %this.choiceCount; %i++)
 	{
@@ -105,7 +105,7 @@ function GuiEditorChoiceRow::setChoiceVisible(%this, %value, %visible)
 
 // Load a value without telling the owner. A value the row does not offer leaves
 // every button up rather than guessing, so nothing is silently rewritten.
-function GuiEditorChoiceRow::setValue(%this, %value)
+function EditorChoiceRow::setValue(%this, %value)
 {
 	%this.value = %value;
 	%this.populating = true;
@@ -116,7 +116,7 @@ function GuiEditorChoiceRow::setValue(%this, %value)
 	%this.populating = false;
 }
 
-function GuiEditorChoiceRow::getValue(%this)
+function EditorChoiceRow::getValue(%this)
 {
 	return %this.value;
 }
@@ -124,7 +124,7 @@ function GuiEditorChoiceRow::getValue(%this)
 // A button toggled itself. Whatever it did to its own state, the row's rule is
 // that exactly one is on -- so re-assert that from the value rather than from
 // what the button happens to hold.
-function GuiEditorChoiceRow::onToggleIconChanged(%this, %button)
+function EditorChoiceRow::onToggleIconChanged(%this, %button)
 {
 	if(%this.populating)
 	{
@@ -147,7 +147,7 @@ function GuiEditorChoiceRow::onToggleIconChanged(%this, %button)
 	}
 }
 
-function GuiEditorChoiceRow::setEnabled(%this, %enabled)
+function EditorChoiceRow::setEnabled(%this, %enabled)
 {
 	%this.label.setActive(%enabled);
 	for(%i = 0; %i < %this.choiceCount; %i++)
