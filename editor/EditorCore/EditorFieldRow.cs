@@ -1,38 +1,57 @@
 
 //-----------------------------------------------------------------------------
-// One field cell in the Gui Profile Editor's profile pane: a caption above an
-// editor sized to the field's type, with a reset button that appears only while
-// the field is overridden away from its theme's stamped value.
+// One field cell in an editor's properties pane: a caption above an editor
+// sized to the field's type, with a reset button beside it.
+//
+// Grown in the Gui Profile Editor and now shared -- the Gui Editor's inspector
+// pane, the Profile Editor's three forms and the Asset Manager's asset panes all
+// build their rows from this, which is why it lives in EditorCore rather than in
+// the module that first wanted it.
 //
 // Caption-above-editor rather than caption-beside-editor because these are grid
 // cells: the pane flows them left-to-right and wraps into as many columns as the
-// Properties pane is wide, the way the native inspector does, so a cell has to
-// stay narrow. It also stops long captions ("Horizontal Align") from clipping.
+// pane is wide, the way the native inspector does, so a cell has to stay narrow.
+// It also stops long captions ("Horizontal Align") from clipping.
 //
 // The grid resizes every cell it lays out, so the widgets carry sizing flags
 // rather than fixed geometry: the caption and editor follow the cell width and
 // the reset button stays pinned to its right edge.
 //
-// The row owns its widgets and nothing else. It never reads or writes the
-// profile -- it hands values to its owner and takes them back, so the owner
-// stays the single place that knows about theme overrides, array-indexed
-// fields, and dirty marking. Commits arrive at owner.onProfileRowCommit(%row)
-// and reset clicks at owner.onProfileRowReset(%row).
+// The row owns its widgets and nothing else. It never reads or writes the thing
+// being edited -- it hands values to its owner and takes them back, so the owner
+// stays the single place that knows about theme overrides, array-indexed fields,
+// and dirty marking. Commits arrive at owner.onFieldRowCommit(%row) and reset
+// clicks at owner.onFieldRowReset(%row).
 //
 // The creator sets these inline: fieldName, labelText, kind, owner, and for kind
-// "enum" the tab-separated enumItems. Call build() once after adding the row to
-// its container -- the container decides the cell width, so build() has to run
-// after the add. It records the laid-out height in .rowHeight.
+// "enum" the tab-separated enumItems. Optionally swatchWidth (a "color" row that
+// should not fill its cell) and editorHeight (how deep a "multiline" box is).
+// Call build() once after adding the row to its container -- the container
+// decides the cell width, so build() has to run after the add. It records the
+// laid-out height in .rowHeight.
 //
-// Kinds: text, number, point, bool, color, enum, dropdown, file, asset.
+// Two things a row takes from its OWNER rather than from itself, because they
+// are decisions the whole pane makes once:
+//
+//   swatchClass  the class a color popup wears. Empty gives a plain one; the
+//                Profile Editor points it at GuiProfileEditorColorPopup, which
+//                fills the swatch row from the theme in its tree. That class
+//                belongs to the Gui Editor module and cannot be named here.
+//   findBase     what a "file" row's Find button makes its path relative to.
+//                The default is the game root, which is what a bitmap path
+//                means; an asset's loose file is relative to the asset's own
+//                folder instead.
+//
+// Kinds: text, number, decimal, point, pointf, bool, color, enum, dropdown,
+// file, asset, multiline.
 //-----------------------------------------------------------------------------
 
-function GuiProfileEditorFieldRow::onAdd(%this)
+function EditorFieldRow::onAdd(%this)
 {
 	ThemeManager.setProfile(%this, "emptyProfile");
 }
 
-function GuiProfileEditorFieldRow::build(%this)
+function EditorFieldRow::build(%this)
 {
 	// The grid sizes a cell the moment it is added, which is before build()
 	// runs, so lay out against the width we actually have rather than the
@@ -50,9 +69,16 @@ function GuiProfileEditorFieldRow::build(%this)
 	%captioned = %this.labelText !$= "";
 	%editorY = %captioned ? (%labelH + 4) : 2;
 
-	// A multiline row is three lines of a wrapped text box rather than one line of
-	// a plain one. Everything else about it is a text row.
-	%editorH = (%this.kind $= "multiline") ? 62 : 24;
+	// A multiline row is a wrapped text box several lines deep rather than one
+	// line of a plain one. Everything else about it is a text row. Three lines
+	// unless the creator asked for a particular depth -- a row that has a grid
+	// cell to itself can afford more, and an empty box the size of its neighbours
+	// says "this is where the prose goes" in a way a three-line one does not.
+	%editorH = 24;
+	if(%this.kind $= "multiline")
+	{
+		%editorH = (%this.editorHeight > 0) ? %this.editorHeight : 62;
+	}
 	%h = %editorY + %editorH + 4;
 
 	// The editor stops short of the reset button so the two never overlap once
@@ -108,7 +134,7 @@ function GuiProfileEditorFieldRow::build(%this)
 	{
 		%this.editor = new GuiDropDownCtrl()
 		{
-			class = "GuiProfileEditorRowDropDown";
+			class = "EditorFieldRowDropDown";
 			HorizSizing = "width";
 			Position = %pad SPC %editorY;
 			Extent = %editorW SPC 22;
@@ -192,7 +218,7 @@ function GuiProfileEditorFieldRow::build(%this)
 // something to be chosen rather than typed. The caller supplies the method the
 // button calls; everything else about the two rows is identical, including the
 // button keeping its place at the cell's right edge as the grid widens.
-function GuiProfileEditorFieldRow::makeFindRow(%this, %pad, %editorY, %editorW, %command)
+function EditorFieldRow::makeFindRow(%this, %pad, %editorY, %editorW, %command)
 {
 	%buttonW = 56;
 	%this.editor = %this.makeInput(%pad, %editorY, %editorW - %buttonW - 4, 22, false, "width");
@@ -211,14 +237,14 @@ function GuiProfileEditorFieldRow::makeFindRow(%this, %pad, %editorY, %editorW, 
 // True where the field holds a real number rather than a whole one. Kept as a
 // question about the kind rather than a flag on the row, because it is asked
 // from three places and has to answer the same way in all of them.
-function GuiProfileEditorFieldRow::isDecimalKind(%this)
+function EditorFieldRow::isDecimalKind(%this)
 {
 	return %this.kind $= "decimal" || %this.kind $= "pointf";
 }
 
 // A text box that commits on blur (AltCommand) and on Enter, matching how the
 // native inspector and the border grid apply their edits.
-function GuiProfileEditorFieldRow::makeInput(%this, %x, %y, %w, %h, %numeric, %sizing)
+function EditorFieldRow::makeInput(%this, %x, %y, %w, %h, %numeric, %sizing)
 {
 	%decimal = %this.isDecimalKind();
 
@@ -231,7 +257,7 @@ function GuiProfileEditorFieldRow::makeInput(%this, %x, %y, %w, %h, %numeric, %s
 		// a text box meant nudge() swallowed both arrows and did nothing with
 		// them, which is what stopped the caret moving between lines in the
 		// multi-line box.
-		class = %numeric ? "GuiProfileEditorRowInput" : "";
+		class = %numeric ? "EditorFieldRowInput" : "";
 		HorizSizing = %sizing;
 		Position = %x SPC %y;
 		Extent = %w SPC %h;
@@ -256,11 +282,15 @@ function GuiProfileEditorFieldRow::makeInput(%this, %x, %y, %w, %h, %numeric, %s
 	return %box;
 }
 
-function GuiProfileEditorFieldRow::makeSwatch(%this, %x, %y, %w, %h)
+// The swatch's class comes from the owner, not from here: the Profile Editor
+// wants one that fills its swatch row from the theme under the tree, and that
+// class lives in the Gui Editor module, which EditorCore knows nothing about.
+// Empty gives the plain popup, which is what a pane with no theme to offer wants.
+function EditorFieldRow::makeSwatch(%this, %x, %y, %w, %h)
 {
 	%swatch = new GuiColorPopupCtrl()
 	{
-		class = "GuiProfileEditorColorPopup";
+		class = isObject(%this.owner) ? %this.owner.swatchClass : "";
 		// A fixed-width swatch stays put as the cell widens; a full-width one
 		// follows it.
 		HorizSizing = (%this.swatchWidth > 0) ? "anchorLeft" : "width";
@@ -291,25 +321,25 @@ function GuiProfileEditorFieldRow::makeSwatch(%this, %x, %y, %w, %h)
 // from a text box that merely lost focus. The recorded form is whatever the
 // widget reads back, not what was passed in, because the two differ: a ColorI
 // field holding "White" comes back out of the swatch as "255 255 255 255".
-function GuiProfileEditorFieldRow::setValue(%this, %value)
+function EditorFieldRow::setValue(%this, %value)
 {
 	%this.applyValue(%value);
 	%this.lastValue = %this.getValue();
 }
 
 // True when the widget now holds something other than what was loaded into it.
-function GuiProfileEditorFieldRow::hasChanged(%this)
+function EditorFieldRow::hasChanged(%this)
 {
 	return %this.getValue() !$= %this.lastValue;
 }
 
 // Accept the widget's current contents as the new baseline, after a commit.
-function GuiProfileEditorFieldRow::markClean(%this)
+function EditorFieldRow::markClean(%this)
 {
 	%this.lastValue = %this.getValue();
 }
 
-function GuiProfileEditorFieldRow::applyValue(%this, %value)
+function EditorFieldRow::applyValue(%this, %value)
 {
 	%kind = %this.kind;
 	if(%kind $= "bool")
@@ -344,7 +374,7 @@ function GuiProfileEditorFieldRow::applyValue(%this, %value)
 	}
 }
 
-function GuiProfileEditorFieldRow::getValue(%this)
+function EditorFieldRow::getValue(%this)
 {
 	%kind = %this.kind;
 	if(%kind $= "bool")
@@ -374,7 +404,7 @@ function GuiProfileEditorFieldRow::getValue(%this)
 // "12.0" into a Point2I. A real one is not: flooring a font size multiplier
 // turns every 1.5 into a 1, which is how a control that would not resize looked
 // like a control whose font size did nothing.
-function GuiProfileEditorFieldRow::numberIn(%this, %box)
+function EditorFieldRow::numberIn(%this, %box)
 {
 	return %this.isDecimalKind() ? %box.getText() : mFloor(%box.getText());
 }
@@ -385,7 +415,7 @@ function GuiProfileEditorFieldRow::numberIn(%this, %box)
 
 // %items is tab-separated. The current selection survives a refill even when
 // the new list does not contain it (a font face outside the directory).
-function GuiProfileEditorFieldRow::fillItems(%this, %items)
+function EditorFieldRow::fillItems(%this, %items)
 {
 	%selected = %this.currentItem;
 	%this.editor.clearItems();
@@ -406,7 +436,7 @@ function GuiProfileEditorFieldRow::fillItems(%this, %items)
 	}
 }
 
-function GuiProfileEditorFieldRow::selectItem(%this, %value)
+function EditorFieldRow::selectItem(%this, %value)
 {
 	%this.currentItem = %value;
 	if(%value $= "")
@@ -432,7 +462,7 @@ function GuiProfileEditorFieldRow::selectItem(%this, %value)
 
 // A field the current control never reads stays visible but inert, so its value
 // is never lost -- the pane's Show All puts it back in reach.
-function GuiProfileEditorFieldRow::setEnabled(%this, %enabled, %reason)
+function EditorFieldRow::setEnabled(%this, %enabled, %reason)
 {
 	%this.editor.setActive(%enabled);
 	if(isObject(%this.editorY))
@@ -449,13 +479,13 @@ function GuiProfileEditorFieldRow::setEnabled(%this, %enabled, %reason)
 // One field wears a different name depending on the category (cursorColor is a
 // text caret in one control and a focus rectangle in another), so the pane can
 // retitle a row after it is built.
-function GuiProfileEditorFieldRow::setLabelText(%this, %text)
+function EditorFieldRow::setLabelText(%this, %text)
 {
 	%this.labelText = %text;
 	%this.label.setText(%text);
 }
 
-function GuiProfileEditorFieldRow::setOverridden(%this, %overridden)
+function EditorFieldRow::setOverridden(%this, %overridden)
 {
 	ThemeManager.setProfile(%this.label, %overridden ? "overrideLabelProfile" : "labelProfile");
 	%this.resetButton.setVisible(%overridden);
@@ -467,7 +497,7 @@ function GuiProfileEditorFieldRow::setOverridden(%this, %overridden)
 // mark spurious theme overrides.
 //-----------------------------------------------------------------------------
 
-function GuiProfileEditorFieldRow::commit(%this)
+function EditorFieldRow::commit(%this)
 {
 	if(!isObject(%this.owner) || %this.owner.populating)
 	{
@@ -477,29 +507,49 @@ function GuiProfileEditorFieldRow::commit(%this)
 	{
 		%this.currentItem = %this.editor.getText();
 	}
-	%this.owner.onProfileRowCommit(%this);
+	%this.owner.onFieldRowCommit(%this);
 }
 
-function GuiProfileEditorFieldRow::onResetClicked(%this)
+function EditorFieldRow::onResetClicked(%this)
 {
 	if(isObject(%this.owner))
 	{
-		%this.owner.onProfileRowReset(%this);
+		%this.owner.onFieldRowReset(%this);
 	}
 }
 
-// The Find button on a "file" row. Picks a file and writes its path back into
-// the box relative to the game root, which is the only form that means the same
-// thing on somebody else's machine.
-function GuiProfileEditorFieldRow::onFindClicked(%this)
+// What a chosen path is written back relative to. The game root is the right
+// answer for a bitmap named in a profile -- it is the only form that means the
+// same thing on somebody else's machine -- but an asset's loose file is stored
+// relative to the asset's own folder, so a pane that edits one sets findBase.
+function EditorFieldRow::pathBase(%this)
 {
+	if(isObject(%this.owner) && %this.owner.findBase !$= "")
+	{
+		return %this.owner.findBase;
+	}
+	return getMainDotCsDir();
+}
+
+// The Find button on a "file" row. Picks a file and writes its path back into
+// the box relative to whatever pathBase() says it should be measured from.
+function EditorFieldRow::onFindClicked(%this)
+{
+	// Where the path is measured from, and where the dialog opens. They are the
+	// same folder when a pane has named one; with no base the path is the game
+	// root's but the dialog still opens on the project, which is where the
+	// pictures are.
+	%base = %this.pathBase();
+	%start = (isObject(%this.owner) && %this.owner.findBase !$= "")
+		? %base : pathConcat(%base, ProjectManager.getProjectFolder());
+
 	%dialog = new OpenFileDialog()
 	{
 		Filters = "Image Files (*.png;*.jpg;*.jpeg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp|All Files (*.*)|*.*";
 		ChangePath = false;
 		MultipleFiles = false;
 		DefaultFile = "";
-		defaultPath = pathConcat(getMainDotCsDir(), ProjectManager.getProjectFolder());
+		defaultPath = %start;
 		title = "Choose an Image";
 	};
 	%result = %dialog.execute();
@@ -511,7 +561,7 @@ function GuiProfileEditorFieldRow::onFindClicked(%this)
 		return;
 	}
 
-	%this.editor.setText(makeRelativePath(%fileName, getMainDotCsDir()));
+	%this.editor.setText(makeRelativePath(%fileName, %base));
 	%this.commit();
 }
 
@@ -519,14 +569,14 @@ function GuiProfileEditorFieldRow::onFindClicked(%this)
 // native inspector's browse button uses it too; it hands back the chosen id
 // through onAssetPicked. Whatever the box holds now is passed along so the
 // picker opens on the current choice.
-function GuiProfileEditorFieldRow::onFindAssetClicked(%this)
+function EditorFieldRow::onFindAssetClicked(%this)
 {
 	EditorCore.openAssetPicker(%this, "onAssetPicked", %this.editor.getText(), "ImageAsset");
 }
 
 // An asset id is already portable -- it names a module and an asset, not a
 // place on this machine -- so unlike a bitmap path it goes in as it came out.
-function GuiProfileEditorFieldRow::onAssetPicked(%this, %assetId)
+function EditorFieldRow::onAssetPicked(%this, %assetId)
 {
 	%this.editor.setText(%assetId);
 	%this.commit();
@@ -547,17 +597,17 @@ function GuiProfileEditorFieldRow::onAssetPicked(%this, %assetId)
 // still selects everything - GuiTextEditCtrl::setFirstResponder does that - and
 // a click now does what a click does.
 
-function GuiProfileEditorRowInput::onUpArrow(%this)
+function EditorFieldRowInput::onUpArrow(%this)
 {
 	%this.nudge(1);
 }
 
-function GuiProfileEditorRowInput::onDownArrow(%this)
+function EditorFieldRowInput::onDownArrow(%this)
 {
 	%this.nudge(-1);
 }
 
-function GuiProfileEditorRowInput::nudge(%this, %delta)
+function EditorFieldRowInput::nudge(%this, %delta)
 {
 	if(!%this.numeric)
 	{
@@ -572,7 +622,7 @@ function GuiProfileEditorRowInput::nudge(%this, %delta)
 	%this.row.commit();
 }
 
-function GuiProfileEditorRowDropDown::onSelect(%this)
+function EditorFieldRowDropDown::onSelect(%this)
 {
 	%this.owner.call(%this.selectMethod);
 }

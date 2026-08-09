@@ -92,7 +92,7 @@ function sGrabTinted()
 	%d = GuiEditor.profileEditorDialog;
 	%d.cursorForm.onAnchorPreset(0.5, 0.5);
 	%d.cursorForm.row["hotSpot"].applyValue("6 -4");
-	%d.cursorForm.onProfileRowCommit(%d.cursorForm.row["hotSpot"]);
+	%d.cursorForm.onFieldRowCommit(%d.cursorForm.row["hotSpot"]);
 
 	schedule(500, 0, "sGrabAnchored");
 }

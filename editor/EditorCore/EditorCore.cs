@@ -59,6 +59,11 @@ function EditorCore::create( %this )
 	exec("./EditorToggleIcon.cs");
 	exec("./EditorChoiceRow.cs");
 
+	// The field cell, here for the same reason: the Gui Editor grew it, and the
+	// Asset Manager's inspector panes are built at create time from a module that
+	// loads before the Gui Editor does.
+	exec("./EditorFieldRow.cs");
+
 	exec("./EditorAssetPickerDialog.cs");
 	exec("./EditorAssetPickerItem.cs");
 	exec("./EditorPreferences.cs");

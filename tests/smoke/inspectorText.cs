@@ -215,7 +215,7 @@ function tStep4()
 	// movement, and isMethod answers for the class -- so the spinner class on a
 	// text box swallowed both arrows and left the caret unable to change line.
 	tCheck("the spinner class is on the number box",
-		%row.editor.class $= "GuiProfileEditorRowInput");
+		%row.editor.class $= "EditorFieldRowInput");
 	tCheck("and not on the text box", %pane.row["text"].editor.class $= "");
 	tCheck("so the text box has no onUpArrow to claim the key",
 		!%pane.row["text"].editor.isMethod("onUpArrow"));
@@ -337,7 +337,7 @@ function tStep6()
 	tCheck("the revert appeared", %row.resetButton.isVisible());
 
 	// The revert is the only way back to the profile's color.
-	%pane.onProfileRowReset(%row);
+	%pane.onFieldRowReset(%row);
 	tCheck("revert turned the override off", !$tHeading.overrideFontColor);
 	tCheck("the swatch fell back to the profile's color",
 		%row.getValue() $= tProfileOf($tHeading).fontColor);

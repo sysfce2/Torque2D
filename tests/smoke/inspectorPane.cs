@@ -609,7 +609,7 @@ function pStep8()
 	pCheck("dynamic field survived reselect", isObject(%dyn.row["smokeTag"]));
 
 	// Remove, which is the row's reset button repurposed.
-	%dyn.onProfileRowReset(%dyn.row["smokeTag"]);
+	%dyn.onFieldRowReset(%dyn.row["smokeTag"]);
 	schedule(100, 0, "pStep9");
 }
 

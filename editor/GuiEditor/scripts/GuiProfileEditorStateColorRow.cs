@@ -46,7 +46,7 @@ function GuiProfileEditorStateColorRow::stateField(%this, %index)
 function GuiProfileEditorStateColorRow::build(%this)
 {
 	// The grid has already sized this cell by the time build() runs, so lay out
-	// against the width we actually have. See GuiProfileEditorFieldRow::build.
+	// against the width we actually have. See EditorFieldRow::build.
 	%w = getWord(%this.getExtent(), 0);
 	%pad = 4;
 	%resetW = 24;

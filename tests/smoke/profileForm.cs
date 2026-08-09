@@ -237,7 +237,7 @@ function fStep4()
 	%form.onShowAllToggled();
 
 	// --- Reset puts a field back to the theme's stamped value. ---
-	%form.onProfileRowReset(%form.row["fontSize"]);
+	%form.onFieldRowReset(%form.row["fontSize"]);
 	fCheck("field override cleared by reset", !$fTheme.isFieldOverridden(%profile, "fontSize"));
 	fCheck("field value restamped by reset", %profile.fontSize == %oldSize);
 	fCheck("field reset button hidden again", !%form.row["fontSize"].resetButton.isVisible());

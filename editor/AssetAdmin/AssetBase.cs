@@ -1,10 +1,18 @@
 //-----------------------------------------------------------------------------
 // What the Asset Manager does when an asset changes underneath it.
 //
-// AssetBase::setAssetName, setAssetDescription and setAssetCategory all end in
-// refreshAsset(), which fires this. The inspector edits all three, and the
-// library now searches and sorts by all three -- so a tile that cached them has
-// to be told, or the search box goes on answering about the old values.
+// Every setter on an asset ends in refreshAsset(), which saves the asset's file
+// and fires this. So this is the one place that hears about a change however it
+// was made -- from the inspector, from the Explicit Frames or Image Layers tab,
+// or as a cascade from some other asset that this one depends on.
+//
+// Three things have to be told:
+//
+//   the library    a tile caches the name, description and category it is
+//                  searched and sorted by, and the inspector edits all three
+//   the preview    the scene showing the asset is built from its values
+//   the inspector  a change made on another tab -- explicit mode, a new layer --
+//                  is a change to what the inspector is showing
 //-----------------------------------------------------------------------------
 
 function AssetBase::onRefresh(%this)
@@ -18,7 +26,10 @@ function AssetBase::onRefresh(%this)
 	}
 
 	AssetAdmin.libWindow.onAssetRefreshed(%this.getAssetId());
+	AssetAdmin.inspector.onAssetRefreshed(%this);
 
+	// Redraws the preview. It does not re-enter the inspector: onClick only loads
+	// an asset into it when the selection actually moved.
 	if(isObject(AssetAdmin.chosenButton))
 	{
 		AssetAdmin.chosenButton.onClick();

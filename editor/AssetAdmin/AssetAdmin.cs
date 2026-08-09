@@ -39,6 +39,7 @@ function AssetAdmin::create(%this)
 	exec("./DeleteAssetDialog.cs");
 	exec("./ParticleEditor/exec.cs");
 	exec("./ImageEditor/exec.cs");
+	exec("./Inspector/exec.cs");
 
 	%this.guiPage = EditorCore.RegisterEditor("Asset Manager", %this);
 	%this.content = %this.createFrameSet();
@@ -73,12 +74,20 @@ function AssetAdmin::createFrameSet(%this)
     %rightID = getWord(%idList, 1);
     %content.anchorFrame(%rightID);
     %content.setFrameSize(%rightID, 324);
-    
+
     %ids = %content.createVerticalSplit(%leftID);
     %centerFrameID = getWord(%ids, 0);
     %inspectorFrameID = getWord(%ids, 1);
 	%content.anchorFrame(%inspectorFrameID);
     %content.setFrameSize(%inspectorFrameID, 360);
+
+    // Kept because the only way to move a divider from script is to name the
+    // frame, and the ids are handed out once here and never again. The inspector
+    // is the bottom frame, so it opens wide and short -- which is why everything
+    // in it reflows.
+    %this.libraryFrameId = %rightID;
+    %this.previewFrameId = %centerFrameID;
+    %this.inspectorFrameId = %inspectorFrameID;
 
 	return %content;
 }
@@ -125,7 +134,14 @@ function AssetAdmin::buildInspector(%this)
         VertSizing = "bottom";
         text = "Asset Inspector";
 		Extent = "706 380";
-		MinExtent = "500 250";
+
+		// Narrow enough to hold the cell table and its scroll bar, and no
+		// narrower. A frame set moves its divider whatever the window in the frame
+		// thinks, so a minimum the user can drag past is not a floor -- it is 106
+		// pixels of window hanging off the right-hand edge, clipped away, taking
+		// the Find button and a column of settings with them. The pane reflows all
+		// the way down to one column, so there is nothing here to protect.
+		MinExtent = "260 200";
         canMove = true;
         canClose = false;
         canMinimize = true;

@@ -105,6 +105,19 @@ function AssetInspector::onAdd(%this)
 	%this.inspector = %this.createInspector();
 	%this.insScroller.add(%this.inspector);
 
+	// The image asset's own pane, in place of the generic inspector for the one
+	// asset kind that has one so far. It shares the Inspector page with the
+	// inspector rather than taking a tab of its own -- it IS the inspector, for
+	// that kind of asset -- and chooseInspector decides which of the two is on
+	// show. Neither is ever rebuilt or freed.
+	%this.imageScroller = %this.createScroller();
+	%this.imageScroller.setVisible(false);
+	%this.insPage.add(%this.imageScroller);
+
+	%this.imagePane = %this.createImagePane();
+	%this.imageScroller.add(%this.imagePane);
+	%this.imagePane.build();
+
 	//Particle Graph Tool
 	%this.scaleGraphPage = %this.createTabPage("Scale Graph", "AssetParticleGraphTool", "");
 
@@ -135,12 +148,20 @@ function AssetInspector::createTabPage(%this, %name, %class, %superClass)
 	return %page;
 }
 
+// Fill, not width/height. A scroller here is its tab page's only child and wants
+// the whole content rect, and the two flags answer that differently: "height"
+// keeps the gap to each edge that the control had when it was added, so a page
+// resized twice -- once when it joined the book and again when the frame set
+// gave the window its real size -- left the scroller 12 pixels taller than the
+// page holding it, and the page clipped the 12 pixels at the bottom. That is the
+// scroll bar's down arrow. Fill recomputes from the parent's content rect every
+// time, so it cannot drift. (GuiEditorInspectorWindow says the same thing.)
 function AssetInspector::createScroller(%this)
 {
 	%scroller = new GuiScrollCtrl()
 	{
-		HorizSizing="width";
-		VertSizing="height";
+		HorizSizing="fill";
+		VertSizing="fill";
 		Position="0 0";
 		Extent="700 320";
 		hScrollBar="alwaysOff";
@@ -194,6 +215,62 @@ function AssetInspector::createInspector(%this)
 	return %inspector;
 }
 
+// The scroller is 700 wide with a bar always on, so the pane lays out against
+// what is left. "width" from there: the pane follows the frame as it is dragged,
+// and its grids answer by reflowing into more or fewer columns.
+function AssetInspector::createImagePane(%this)
+{
+	%width = 686;
+
+	return new GuiChainCtrl()
+	{
+		class = "AssetImageInspectorPane";
+		superclass = "AssetInspectorPane";
+		HorizSizing = "width";
+		Position = "0 0";
+		Extent = %width SPC 320;
+		IsVertical = true;
+		ChildSpacing = 6;
+		paneWidth = %width;
+	};
+}
+
+// Which of the two inspectors the Inspector page is showing. The one standing
+// down is hidden rather than emptied, so nothing it holds is ever freed while
+// the engine might be dispatching on it.
+function AssetInspector::chooseInspector(%this, %useImagePane)
+{
+	%this.insScroller.setVisible(!%useImagePane);
+	%this.imageScroller.setVisible(%useImagePane);
+
+	if(!%useImagePane)
+	{
+		%this.imagePane.unbind();
+	}
+}
+
+// What the title bar's delete button acts on. The generic inspector knows what
+// it was handed; the image pane has to be asked, because it is not one.
+function AssetInspector::inspectedObject(%this)
+{
+	if(%this.imageScroller.isVisible())
+	{
+		return %this.imagePane.target;
+	}
+	return %this.inspector.getInspectObject();
+}
+
+// An asset changed -- possibly the one on show, possibly one it depends on.
+// AssetBase::onRefresh sends every one of them here; the pane decides whether it
+// is the one it is bound to.
+function AssetInspector::onAssetRefreshed(%this, %asset)
+{
+	if(%this.imageScroller.isVisible())
+	{
+		%this.imagePane.onAssetRefreshed(%asset);
+	}
+}
+
 function AssetInspector::hideInspector(%this)
 {
 	%this.titlebar.setText("");
@@ -201,6 +278,9 @@ function AssetInspector::hideInspector(%this)
 	%this.tabBook.Visible = false;
 	%this.emitterButtonBar.visible = false;
 	%this.deleteAssetButton.visible = false;
+
+	// Nothing is selected, so nothing is bound. The pane keeps its rows.
+	%this.chooseInspector(false);
 }
 
 function AssetInspector::resetInspector(%this)
@@ -216,6 +296,10 @@ function AssetInspector::resetInspector(%this)
 
 	%this.emitterButtonBar.visible = false;
 	%this.deleteAssetButton.visible = true;
+
+	// Back to the generic inspector. The one asset kind with a pane of its own
+	// says so straight after.
+	%this.chooseInspector(false);
 }
 
 function AssetInspector::loadImageAsset(%this, %imageAsset, %assetID)
@@ -226,13 +310,8 @@ function AssetInspector::loadImageAsset(%this, %imageAsset, %assetID)
 	%this.tabBook.selectPage(0);
 	%this.titlebar.setText("Image Asset:" SPC %imageAsset.AssetName);
 
-	%this.inspector.clearHiddenFields();
-	%this.inspector.addHiddenField("hidden");
-	%this.inspector.addHiddenField("locked");
-	%this.inspector.addHiddenField("AssetInternal");
-	%this.inspector.addHiddenField("AssetPrivate");
-	%this.inspector.addHiddenField("ExplicitMode");
-	%this.inspector.inspect(%imageAsset);
+	%this.chooseInspector(true);
+	%this.imagePane.bind(%imageAsset, %assetID);
 
 	%this.imageFrameEditPage.inspect(%imageAsset);
 	%this.imageLayersEditPage.inspect(%imageAsset);
@@ -349,7 +428,7 @@ function AssetInspector::loadSpineAsset(%this, %spineAsset, %assetID)
 
 function AssetInspector::deleteAsset(%this)
 {
-	%asset = %this.inspector.getInspectObject();
+	%asset = %this.inspectedObject();
 	if(%this.titleDropDown.visible && %this.titleDropDown.getSelectedItem() != 0)
 	{
 		%asset = %asset.getOwner();

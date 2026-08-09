@@ -326,7 +326,7 @@ function fStep6()
 
 	// Reset must undo an asset the same as any other field.
 	%form = GuiEditor.profileEditorDialog.profileForm;
-	%form.onProfileRowReset($fRow);
+	%form.onFieldRowReset($fRow);
 	fCheck("reset cleared the asset override",
 		!$fTheme.isFieldOverridden(%form.target, "imageAsset"));
 	fCheck("reset hid the row's reset button", !$fRow.resetButton.isVisible());
@@ -346,7 +346,7 @@ function fStep6()
 // This block used to drive the native GuiInspector, whose GuiInspectorTypeAsset
 // baked an EditorCore.openAssetPicker call straight into a "..." button's
 // Command. The Gui Editor no longer builds an inspector -- GuiEditorInspectorPane
-// replaced it -- so the path under test is now GuiProfileEditorFieldRow's
+// replaced it -- so the path under test is now EditorFieldRow's
 // "asset" kind, which routes the click through onFindAssetClicked instead of a
 // baked-in command string. Same promise, one indirection later.
 //

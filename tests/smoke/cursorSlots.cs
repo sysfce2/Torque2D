@@ -125,7 +125,7 @@ function sStep3()
 	%row = %pane.row["nWSECursor"];
 
 	%row.applyValue($sExtra.getName());
-	%pane.onProfileRowCommit(%row);
+	%pane.onFieldRowCommit(%row);
 	sCheck("choosing the extra wrote it to the control",
 		$sWindow.nWSECursor $= $sExtra.getName());
 

@@ -40,7 +40,6 @@ function GuiEditor::create( %this )
     exec("./scripts/GuiProfileEditorBorderSetter.cs");
     exec("./scripts/GuiProfileEditorBorderForm.cs");
     exec("./scripts/GuiProfileEditorFieldSpec.cs");
-    exec("./scripts/GuiProfileEditorFieldRow.cs");
     exec("./scripts/GuiProfileEditorStateColorRow.cs");
     exec("./scripts/GuiProfileEditorProfileForm.cs");
     exec("./scripts/GuiProfileEditorCursorForm.cs");
