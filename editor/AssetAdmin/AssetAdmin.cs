@@ -40,6 +40,8 @@ function AssetAdmin::create(%this)
 	exec("./ParticleEditor/exec.cs");
 	exec("./ImageEditor/exec.cs");
 	exec("./Inspector/exec.cs");
+	exec("./Animation/exec.cs");
+	exec("./AssetPreviewSprite.cs");
 
 	%this.guiPage = EditorCore.RegisterEditor("Asset Manager", %this);
 	%this.content = %this.createFrameSet();
@@ -47,6 +49,15 @@ function AssetAdmin::create(%this)
 	%this.buildAudioPlayButton();
 	%this.buildInspector();
 	%this.buildLibrary();
+
+	// The manager that turns the preview into an animation editor and back. It
+	// owns the two panes it builds and deletes them in its own onRemove, so
+	// deleting it is the whole of the teardown.
+	%this.animationStage = new ScriptObject()
+	{
+		class = "AssetAnimationStage";
+		admin = %this;
+	};
 
 	EditorCore.FinishRegistration(%this.guiPage);
 
@@ -286,7 +297,10 @@ function AssetAdmin::buildAudioPlayButton(%this)
 
 function AssetAdmin::destroy(%this)
 {
-
+	if(isObject(%this.animationStage))
+	{
+		%this.animationStage.delete();
+	}
 }
 
 function AssetAdmin::open(%this)
@@ -299,6 +313,11 @@ function AssetAdmin::open(%this)
 
 function AssetAdmin::close(%this)
 {
+	// The last chance to see where the user left the animation editor's dividers:
+	// a frame set announces nothing when one is dragged, so the sizes are read at
+	// the moments the split is about to go away.
+	%this.animationStage.rememberSizes();
+
 	%this.libWindow.unloadAssets();
 
 	%this.assetScene.setScenePause(true);

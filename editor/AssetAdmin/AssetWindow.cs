@@ -118,8 +118,11 @@ function AssetWindow::displayAnimationAsset(%this, %imageAsset, %animationAsset,
 	AssetAdmin.AssetScene.clear(true);
 
 	%size = %this.getWorldSize(%imageAsset.getFrameSize(0));
-	new Sprite()
+	%sprite = new Sprite()
 	{
+		// It needs a class only so onAnimationEnd has somewhere to land -- that is
+		// how the transport bar learns a one-shot animation has finished.
+		class = "AssetPreviewSprite";
 		Scene = AssetAdmin.AssetScene;
 		Animation = %assetID;
 		size = %size;
@@ -128,6 +131,11 @@ function AssetWindow::displayAnimationAsset(%this, %imageAsset, %animationAsset,
 		Position = "0 0";
 		BodyType = static;
 	};
+
+	// This sprite is a different object every time -- the scene is cleared and
+	// rebuilt above -- so whatever was following the old one has to be told.
+	AssetAdmin.previewSprite = %sprite;
+	AssetAdmin.animationStage.onPreviewRebuilt(%sprite);
 }
 
 function AssetWindow::displayParticleAsset(%this, %particleAsset, %assetID)

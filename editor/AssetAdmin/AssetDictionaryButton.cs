@@ -298,9 +298,18 @@ function AssetDictionaryButton::onClick(%this)
 	AssetAdmin.audioPlayButtonContainer.setVisible(false);
 	AssetAdmin.AssetWindow.setVisible(true);
 
+	// One line, above the whole chain, and every branch below is untouched. The
+	// stage keeps the animation split up if this asset is the one it is already
+	// showing and takes it down otherwise, which is the entire answer for the
+	// five asset kinds that have never heard of it.
+	AssetAdmin.animationStage.retainFor(%this.AnimationAssetID);
+
+	// The animation branch has to stay first: an animation tile caches its image
+	// asset too, so the image branch would swallow it.
 	if(isObject(%this.AnimationAsset) && %this.AnimationAssetID !$= "")
 	{
 		AssetAdmin.AssetWindow.displayAnimationAsset(%this.imageAsset, %this.AnimationAsset, %this.AnimationAssetID);
+		AssetAdmin.animationStage.select(%this.imageAsset, %this.AnimationAsset, %this.AnimationAssetID);
 		if(%firstLoad)
 		{
 			AssetAdmin.inspector.loadAnimationAsset(%this.AnimationAsset, %this.AnimationAssetID);
