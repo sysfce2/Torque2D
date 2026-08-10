@@ -30,8 +30,5 @@ function AssetBase::onRefresh(%this)
 
 	// Redraws the preview. It does not re-enter the inspector: onClick only loads
 	// an asset into it when the selection actually moved.
-	if(isObject(AssetAdmin.chosenButton))
-	{
-		AssetAdmin.chosenButton.onClick();
-	}
+	AssetAdmin.refreshPreview(%this);
 }

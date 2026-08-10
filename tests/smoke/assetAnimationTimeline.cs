@@ -168,6 +168,49 @@ function aniStep4()
 
 	aniCheck("a slot moved to the end", $aniTimeline.getFrames() $= "11 12 10");
 
+	schedule(300, 0, "aniStepPreview");
+}
+
+//-----------------------------------------------------------------------------
+// The refresh storm. Every timeline edit writes the asset, and the editor's
+// answer to a written asset used to be "rebuild the preview from nothing" --
+// which would restart the animation on every dragged frame.
+//-----------------------------------------------------------------------------
+
+function aniStepPreview()
+{
+	$aniTimeline.setFrames("20 21 22 23 24 25 26 27");
+	$aniStage.timelinePane.commitFrames();
+
+	$aniSprite = AssetAdmin.previewSprite;
+	aniCheck("there is a preview sprite", isObject($aniSprite));
+
+	$aniStage.play();
+	schedule(400, 0, "aniStepPreview2");
+}
+
+function aniStepPreview2()
+{
+	// Park it somewhere that is not the start, so a restart would be obvious.
+	$aniStage.stop();
+	$aniStage.scrubTo(5);
+
+	aniCheck("the preview scrubbed to slot 5", $aniSprite.getAnimationFrame() == 5);
+
+	// An edit, which writes the file and comes straight back through onRefresh.
+	$aniStage.timelinePane.appendFrame(28);
+
+	aniCheck("the edit landed", $aniTimeline.getCellCount() == 9);
+	aniCheck("the preview sprite was NOT rebuilt", AssetAdmin.previewSprite == $aniSprite);
+	aniCheck("the playhead did not jump back to the start", $aniSprite.getAnimationFrame() == 5);
+	aniCheck("the preview is still paused", !$aniStage.playing);
+
+	// And a refresh raised from somewhere else entirely still reaches the strip.
+	$aniStage.animationAsset.setAnimationFrames("30 31 32");
+
+	aniCheck("an outside change reloads the timeline", $aniTimeline.getFrames() $= "30 31 32");
+	aniCheck("and still did not rebuild the preview", AssetAdmin.previewSprite == $aniSprite);
+
 	schedule(300, 0, "aniStep5");
 }
 

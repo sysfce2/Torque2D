@@ -249,6 +249,14 @@ function AssetWindow::onExtentChange(%this, %d)
 	%this.setCameraArea(%area);
 	%this.setViewLimitOn(%area);
 
+	// The animation stage resizes the sprite it already has rather than letting
+	// the whole preview be rebuilt, which would restart the animation every time
+	// a divider moved.
+	if(AssetAdmin.animationStage.resizePreview())
+	{
+		return;
+	}
+
 	if(isObject(AssetAdmin.chosenButton))
 	{
 		AssetAdmin.chosenButton.onClick();

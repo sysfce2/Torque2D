@@ -295,6 +295,29 @@ function AssetAdmin::buildAudioPlayButton(%this)
 	%this.background.add(%this.audioPlayButtonContainer);
 }
 
+// Something about the selected asset changed and the preview has to catch up.
+//
+// The old answer was to re-click the tile, which rebuilds the preview scene from
+// nothing. That is right for an image or a font, where the picture is a pure
+// function of the asset -- and quite wrong for an animation being edited, where
+// it would clear the running sprite and start again from frame one on every
+// single change. Dragging one frame in the timeline would restart the playback.
+function AssetAdmin::refreshPreview(%this, %asset)
+{
+	// A live edit to what is already on show: the stage keeps the scene it has
+	// and re-reads only what moved, so the preview does not blink and the
+	// playhead does not jump back to the start.
+	if(%this.animationStage.absorbRefresh(%asset))
+	{
+		return;
+	}
+
+	if(isObject(%this.chosenButton))
+	{
+		%this.chosenButton.onClick();
+	}
+}
+
 function AssetAdmin::destroy(%this)
 {
 	if(isObject(%this.animationStage))

@@ -45,6 +45,10 @@ function AssetAnimationStage::onAdd(%this)
 	%this.built = false;
 	%this.assetId = "";
 	%this.playing = false;
+
+	// -1 rather than unset: an unset field reads as an empty string, which is not
+	// less than zero, so every "have I got one?" test below would pass with it.
+	%this.resumeSlot = -1;
 }
 
 function AssetAnimationStage::onRemove(%this)
@@ -121,6 +125,12 @@ function AssetAnimationStage::select(%this, %imageAsset, %animationAsset, %asset
 
 	%this.palettePane.load(%this.imageAssetId);
 	%this.timelinePane.load(%this.imageAssetId, trim(%animationAsset.getAnimationFrames()));
+
+	// Adopt the sprite the preview has already made. displayAnimationAsset builds
+	// it and announces it BEFORE this runs -- the tile displays first and selects
+	// second -- so on a first selection that announcement arrives while there is
+	// no stage to hear it. Asking here covers both orders.
+	%this.onPreviewRebuilt(%this.admin.previewSprite);
 }
 
 //-----------------------------------------------------------------------------
@@ -382,6 +392,101 @@ function AssetAnimationStage::onPreviewFinished(%this)
 }
 
 //-----------------------------------------------------------------------------
+// Absorbing a refresh instead of being rebuilt by one.
+//
+// Every asset setter ends in refreshAsset, which rewrites the file and fires
+// onRefresh -- and the editor's answer to onRefresh has always been to re-click
+// the selected tile, which clears the preview scene and builds a new sprite. For
+// an image that is exactly right. For an animation being edited it means the
+// preview restarts from frame one every time a frame is dragged.
+//
+// So the stage says "I've got this" for the asset it is showing, and the old
+// path is untouched for everything else.
+//-----------------------------------------------------------------------------
+
+function AssetAnimationStage::absorbRefresh(%this, %asset)
+{
+	if(!%this.built || %this.busy || !isObject(%asset))
+	{
+		return false;
+	}
+
+	%isAnimation = (%asset == %this.animationAsset);
+	%isImage = (%asset == %this.imageAsset);
+
+	if(!%isAnimation && !%isImage)
+	{
+		return false;
+	}
+
+	// Unless the strip is what produced this value in the first place. Reloading
+	// it from the asset mid-commit would throw away the selection and the caret
+	// for a list it already holds. The same guard shape AssetInspectorPane uses.
+	if(%isAnimation && !%this.committing)
+	{
+		%this.timelinePane.load(%this.imageAssetId, trim(%this.animationAsset.getAnimationFrames()));
+	}
+
+	// The image may have been re-cut, so the palette's frame count has moved --
+	// and so has what the animation's frames mean.
+	if(%isImage)
+	{
+		%this.palettePane.reload();
+	}
+
+	%this.resyncPreview();
+	return true;
+}
+
+// Put the preview back the way it was before the write disturbed it.
+//
+// Three cases, because ImageFrameProviderCore::onAssetRefreshed has already had
+// its say by the time this runs: it calls playAnimation on a RUNNING preview,
+// restarting it from slot zero, and does nothing at all to a finished one. And
+// playAnimation opens by clearing the pause, so a paused preview comes back
+// playing.
+function AssetAnimationStage::resyncPreview(%this)
+{
+	if(!isObject(%this.previewSprite))
+	{
+		return;
+	}
+
+	// The slot the commit put aside, or -- for a change raised from somewhere
+	// other than this editor -- the last one the marker was drawn on.
+	%slot = %this.resumeSlot;
+	if(%slot < 0)
+	{
+		%slot = %this.timelinePane.strip.getPlayheadSlot();
+	}
+
+	%this.armPreview();
+	%this.previewSprite.pauseAnimation(!%this.playing);
+
+	// Restored by SLOT, not by image frame. A slot's meaning shifts when
+	// something is inserted before it, so the preview can appear to skip -- but
+	// tracking the image frame instead breaks the moment a frame appears twice,
+	// which is exactly what a hold is.
+	if(%slot >= 0)
+	{
+		%this.scrubTo(%slot);
+	}
+}
+
+// A divider moved, or the editor was resized. The sprite is already there and
+// only its size is wrong, so there is nothing to rebuild.
+function AssetAnimationStage::resizePreview(%this)
+{
+	if(!%this.built || %this.busy || !isObject(%this.previewSprite) || !isObject(%this.imageAsset))
+	{
+		return false;
+	}
+
+	%this.previewSprite.setSize(%this.admin.assetWindow.getWorldSize(%this.imageAsset.getFrameSize(0)));
+	return true;
+}
+
+//-----------------------------------------------------------------------------
 // Editing. Every path that changes the list ends here, and this is the only
 // place in the editor that writes the animation's frames.
 //-----------------------------------------------------------------------------
@@ -393,12 +498,22 @@ function AssetAnimationStage::commitFrames(%this, %frames)
 		return;
 	}
 
+	// Where the preview is, captured BEFORE the write, because the engine
+	// restarts playback in the middle of it: AssetManager::refreshAsset notifies
+	// every AssetPtr pointing at the asset -- which for a sprite means
+	// playAnimation, from slot zero -- and only then fires the script onRefresh
+	// this editor listens on. By the time we are asked to put things back, the
+	// sprite has already forgotten where it was.
+	%this.resumeSlot = isObject(%this.previewSprite) ? %this.previewSprite.getAnimationFrame() : -1;
+
 	// Guarded because the write comes straight back: every asset setter ends in
 	// refreshAsset, which rewrites the .animation.taml and fires onRefresh
 	// synchronously, inside this call.
 	%this.committing = true;
 	%this.animationAsset.setAnimationFrames(%frames);
 	%this.committing = false;
+
+	%this.resumeSlot = -1;
 }
 
 function AssetAnimationStage::appendFrame(%this, %frame)
