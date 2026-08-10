@@ -23,5 +23,8 @@
 exec("./AssetAnimationStage.cs");
 exec("./AssetAnimationPalettePane.cs");
 exec("./AssetAnimationTimelinePane.cs");
+exec("./AssetAnimationTransportBar.cs");
+exec("./AssetAnimationFrameRange.cs");
+exec("./AssetAnimationRangeDialog.cs");
 exec("./GuiEditFramePaletteCtrl.cs");
 exec("./GuiEditFrameTimelineCtrl.cs");

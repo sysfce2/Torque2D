@@ -211,6 +211,128 @@ function aniStepPreview2()
 	aniCheck("an outside change reloads the timeline", $aniTimeline.getFrames() $= "30 31 32");
 	aniCheck("and still did not rebuild the preview", AssetAdmin.previewSprite == $aniSprite);
 
+	schedule(300, 0, "aniStepTransport");
+}
+
+//-----------------------------------------------------------------------------
+// The transport, and the trap that makes a stopped preview unscrubbable.
+//-----------------------------------------------------------------------------
+
+function aniStepTransport()
+{
+	%bar = AssetAdmin.transportBar;
+	aniCheck("the transport bar exists", isObject(%bar));
+	aniCheck("it is on show for an animation", AssetAdmin.transportBarContainer.isVisible());
+
+	$aniStage.timelinePane.setFrames("40 41 42 43 44 45");
+
+	$aniStage.play();
+	aniCheck("play starts it", $aniStage.playing);
+
+	$aniStage.stop();
+	aniCheck("stop halts it", !$aniStage.playing);
+
+	$aniStage.scrubTo(3);
+	aniCheck("scrubbing moves the preview", $aniSprite.getAnimationFrame() == 3);
+
+	// The trap, asserted head on. SpriteBase::stopAnimation sets the finished
+	// flag, and ImageFrameProviderCore::updateAnimation returns immediately on it
+	// -- so setAnimationFrame is dead and the preview could never be scrubbed
+	// again. armPreview is the only way back, and every path that moves the
+	// playhead goes through it.
+	$aniSprite.stopAnimation();
+	$aniStage.scrubTo(1);
+	aniCheck("scrubbing still works after the animation has finished",
+		$aniSprite.getAnimationFrame() == 1);
+
+	// Rewind leaves the playing state alone.
+	%bar.rewind();
+	aniCheck("rewind goes to the first slot", $aniSprite.getAnimationFrame() == 0);
+
+	schedule(300, 0, "aniStepToggles");
+}
+
+//-----------------------------------------------------------------------------
+// The two toggles: one writes the asset, one is an editor preference.
+//-----------------------------------------------------------------------------
+
+function aniStepToggles()
+{
+	%asset = $aniStage.animationAsset;
+
+	%wasCycling = %asset.getAnimationCycle();
+	$aniStage.setCycle(!%wasCycling);
+	aniCheck("the loop toggle writes the asset's cycle flag",
+		%asset.getAnimationCycle() == !%wasCycling);
+	$aniStage.setCycle(%wasCycling);
+
+	// Keep frame rate off: the count changes and the time does not.
+	EditorPreferences.set("assetAnimationKeepFrameRate", false);
+	$aniStage.timelinePane.setFrames("0 1 2 3");
+	%asset.setAnimationTime(1.0);
+
+	$aniStage.timelinePane.appendFrame(4);
+	aniCheck("with keep-rate off the animation time is left alone",
+		mAbs(%asset.getAnimationTime() - 1.0) < 0.001);
+
+	// Keep frame rate on: 4 frames at 1.0s becomes 5 frames at 1.25s, so each
+	// frame still lasts a quarter of a second.
+	EditorPreferences.set("assetAnimationKeepFrameRate", true);
+	$aniStage.timelinePane.setFrames("0 1 2 3");
+	%asset.setAnimationTime(1.0);
+
+	$aniStage.timelinePane.appendFrame(4);
+	aniCheck("with keep-rate on the time grows with the frame count (" @
+		%asset.getAnimationTime() @ " from " @ $aniTimeline.getCellCount() @ " frames)",
+		mAbs(%asset.getAnimationTime() - 1.25) < 0.001);
+
+	EditorPreferences.set("assetAnimationKeepFrameRate", false);
+
+	schedule(200, 0, "aniStepRange");
+}
+
+//-----------------------------------------------------------------------------
+// The range builder. Eight rows, no dialog: it is a pure function and the
+// dialog's feedback line is this same answer read back.
+//-----------------------------------------------------------------------------
+
+function aniStepRange()
+{
+	%r = AssetAdmin.frameRange;
+
+	aniCheck("a plain range", %r.build(28, 32, 1, 1, false) $= "28 29 30 31 32");
+	aniCheck("a reversed range counts down", %r.build(32, 28, 1, 1, false) $= "32 31 30 29 28");
+	aniCheck("a step skips frames", %r.build(0, 8, 2, 1, false) $= "0 2 4 6 8");
+	aniCheck("a hold repeats each frame", %r.build(0, 3, 1, 2, false) $= "0 0 1 1 2 2 3 3");
+
+	// Both ends appear once, not twice: keeping them would hold the turn at each
+	// end for twice as long as every other frame, which reads as a stutter.
+	aniCheck("ping-pong drops the shared end frames", %r.build(0, 3, 1, 1, true) $= "0 1 2 3 2 1");
+
+	// Hold applies AFTER ping-pong, so "shared" means one frame, not N slots.
+	aniCheck("hold applies to the ping-pong too",
+		%r.build(0, 3, 1, 2, true) $= "0 0 1 1 2 2 3 3 2 2 1 1");
+
+	aniCheck("a single frame cannot ping-pong", %r.build(0, 0, 1, 1, true) $= "0");
+	aniCheck("a step past the end still gives the first frame", %r.build(5, 5, 3, 1, false) $= "5");
+
+	// And it refuses what it should.
+	aniCheck("a frame outside the image is refused",
+		%r.problemWith(0, 500, 1, 1, false, 100) !$= "");
+	aniCheck("an enormous hold is refused",
+		%r.problemWith(0, 99, 1, 100, false, 100) !$= "");
+	aniCheck("a sensible range is not refused",
+		%r.problemWith(28, 32, 1, 1, false, 100) $= "");
+
+	// Applied through the stage, both ways.
+	$aniStage.timelinePane.setFrames("1 2");
+	$aniStage.appendFrames(%r.build(28, 30, 1, 1, false));
+	aniCheck("appending adds to what is there",
+		$aniTimeline.getFrames() $= "1 2 28 29 30");
+
+	$aniStage.setFrames(%r.build(28, 30, 1, 1, false));
+	aniCheck("replacing does not", $aniTimeline.getFrames() $= "28 29 30");
+
 	schedule(300, 0, "aniStep5");
 }
 

@@ -4,7 +4,8 @@
 //      right, the timeline along the bottom of both
 //   1  a timeline with a hold in it, to judge how a run of one frame reads
 //   2  the insertion caret mid-hover, which is the promise a drop then keeps
-//   3  an image asset selected, where the split must collapse back to one preview
+//   3  the frame range dialog, showing a ping-pong read back before it is applied
+//   4  an image asset selected, where the split must collapse back to one preview
 //
 // What only a picture can settle: whether the three sections balance at the size
 // the editor opens at, whether a run of repeated frames reads as one held pose
@@ -110,6 +111,41 @@ function aaGrabCaret()
 	aaGrab("assetAnimation2");
 	$aaStage.timelinePane.strip.clearCaret();
 
+	// The range dialog, with a ping-pong in the feedback line -- the thing that
+	// makes step, hold and ping-pong comprehensible without explaining the rules.
+	$aaStage.openRangeDialog();
+	schedule(500, 0, "aaFillRangeDialog");
+}
+
+function aaFillRangeDialog()
+{
+	// A pushed dialog is the last thing on the canvas.
+	$aaDialog = Canvas.getObject(Canvas.getCount() - 1);
+	if(isObject($aaDialog))
+	{
+		$aaDialog.startBox.setText(28);
+		$aaDialog.endBox.setText(32);
+		$aaDialog.pingPongBox.setStateOn(true);
+		$aaDialog.validate();
+	}
+
+	schedule(400, 0, "aaGrabRange");
+}
+
+function aaGrabRange()
+{
+	aaGrab("assetAnimation3");
+
+	if(isObject($aaDialog))
+	{
+		$aaDialog.onClose();
+	}
+
+	schedule(400, 0, "aaCollapse");
+}
+
+function aaCollapse()
+{
 	// Selecting anything else must take the split back down to one preview.
 	AssetAdmin.Dictionary["ImageAsset"].setExpanded(true);
 	AssetAdmin.libWindow.relayout();
@@ -125,7 +161,7 @@ function aaGrabCaret()
 
 function aaGrabCollapsed()
 {
-	aaGrab("assetAnimation3");
+	aaGrab("assetAnimation4");
 
 	echo("SHOTS DONE");
 	schedule(300, 0, "quit");

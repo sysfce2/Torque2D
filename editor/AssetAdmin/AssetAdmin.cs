@@ -58,6 +58,11 @@ function AssetAdmin::create(%this)
 		class = "AssetAnimationStage";
 		admin = %this;
 	};
+	// The range arithmetic, kept as an object so the dialog and the tests share
+	// one handle and no new global function appears.
+	%this.frameRange = new ScriptObject() { class = "AssetAnimationFrameRange"; };
+
+	%this.buildTransportBar();
 
 	EditorCore.FinishRegistration(%this.guiPage);
 
@@ -295,6 +300,47 @@ function AssetAdmin::buildAudioPlayButton(%this)
 	%this.background.add(%this.audioPlayButtonContainer);
 }
 
+// The animation transport, overlaid on the preview exactly as the audio play
+// button above is -- which is what proves an overlay here receives clicks over
+// the SceneWindow. Built once and only shown or hidden, because the stage comes
+// and goes many times in a session and this does not have to.
+function AssetAdmin::buildTransportBar(%this)
+{
+	%this.transportBarContainer = new GuiControl()
+	{
+		position = "0 0";
+		extent = %this.background.extent;
+		HorizSizing = "width";
+		VertSizing = "height";
+		Visible = "0";
+	};
+	ThemeManager.setProfile(%this.transportBarContainer, "emptyProfile");
+
+	// "top" anchors the BOTTOM edge -- the sizing names read the opposite way
+	// round to how they sound -- so the bar keeps the gap it is given below it
+	// and rides the bottom of the preview as the frame grows. The position is set
+	// against the extent the background has now, which is why it is a gap rather
+	// than a coordinate.
+	%barGap = 8;
+	%barTop = getWord(%this.background.extent, 1) - $AssetAnimationTransportBar::buttonSize - %barGap;
+
+	%this.transportBar = new GuiChainCtrl()
+	{
+		class = "AssetAnimationTransportBar";
+		stage = %this.animationStage;
+		HorizSizing = "center";
+		VertSizing = "top";
+		Position = "0" SPC %barTop;
+		Extent = "160" SPC $AssetAnimationTransportBar::buttonSize;
+		IsVertical = false;
+		ChildSpacing = $AssetAnimationTransportBar::spacing;
+		IsExtentDynamic = true;
+	};
+	%this.transportBarContainer.add(%this.transportBar);
+
+	%this.background.add(%this.transportBarContainer);
+}
+
 // Something about the selected asset changed and the preview has to catch up.
 //
 // The old answer was to re-click the tile, which rebuilds the preview scene from
@@ -323,6 +369,10 @@ function AssetAdmin::destroy(%this)
 	if(isObject(%this.animationStage))
 	{
 		%this.animationStage.delete();
+	}
+	if(isObject(%this.frameRange))
+	{
+		%this.frameRange.delete();
 	}
 }
 

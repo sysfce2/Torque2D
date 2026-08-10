@@ -126,6 +126,9 @@ function AssetAnimationStage::select(%this, %imageAsset, %animationAsset, %asset
 	%this.palettePane.load(%this.imageAssetId);
 	%this.timelinePane.load(%this.imageAssetId, trim(%animationAsset.getAnimationFrames()));
 
+	%this.admin.transportBarContainer.setVisible(true);
+	%this.admin.transportBar.refresh();
+
 	// Adopt the sprite the preview has already made. displayAnimationAsset builds
 	// it and announces it BEFORE this runs -- the tile displays first and selects
 	// second -- so on a first selection that announcement arrives while there is
@@ -217,6 +220,7 @@ function AssetAnimationStage::teardown(%this)
 
 	%this.busy = true;
 	%this.rememberSizes();
+	%this.admin.transportBarContainer.setVisible(false);
 
 	// Deleting each pane collapses the frame that held it and hoists its twin's
 	// subtree, so two deletes take the tree back to one frame holding the preview
@@ -498,6 +502,11 @@ function AssetAnimationStage::commitFrames(%this, %frames)
 		return;
 	}
 
+	// How many frames there were, asked of the ASSET rather than of the strip:
+	// the strip already holds the edited list by the time it reports, so it can
+	// no longer say what the animation used to be.
+	%before = %this.animationAsset.getAnimationFrameCount();
+
 	// Where the preview is, captured BEFORE the write, because the engine
 	// restarts playback in the middle of it: AssetManager::refreshAsset notifies
 	// every AssetPtr pointing at the asset -- which for a sprite means
@@ -514,6 +523,56 @@ function AssetAnimationStage::commitFrames(%this, %frames)
 	%this.committing = false;
 
 	%this.resumeSlot = -1;
+
+	%this.keepFrameRate(%before);
+}
+
+// Hold the per-frame rate steady across an edit, when the user has asked for it.
+//
+// Uniform timing means AnimationTime is shared out over however many frames there
+// are, so adding one makes every frame play faster and the animation no longer
+// lasts as long. Which of those two a person wants is genuinely a matter of what
+// they are doing -- lengthening a walk cycle, or dropping in a hold without
+// speeding everything up -- so it is a switch, off by default, and the info line
+// in the inspector always shows both numbers either way.
+function AssetAnimationStage::keepFrameRate(%this, %beforeCount)
+{
+	%afterCount = %this.timelinePane.strip.getCellCount();
+
+	if(%beforeCount < 1 || %afterCount == %beforeCount)
+	{
+		return;
+	}
+
+	if(!EditorPreferences.get("assetAnimationKeepFrameRate", false))
+	{
+		return;
+	}
+
+	%time = %this.animationAsset.getAnimationTime() * (%afterCount / %beforeCount);
+
+	// Clamped by hand rather than with mClamp, which rounds to a whole number and
+	// would turn every animation shorter than a second into no time at all. The
+	// floor matters: a time of zero divides by zero in ImageFrameProviderCore, so
+	// nothing may ever write one.
+	if(%time < 0.01) { %time = 0.01; }
+	if(%time > 3600) { %time = 3600; }
+
+	%this.committing = true;
+	%this.animationAsset.setAnimationTime(%time);
+	%this.committing = false;
+}
+
+function AssetAnimationStage::setCycle(%this, %on)
+{
+	if(!isObject(%this.animationAsset))
+	{
+		return;
+	}
+
+	// Writes the file, like every other asset edit. The write comes back through
+	// absorbRefresh, which re-arms the preview; there is nothing else to do.
+	%this.animationAsset.setAnimationCycle(%on);
 }
 
 function AssetAnimationStage::appendFrame(%this, %frame)
@@ -524,4 +583,48 @@ function AssetAnimationStage::appendFrame(%this, %frame)
 	}
 
 	%this.timelinePane.appendFrame(%frame);
+}
+
+function AssetAnimationStage::setFrames(%this, %frames)
+{
+	if(!%this.built)
+	{
+		return;
+	}
+
+	%this.timelinePane.setFrames(%frames);
+}
+
+function AssetAnimationStage::appendFrames(%this, %frames)
+{
+	if(!%this.built)
+	{
+		return;
+	}
+
+	%this.timelinePane.appendFrames(%frames);
+}
+
+function AssetAnimationStage::openRangeDialog(%this)
+{
+	if(!%this.built)
+	{
+		return;
+	}
+
+	%width = 460;
+	%height = 260;
+
+	%dialog = new GuiControl()
+	{
+		class = "AssetAnimationRangeDialog";
+		superclass = "EditorDialog";
+		dialogSize = (%width + 8) SPC (%height + 8);
+		dialogCanClose = true;
+		dialogText = "Frame Range";
+		stage = %this;
+	};
+	%dialog.init(%width, %height);
+
+	Canvas.pushDialog(%dialog);
 }
