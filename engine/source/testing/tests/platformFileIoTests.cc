@@ -145,6 +145,13 @@ static void unitTestCopyPath( char* buffer, U32 bufferSize, const char* relative
 
 static bool unitTestWriteFile( const char* path, const char* contents )
 {
+    // Every one of these writes into a folder that does not exist yet -- the
+    // scratch root is deleted at the top of the test, and pathCopy making its
+    // destination is part of what is being tested. File::open(Write) does not
+    // make one, it just fails, so the very first write failed and took the whole
+    // case with it.
+    Platform::createPath( path );
+
     File file;
     if ( file.open( path, File::Write ) != File::Ok )
         return false;
