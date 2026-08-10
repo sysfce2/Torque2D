@@ -41,6 +41,20 @@ void renderSizableBorderedTexture(RectI &bounds, TextureHandle &texture, RectI &
 void renderFixedBitmapBordersFilled(RectI &bounds, S32 baseMultiplier, GuiControlProfile *profile);
 void renderStretchedBitmap(RectI &bounds, U8 frame, GuiControlProfile *profile);
 void renderStretchedImageAsset(RectI &bounds, U8 frame, GuiControlProfile *profile);
+
+/// One frame of a sheet, stretched to fill bounds, drawn with whatever bitmap
+/// modulation is current.
+///
+/// The plain counterpart to renderStretchedImageAsset just above, and the
+/// differences are the whole reason it exists. That one reads the sheet off a
+/// PROFILE, so it can only ever draw the sheet a control is wearing; this one is
+/// handed the asset, so a control can draw frames of something it merely holds.
+/// That one's first act is dglClearBitmapModulation, which throws away a tint
+/// already set for a row's state; this one leaves the modulation alone, so a
+/// white mask inherits whatever ink the caller established. And that one takes
+/// the frame as a U8, which quietly cannot reach past frame 255 of a sheet that
+/// may have a thousand.
+void renderImageAssetFrame(const RectI &bounds, ImageAsset *imageAsset, U32 frame);
 void renderColorBullet(RectI &bounds, ColorI &color, S32 maxSize, bool useCircle = false);
 void renderTriangleIcon(RectI &bounds, ColorI &color, GuiDirection pointsToward, S32 maxSize);
 

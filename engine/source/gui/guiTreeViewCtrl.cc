@@ -115,19 +115,6 @@ void GuiTreeViewCtrl::setIconImageAsset(const char* pImageAssetID)
 	}
 }
 
-void GuiTreeViewCtrl::drawIconFrame(const RectI& dst, ImageAsset* sheet, U32 frame)
-{
-	if (sheet == NULL || !sheet->isAssetValid() || frame >= sheet->getFrameCount())
-	{
-		return;
-	}
-
-	const ImageAsset::FrameArea::PixelArea& pixelArea = sheet->getImageFrameArea(frame).mPixelArea;
-	RectI srcRect(pixelArea.mPixelOffset, Point2I(pixelArea.mPixelWidth, pixelArea.mPixelHeight));
-
-	dglDrawBitmapStretchSR(sheet->getImageTexture(), dst, srcRect);
-}
-
 void GuiTreeViewCtrl::renderItemIcon(RectI& contentRect, TreeItem* treeItem, GuiControlState currentState)
 {
 	if (!treeItem || treeItem->iconFrame < 0 || mIconImageAsset.isNull())
@@ -143,7 +130,7 @@ void GuiTreeViewCtrl::renderItemIcon(RectI& contentRect, TreeItem* treeItem, Gui
 	}
 
 	// The modulation is still the row's font color, set before any of this drew.
-	drawIconFrame(dst, mIconImageAsset, (U32)treeItem->iconFrame);
+	renderImageAssetFrame(dst, mIconImageAsset, (U32)treeItem->iconFrame);
 
 	contentRect.point.x += advance;
 	contentRect.extent.x -= advance;
