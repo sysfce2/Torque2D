@@ -170,6 +170,45 @@ function AssetAdmin::buildInspector(%this)
 
 function AssetAdmin::buildAssetWindow(%this)
 {
+	// Two layers between the frame and the preview, and each earns its place.
+	//
+	// previewFrames is a frame set so the preview can be split three ways for an
+	// animation -- the art, the frames available, and the timeline -- with
+	// dividers the user can drag. Unsplit it is a pass-through: GuiFrameSetCtrl
+	// resizes its one frame to its own extent with no insets, so every other
+	// asset type sees exactly what it saw before. Splitting it later never
+	// reparents anything either, because splitFrame only rewrites which frame
+	// holds a control, and removing one collapses the frame and hoists its twin.
+	//
+	// previewHost looks like a pointless wrapper and is not. GuiWindowCtrl finds
+	// its dock target as a cast of its parent's FIRST child to GuiFrameSetCtrl.
+	// Today that child is the background sprite, the cast fails, and docking is
+	// quietly off in the Asset Manager. Put the frame set there instead and
+	// docking switches itself on, aimed at the animation split -- so the Asset
+	// Inspector window would offer to dock into frames the stage later deletes
+	// out from under it. One plain control in between keeps that answer "no".
+	%this.previewHost = new GuiControl()
+	{
+		HorizSizing = "right";
+		VertSizing = "bottom";
+		Position = "0 0";
+		Extent = "100 100";
+	};
+	ThemeManager.setProfile(%this.previewHost, "emptyProfile");
+	%this.content.add(%this.previewHost);
+
+	%this.previewFrames = new GuiFrameSetCtrl()
+	{
+		HorizSizing = "width";
+		VertSizing = "height";
+		Position = "0 0";
+		Extent = "100 100";
+		DividerThickness = 6;
+	};
+	ThemeManager.setProfile(%this.previewFrames, "frameSetProfile");
+	ThemeManager.setProfile(%this.previewFrames, "dropButtonProfile", "dropButtonProfile");
+	%this.previewHost.add(%this.previewFrames);
+
 	%this.background = new GuiSpriteCtrl() {
 		HorizSizing = "right";
         VertSizing = "bottom";
@@ -185,7 +224,7 @@ function AssetAdmin::buildAssetWindow(%this)
 		constrainProportions = "1";
 	};
     ThemeManager.setProfile(%this.background, "emptyProfile");
-    %this.content.add(%this.background);
+    %this.previewFrames.add(%this.background);
 
 	%this.assetScene = new Scene();
 	%this.assetScene.setScenePause(true);
