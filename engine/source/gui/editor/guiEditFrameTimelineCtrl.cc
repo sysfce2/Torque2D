@@ -40,31 +40,24 @@ GuiEditFrameTimelineCtrl::GuiEditFrameTimelineCtrl()
 	mDragFrom = -1;
 	mPressAt.set(0, 0);
 	mDragOutside = false;
-
-	// Spelled out because ColorI's constructor leaves its components
-	// uninitialised.
-	mSelectColor.set(120, 190, 255, 255);
-	mPlayheadColor.set(255, 210, 90, 255);
-	mCaretColor.set(255, 255, 255, 230);
-	mHoldColor.set(255, 255, 255, 60);
-	mRemoveColor.set(255, 90, 90, 110);
 }
 
-void GuiEditFrameTimelineCtrl::initPersistFields()
-{
-	Parent::initPersistFields();
-
-	addField("SelectColor", TypeColorI, Offset(mSelectColor, GuiEditFrameTimelineCtrl),
-		"The outline around the picked slot.");
-	addField("PlayheadColor", TypeColorI, Offset(mPlayheadColor, GuiEditFrameTimelineCtrl),
-		"The bar over the slot the preview is showing.");
-	addField("CaretColor", TypeColorI, Offset(mCaretColor, GuiEditFrameTimelineCtrl),
-		"The insertion mark shown while a frame is being dragged in.");
-	addField("HoldColor", TypeColorI, Offset(mHoldColor, GuiEditFrameTimelineCtrl),
-		"The join drawn between repeats of one frame, which is how a hold reads.");
-	addField("RemoveColor", TypeColorI, Offset(mRemoveColor, GuiEditFrameTimelineCtrl),
-		"The wash over a slot that would be removed if the drag were released here.");
-}
+//-----------------------------------------------------------------------------
+// Every color here comes off the profile, so the timeline follows the editor's
+// theme like everything else. A profile offers four fills and four font colors,
+// and this is what each is used for:
+//
+//   fill    HighlightState   the cell under the pointer
+//   fill    SelectedState    the picked cell, and the run joining a held frame
+//   fill    DisabledState    a cell that dragging further would throw away
+//   font    SelectedState    the playhead bar -- an ink rather than a fill, so
+//                            it stays legible against the selected cell it is
+//                            frequently sitting on top of
+//   font    HighlightState   the insertion caret
+//
+// The strip wears listBoxProfile, which has all of them set for exactly this
+// kind of use.
+//-----------------------------------------------------------------------------
 
 //-----------------------------------------------------------------------------
 // The two statics this class adds. Both take everything they use, so the caret
@@ -389,30 +382,38 @@ void GuiEditFrameTimelineCtrl::onPreRender()
 
 //-----------------------------------------------------------------------------
 
+bool GuiEditFrameTimelineCtrl::getCellBackColor(S32 index, bool isHovered, ColorI& color)
+{
+	// The slot being carried shows where it would end up: greyed while it is
+	// still over the strip, and in the disabled fill once dragging further would
+	// throw it away.
+	if (mDragging && index == mDragFrom)
+	{
+		color = mProfile->getFillColor(mDragOutside ? DisabledState : HighlightState);
+		return true;
+	}
+
+	if (index == mSelected)
+	{
+		color = mProfile->getFillColor(SelectedState);
+		return true;
+	}
+
+	return Parent::getCellBackColor(index, isHovered, color);
+}
+
 void GuiEditFrameTimelineCtrl::renderCell(S32 index, const RectI& cellRect, bool isHovered)
 {
 	Parent::renderCell(index, cellRect, isHovered);
 
-	// The slot being carried draws faded in the place it came from, so the list
-	// still reads as continuous while it is being rearranged.
-	if (mDragging && index == mDragFrom)
-	{
-		dglDrawRectFill(cellRect, mDragOutside ? mRemoveColor : mHoldColor);
-	}
-
-	// Selected and playing are drawn differently on purpose -- an outline and a
+	// Selected and playing are drawn differently on purpose -- a background and a
 	// bar -- because they are frequently the same cell and the user needs to see
 	// both. Scrubbing sets one and reads the other.
-	if (index == mSelected)
-	{
-		dglDrawRect(cellRect, mSelectColor);
-	}
-
 	if (index == mPlayhead)
 	{
 		RectI marker = cellRect;
 		marker.extent.y = 3;
-		dglDrawRectFill(marker, mPlayheadColor);
+		dglDrawRectFill(marker, mProfile->getFontColor(SelectedState));
 	}
 }
 
@@ -442,7 +443,7 @@ void GuiEditFrameTimelineCtrl::renderOverlay(const RectI& contentRect)
 
 		RectI join(left, contentRect.point.y + previous.point.y + (previous.extent.y / 3),
 		           right - left, getMax(1, previous.extent.y / 3));
-		dglDrawRectFill(join, mHoldColor);
+		dglDrawRectFill(join, mProfile->getFillColor(SelectedState));
 	}
 
 	if (mCaret < 0)
@@ -452,7 +453,7 @@ void GuiEditFrameTimelineCtrl::renderOverlay(const RectI& contentRect)
 
 	RectI caret = getCaretRect(mCaret, mSlots.size(), mCellSize, mCellPad, mCellSize);
 	caret.point += contentRect.point;
-	dglDrawRectFill(caret, mCaretColor);
+	dglDrawRectFill(caret, mProfile->getFontColor(HighlightState));
 }
 
 //-----------------------------------------------------------------------------

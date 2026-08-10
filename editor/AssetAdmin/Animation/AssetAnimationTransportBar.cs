@@ -30,21 +30,43 @@
 // takes no room from the art.
 //
 // Not built from EditorButtonBar: that makes EditorIconButtons, which are
-// momentary. Three of these five have to SHOW a state, which is what
-// EditorToggleIcon exists for, so the row is assembled by hand.
+// momentary, and two of these have to SHOW a state.
+//
+// Play and Stop are two buttons with one hidden rather than one toggle, and the
+// difference is not cosmetic. A toggle says "this setting is on"; these two say
+// "here is what will happen if you press me", which is a different promise and
+// the one a transport makes. It also means the button cannot get stuck showing
+// Stop after something else halted the preview -- there is no state to fall out
+// of step, only whichever button is currently on show.
+//
+// Order reads left to right as rewind, then the big play, then a gap, then the
+// three that are settings rather than actions.
 //-----------------------------------------------------------------------------
 
 $AssetAnimationTransportBar::buttonSize = 24;
+$AssetAnimationTransportBar::playSize = 36;
+$AssetAnimationTransportBar::iconSize = 20;
 $AssetAnimationTransportBar::spacing = 4;
+$AssetAnimationTransportBar::gap = 16;
 
 function AssetAnimationTransportBar::onAdd(%this)
 {
 	ThemeManager.setProfile(%this, "emptyProfile");
 
-	%this.playButton = %this.addToggle("Play", $EditorIcon::playback_stop, $EditorIcon::playback_play,
-		"Stop the preview", "Play the preview");
+	%this.addButton("rewind", $EditorIcon::playback_rew, "Back to the first frame",
+		$AssetAnimationTransportBar::buttonSize);
 
-	%this.addButton("rewind", $EditorIcon::playback_rew, "Back to the first frame");
+	// The one you reach for, so it is half again the size of the rest. They sit
+	// in the same place, and exactly one of them is ever visible.
+	%this.playButton = %this.addButton("play", $EditorIcon::playback_play, "Play the preview",
+		$AssetAnimationTransportBar::playSize);
+	%this.stopButton = %this.addButton("stop", $EditorIcon::playback_stop, "Stop the preview",
+		$AssetAnimationTransportBar::playSize);
+	%this.stopButton.setVisible(false);
+
+	// A chain lays out what it can see, so an empty control is how a gap is
+	// spelled -- there is no spacing-before on a child.
+	%this.addSpacer($AssetAnimationTransportBar::gap);
 
 	%this.loopButton = %this.addToggle("Loop", $EditorIcon::playback_reload, $EditorIcon::playback_reload,
 		"Looping. Click to play once and stop on the last frame.",
@@ -54,7 +76,8 @@ function AssetAnimationTransportBar::onAdd(%this)
 		"Keeping the frame rate: adding or removing frames rewrites the animation's time to match.",
 		"Keeping the animation's time: adding a frame makes every frame play faster.");
 
-	%this.addButton("openRangeDialog", $EditorIcon::list_num, "Fill the timeline from a range of frames");
+	%this.addButton("openRangeDialog", $EditorIcon::list_num, "Fill the timeline from a range of frames",
+		$AssetAnimationTransportBar::buttonSize);
 }
 
 function AssetAnimationTransportBar::addToggle(%this, %name, %frameOn, %frameOff, %tipOn, %tipOff)
@@ -66,6 +89,12 @@ function AssetAnimationTransportBar::addToggle(%this, %name, %frameOn, %frameOff
 		class = "EditorToggleIcon";
 		Position = "0 0";
 		Extent = %size SPC %size;
+
+		// Matching EditorIconButton, which draws its picture at 20 in the same
+		// 24 pixel button. At the toggle's own default of 16 the row read as two
+		// sizes of button rather than one.
+		iconSize = $AssetAnimationTransportBar::iconSize;
+
 		frameOn = %frameOn;
 		frameOff = %frameOff;
 		tipOn = %tipOn;
@@ -80,15 +109,12 @@ function AssetAnimationTransportBar::addToggle(%this, %name, %frameOn, %frameOff
 	return %button;
 }
 
-function AssetAnimationTransportBar::addButton(%this, %method, %frame, %tooltip)
+function AssetAnimationTransportBar::addButton(%this, %method, %frame, %tooltip, %size)
 {
-	%size = $AssetAnimationTransportBar::buttonSize;
-
 	%button = new GuiButtonCtrl()
 	{
 		class = "EditorIconButton";
 		Position = "0 0";
-		Extent = %size SPC %size;
 		Frame = %frame;
 		Command = %this.getId() @ "." @ %method @ "();";
 		Tooltip = %tooltip;
@@ -97,7 +123,30 @@ function AssetAnimationTransportBar::addButton(%this, %method, %frame, %tooltip)
 	ThemeManager.setProfile(%button, "tipProfile", "TooltipProfile");
 	%this.add(%button);
 
+	// After the add, because EditorIconButton::onAdd sets its own 24 x 24 and
+	// would undo anything the new{} block said. The icon inside it is sized
+	// against the button, so both grow together.
+	if(%size !$= "" && %size != $AssetAnimationTransportBar::buttonSize)
+	{
+		%button.setExtent(%size, %size);
+		%button.icon.setExtent(%size - 4, %size - 4);
+	}
+
 	return %button;
+}
+
+function AssetAnimationTransportBar::addSpacer(%this, %width)
+{
+	%spacer = new GuiControl()
+	{
+		Position = "0 0";
+		Extent = %width SPC $AssetAnimationTransportBar::buttonSize;
+		UseInput = false;
+	};
+	ThemeManager.setProfile(%spacer, "emptyProfile");
+	%this.add(%spacer);
+
+	return %spacer;
 }
 
 //-----------------------------------------------------------------------------
@@ -108,10 +157,6 @@ function AssetAnimationTransportBar::onToggleIconChanged(%this, %button)
 {
 	switch$(%button.toggleName)
 	{
-		case "Play":
-			if(%button.getValue()) { %this.stage.play(); }
-			else                   { %this.stage.stop(); }
-
 		case "Loop":
 			%this.stage.setCycle(%button.getValue());
 
@@ -121,6 +166,16 @@ function AssetAnimationTransportBar::onToggleIconChanged(%this, %button)
 			// wants it next time too.
 			EditorPreferences.set("assetAnimationKeepFrameRate", %button.getValue());
 	}
+}
+
+function AssetAnimationTransportBar::play(%this)
+{
+	%this.stage.play();
+}
+
+function AssetAnimationTransportBar::stop(%this)
+{
+	%this.stage.stop();
 }
 
 function AssetAnimationTransportBar::rewind(%this)
@@ -139,14 +194,27 @@ function AssetAnimationTransportBar::openRangeDialog(%this)
 // Reading the state back out. Called whenever something else may have moved it.
 //-----------------------------------------------------------------------------
 
+// Called from every path that can change the playing state, and there are more
+// of them than the two buttons: clicking a slot stops to scrub, dragging a frame
+// out stops, and a one-shot animation stops itself by reaching the end. Each of
+// those used to leave a Stop button on show over a preview that had stopped.
 function AssetAnimationTransportBar::refresh(%this)
 {
+	%playing = %this.stage.playing;
+	%this.playButton.setVisible(!%playing);
+	%this.stopButton.setVisible(%playing);
+
+	// A chain lays out only the children it can see, and nothing re-lays it out
+	// when one is hidden -- so swapping the two is a resize away from leaving a
+	// hole where the other one was.
+	%this.resize(getWord(%this.getPosition(), 0), getWord(%this.getPosition(), 1),
+		getWord(%this.getExtent(), 0), getWord(%this.getExtent(), 1));
+
 	if(!isObject(%this.stage.animationAsset))
 	{
 		return;
 	}
 
-	%this.playButton.setValue(%this.stage.playing);
 	%this.loopButton.setValue(%this.stage.animationAsset.getAnimationCycle());
 	%this.rateButton.setValue(EditorPreferences.get("assetAnimationKeepFrameRate", false));
 }

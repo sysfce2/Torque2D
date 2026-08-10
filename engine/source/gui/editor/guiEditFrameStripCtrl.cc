@@ -36,10 +36,6 @@ GuiEditFrameStripCtrl::GuiEditFrameStripCtrl()
 	mCellSize = smDefaultCellSize;
 	mCellPad = smDefaultCellPad;
 	mShowFrameNumbers = true;
-	// Spelled out because ColorI's constructor leaves its components
-	// uninitialised, so a field nobody sets is whatever was on the stack.
-	mNumberColor.set(255, 255, 255, 160);
-	mHoverColor.set(255, 255, 255, 90);
 	mHoverCell = -1;
 	mActive = true;
 }
@@ -152,10 +148,6 @@ void GuiEditFrameStripCtrl::initPersistFields()
 		"The gap between two cells.");
 	addField("ShowFrameNumbers", TypeBool, Offset(mShowFrameNumbers, GuiEditFrameStripCtrl),
 		"Whether each cell is labelled with the image frame it is showing.");
-	addField("NumberColor", TypeColorI, Offset(mNumberColor, GuiEditFrameStripCtrl),
-		"The ink those labels are drawn in.");
-	addField("HoverColor", TypeColorI, Offset(mHoverColor, GuiEditFrameStripCtrl),
-		"The wash over the cell under the pointer.");
 }
 
 //-----------------------------------------------------------------------------
@@ -331,20 +323,34 @@ void GuiEditFrameStripCtrl::onRender(Point2I offset, const RectI& updateRect)
 	renderChildControls(offset, contentRect, updateRect);
 }
 
+bool GuiEditFrameStripCtrl::getCellBackColor(S32 index, bool isHovered, ColorI& color)
+{
+	if (!isHovered)
+	{
+		return false;
+	}
+
+	color = mProfile->getFillColor(HighlightState);
+	return true;
+}
+
 void GuiEditFrameStripCtrl::renderCell(S32 index, const RectI& cellRect, bool isHovered)
 {
 	const S32 frame = getFrameAt(index);
+
+	// The background first, so an opaque theme color sits behind the art rather
+	// than over it.
+	ColorI backColor;
+	if (getCellBackColor(index, isHovered, backColor))
+	{
+		dglDrawRectFill(cellRect, backColor);
+	}
 
 	// White is untinted. Set every cell rather than once for the loop, because a
 	// subclass drawing its own chrome between cells will have changed it.
 	dglSetBitmapModulation(ColorF(1.0f, 1.0f, 1.0f, 1.0f));
 	renderImageAssetFrame(cellRect, mImageAsset, (U32)frame);
 	dglClearBitmapModulation();
-
-	if (isHovered)
-	{
-		dglDrawRectFill(cellRect, mHoverColor);
-	}
 
 	if (!mShowFrameNumbers)
 	{
@@ -373,7 +379,7 @@ void GuiEditFrameStripCtrl::renderCell(S32 index, const RectI& cellRect, bool is
 	const Point2I textPoint(cellRect.point.x + ((cellRect.extent.x - textWidth) / 2),
 	                        (cellRect.point.y + cellRect.extent.y) - textHeight);
 
-	dglSetBitmapModulation(mNumberColor);
+	dglSetBitmapModulation(mProfile->getFontColor(isHovered ? HighlightState : NormalState));
 	dglDrawText(font, textPoint, (const UTF8*)buffer);
 	dglClearBitmapModulation();
 }
@@ -433,40 +439,11 @@ void GuiEditFrameStripCtrl::onTouchLeave(const GuiEvent& event)
 	Parent::onTouchLeave(event);
 }
 
-void GuiEditFrameStripCtrl::onMouseWheelUp(const GuiEvent& event)
-{
-	// A magnifier over the art, which is what a wheel over a grid of pictures
-	// should do. The scroller only gets the wheel when this declines it, which is
-	// why the step reports back: at either end there is nothing to zoom and the
-	// gesture should go back to scrolling.
-	const S32 before = mCellSize;
-	setCellSize(mCellSize + 8);
-
-	if (mCellSize == before)
-	{
-		Parent::onMouseWheelUp(event);
-		return;
-	}
-
-	if (isMethod("onCellSizeChanged"))
-	{
-		Con::executef(this, 2, "onCellSizeChanged", Con::getIntArg(mCellSize));
-	}
-}
-
-void GuiEditFrameStripCtrl::onMouseWheelDown(const GuiEvent& event)
-{
-	const S32 before = mCellSize;
-	setCellSize(mCellSize - 8);
-
-	if (mCellSize == before)
-	{
-		Parent::onMouseWheelDown(event);
-		return;
-	}
-
-	if (isMethod("onCellSizeChanged"))
-	{
-		Con::executef(this, 2, "onCellSizeChanged", Con::getIntArg(mCellSize));
-	}
-}
+// Deliberately no mouse wheel handler.
+//
+// It used to zoom the cells, and that was wrong twice over: a wheel over a
+// scrolling list of pictures means scroll, and taking the event meant the wheel
+// never reached the scroller -- so shrinking the cells until they all fitted was
+// the only way to reach the frames at the bottom. Left unhandled, the event
+// bubbles to the scroller and does what everyone expects. Cell size is still a
+// field a pane can set.

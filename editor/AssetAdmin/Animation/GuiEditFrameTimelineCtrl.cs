@@ -51,8 +51,3 @@ function GuiEditFrameTimelineCtrl::onSlotSelected(%this, %slot, %frame)
 
 	%this.pane.stage.onSlotSelected(%slot, %frame);
 }
-
-function GuiEditFrameTimelineCtrl::onCellSizeChanged(%this, %cellSize)
-{
-	EditorPreferences.set("assetAnimationTimelineCellSize", %cellSize);
-}

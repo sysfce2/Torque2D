@@ -75,15 +75,10 @@ protected:
 	Point2I mPressAt;
 	bool mDragOutside;          ///< The pointer has left, so releasing removes rather than moves.
 
-	ColorI mSelectColor;
-	ColorI mPlayheadColor;
-	ColorI mCaretColor;
-	ColorI mHoldColor;
-	ColorI mRemoveColor;
-
 	/// What the preview is showing, or -1 when there is nothing to ask.
 	S32 readPlayhead();
 
+	bool getCellBackColor(S32 index, bool isHovered, ColorI& color);
 	void renderCell(S32 index, const RectI& cellRect, bool isHovered);
 	void renderOverlay(const RectI& contentRect);
 
@@ -118,7 +113,6 @@ public:
 	static RectI getCaretRect(S32 insertIndex, S32 cellCount, S32 cellSize, S32 cellPad, S32 height);
 
 	GuiEditFrameTimelineCtrl();
-	static void initPersistFields();
 
 	S32 getCellCount() const { return mSlots.size(); }
 	S32 getFrameAt(S32 index) const;

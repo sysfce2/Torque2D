@@ -42,7 +42,11 @@ function AssetAnimationPalettePane::onAdd(%this)
 		Extent = "100" SPC $AssetAnimationPalettePane::captionHeight;
 		Text = "Frames";
 	};
-	ThemeManager.setProfile(%this.caption, "labelProfile");
+	// panelProfile, which is what the Asset Inspector's own title bar wears: its
+	// font is the theme's color5, legible on the panel fill behind it. labelProfile
+	// is meant for a caption on the window background and comes out near-black on
+	// dark blue under Lab Coat.
+	ThemeManager.setProfile(%this.caption, "panelProfile");
 	%this.add(%this.caption);
 
 	// "height", not "fill": fill means "be the whole of the parent", which here
@@ -55,7 +59,12 @@ function AssetAnimationPalettePane::onAdd(%this)
 		Position = "0" SPC $AssetAnimationPalettePane::captionHeight;
 		Extent = "100 80";
 		hScrollBar = "alwaysOff";
-		vScrollBar = "dynamic";
+
+		// Always on, not dynamic. A sheet worth opening the palette for has more
+		// frames than fit, so the bar is all but permanent anyway -- and a
+		// dynamic bar has to be decided from the strip's height, which the strip
+		// works out during the very layout pass that would have to notice it.
+		vScrollBar = "alwaysOn";
 		constantThumbHeight = false;
 		scrollBarThickness = 14;
 		showArrowButtons = false;

@@ -44,7 +44,9 @@ function AssetAnimationTimelinePane::onAdd(%this)
 		Extent = "100" SPC $AssetAnimationTimelinePane::captionHeight;
 		Text = "Timeline";
 	};
-	ThemeManager.setProfile(%this.caption, "labelProfile");
+	// panelProfile for its color5 font, as the palette's caption is and the Asset
+	// Inspector's title bar is. See the note there.
+	ThemeManager.setProfile(%this.caption, "panelProfile");
 	%this.add(%this.caption);
 
 	// "height", not "fill": fill would put the scroller over the caption.

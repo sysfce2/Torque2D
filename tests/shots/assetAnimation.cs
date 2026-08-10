@@ -88,6 +88,13 @@ function aaOpeningShot()
 function aaHoldShot()
 {
 	$aaStage.timelinePane.setFrames("55 56 56 56 57 58 59");
+
+	// A picked slot and a playhead somewhere else, so the shot shows both at once
+	// -- they are frequently the same cell and have to stay tellable apart.
+	$aaStage.stop();
+	$aaStage.scrubTo(5);
+	$aaStage.timelinePane.strip.setSelectedSlot(1);
+
 	schedule(500, 0, "aaGrabHold");
 }
 

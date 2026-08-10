@@ -133,12 +133,3 @@ function GuiEditFramePaletteCtrl::makePayload(%this, %frame)
 	return %payload;
 }
 
-//-----------------------------------------------------------------------------
-// Wheel zoom. Remembered, because a person who wants big thumbnails wants them
-// every time they open the editor, not once.
-//-----------------------------------------------------------------------------
-
-function GuiEditFramePaletteCtrl::onCellSizeChanged(%this, %cellSize)
-{
-	EditorPreferences.set("assetAnimationPaletteCellSize", %cellSize);
-}

@@ -79,8 +79,6 @@ protected:
 	S32 mCellSize;              ///< The square one frame draws in.
 	S32 mCellPad;               ///< The gap between two cells, and nothing else.
 	bool mShowFrameNumbers;     ///< Whether each cell is labelled with the image frame it shows.
-	ColorI mNumberColor;
-	ColorI mHoverColor;
 	S32 mHoverCell;             ///< -1 when the pointer is off the cells or outside.
 
 	/// Lay the control out to fit its cells and tell the scroller.
@@ -110,8 +108,15 @@ protected:
 	/// under the pointer or make a click land one cell over.
 	RectI getContentRect(const Point2I& offset);
 
-	/// One cell. The base draws the frame and, if asked, its number; a subclass
-	/// overrides to put a selection or a playhead on top of that.
+	/// What to paint behind a cell's art, if anything.
+	///
+	/// Behind rather than over, which matters: a theme's fill colors are opaque,
+	/// so a hover drawn on top of the frame would hide the very thing the pointer
+	/// is hovering over. Returns false to leave the cell's background alone.
+	virtual bool getCellBackColor(S32 index, bool isHovered, ColorI& color);
+
+	/// One cell: the background, the frame, and its number. A subclass overrides
+	/// to put a selection or a playhead on top of that.
 	virtual void renderCell(S32 index, const RectI& cellRect, bool isHovered);
 
 	/// Anything drawn over the whole grid rather than per cell -- an insertion
@@ -168,8 +173,6 @@ public:
 
 	void onTouchMove(const GuiEvent& event);
 	void onTouchLeave(const GuiEvent& event);
-	void onMouseWheelUp(const GuiEvent& event);
-	void onMouseWheelDown(const GuiEvent& event);
 
 	/// How many cells there are. The palette derives it from the image, the
 	/// timeline from its own list; the base has none, so it draws nothing.

@@ -374,6 +374,22 @@ function AssetAnimationStage::stop(%this)
 
 	%this.playing = false;
 	%this.previewSprite.pauseAnimation(true);
+	%this.refreshTransport();
+}
+
+// Every path that changes the playing state ends here, and there are more of
+// them than the two buttons: clicking a slot stops in order to scrub, dragging a
+// frame off the timeline stops, and a one-shot animation stops itself by reaching
+// the end. Each of those left a Stop button showing over a stopped preview until
+// the bar was told.
+function AssetAnimationStage::refreshTransport(%this)
+{
+	if(!%this.built || !isObject(%this.admin.transportBar))
+	{
+		return;
+	}
+
+	%this.admin.transportBar.refresh();
 }
 
 function AssetAnimationStage::play(%this)
@@ -385,14 +401,16 @@ function AssetAnimationStage::play(%this)
 
 	%this.playing = true;
 	%this.previewSprite.pauseAnimation(false);
+	%this.refreshTransport();
 }
 
 // A one-shot animation reached its end on its own. Nothing to do to the preview
-// -- the engine has already parked it on the last frame -- but the editor's idea
-// of "playing" is now wrong, and a transport bar reading from it would be too.
+// -- the engine has already parked it on the last frame -- but the button still
+// says Stop, over something that has already stopped.
 function AssetAnimationStage::onPreviewFinished(%this)
 {
 	%this.playing = false;
+	%this.refreshTransport();
 }
 
 //-----------------------------------------------------------------------------
@@ -456,24 +474,25 @@ function AssetAnimationStage::resyncPreview(%this)
 		return;
 	}
 
-	// The slot the commit put aside, or -- for a change raised from somewhere
-	// other than this editor -- the last one the marker was drawn on.
-	%slot = %this.resumeSlot;
-	if(%slot < 0)
-	{
-		%slot = %this.timelinePane.strip.getPlayheadSlot();
-	}
-
 	%this.armPreview();
 	%this.previewSprite.pauseAnimation(!%this.playing);
 
-	// Restored by SLOT, not by image frame. A slot's meaning shifts when
-	// something is inserted before it, so the preview can appear to skip -- but
-	// tracking the image frame instead breaks the moment a frame appears twice,
-	// which is exactly what a hold is.
-	if(%slot >= 0)
+	// Only when a commit of ours put a slot aside. One write raises more than one
+	// refresh -- the asset manager fans them out as it re-reads the file it just
+	// wrote -- and the later ones arrive with nothing remembered.
+	//
+	// The obvious fallback, asking the strip where its marker was drawn, is a
+	// trap: that marker is a cached value updated once a frame in onPreRender, so
+	// mid-script it is whatever the last rendered frame said. Restoring from it
+	// undid the correct restore the first refresh had just made, which is how the
+	// playhead ended up back at zero after every edit.
+	//
+	// And by SLOT, not by image frame: a slot's meaning shifts when something is
+	// inserted before it, so the preview can appear to skip -- but tracking the
+	// image frame breaks the moment a frame appears twice, which is what a hold is.
+	if(%this.resumeSlot >= 0)
 	{
-		%this.scrubTo(%slot);
+		%this.scrubTo(%this.resumeSlot);
 	}
 }
 
@@ -522,9 +541,14 @@ function AssetAnimationStage::commitFrames(%this, %frames)
 	%this.animationAsset.setAnimationFrames(%frames);
 	%this.committing = false;
 
-	%this.resumeSlot = -1;
-
+	// Before the slot is forgotten, because this writes the asset a second time
+	// and every write restarts playback. Cleared only once BOTH are done, so the
+	// one remembered slot covers the pair -- forgetting it in between left the
+	// second refresh with nothing to restore, and the preview back at frame zero
+	// after every edit.
 	%this.keepFrameRate(%before);
+
+	%this.resumeSlot = -1;
 }
 
 // Hold the per-frame rate steady across an edit, when the user has asked for it.

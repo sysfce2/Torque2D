@@ -58,6 +58,11 @@ function aniStep1()
 
 	aniCheck("fixture asset module registered", aniLoadFixtureAssets());
 
+	// Spelled out rather than inherited. The preferences file lives in shots/ and
+	// survives between runs, so a suite that left this on would change what every
+	// commit below does to the animation's time.
+	EditorPreferences.set("assetAnimationKeepFrameRate", false);
+
 	EditorCore.tabBook.selectPage(2);
 
 	schedule(700, 0, "aniStep2");
@@ -202,7 +207,8 @@ function aniStepPreview2()
 
 	aniCheck("the edit landed", $aniTimeline.getCellCount() == 9);
 	aniCheck("the preview sprite was NOT rebuilt", AssetAdmin.previewSprite == $aniSprite);
-	aniCheck("the playhead did not jump back to the start", $aniSprite.getAnimationFrame() == 5);
+	aniCheck("the playhead did not jump back to the start (" @ $aniSprite.getAnimationFrame() @
+		" of " @ $aniTimeline.getCellCount() @ ")", $aniSprite.getAnimationFrame() == 5);
 	aniCheck("the preview is still paused", !$aniStage.playing);
 
 	// And a refresh raised from somewhere else entirely still reaches the strip.
@@ -290,11 +296,33 @@ function aniStepTransport()
 
 	$aniStage.timelinePane.setFrames("40 41 42 43 44 45");
 
+	// Play and Stop are two buttons with one hidden, not one toggle, so "which is
+	// on show" is the only state there is and it cannot fall out of step.
+	aniCheck("it offers Play while stopped", %bar.playButton.isVisible());
+	aniCheck("and not Stop", !%bar.stopButton.isVisible());
+
 	$aniStage.play();
 	aniCheck("play starts it", $aniStage.playing);
+	aniCheck("and the button becomes Stop", %bar.stopButton.isVisible());
+	aniCheck("with Play hidden", !%bar.playButton.isVisible());
 
 	$aniStage.stop();
 	aniCheck("stop halts it", !$aniStage.playing);
+	aniCheck("and the button goes back to Play", %bar.playButton.isVisible());
+
+	// The button has to follow every path that stops the preview, not just the
+	// one that is a button. Clicking a slot stops in order to scrub, and used to
+	// leave Stop showing over something that had stopped.
+	$aniStage.play();
+	$aniStage.onSlotSelected(2, $aniTimeline.getFrameAt(2));
+	aniCheck("clicking a slot stops the preview", !$aniStage.playing);
+	aniCheck("and the button followed it", %bar.playButton.isVisible());
+
+	// So does a one-shot animation reaching its end on its own.
+	$aniStage.play();
+	$aniStage.onPreviewFinished();
+	aniCheck("an animation finishing stops it", !$aniStage.playing);
+	aniCheck("and the button followed that too", %bar.playButton.isVisible());
 
 	$aniStage.scrubTo(3);
 	aniCheck("scrubbing moves the preview", $aniSprite.getAnimationFrame() == 3);
