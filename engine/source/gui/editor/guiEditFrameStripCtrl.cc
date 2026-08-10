@@ -25,6 +25,8 @@
 #include "gui/guiDefaultControlRender.h"
 #include "console/consoleTypes.h"
 
+#include "guiEditFrameStripCtrl_ScriptBinding.h"
+
 IMPLEMENT_CONOBJECT(GuiEditFrameStripCtrl);
 
 GuiEditFrameStripCtrl::GuiEditFrameStripCtrl()

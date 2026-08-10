@@ -202,7 +202,9 @@ set(TORQUE_ENGINE_SOURCES
     ${TORQUE_SRC}/gui/editor/guiEditorCursorCtrl.cc
     ${TORQUE_SRC}/gui/editor/guiDebugger.cc
     ${TORQUE_SRC}/gui/editor/guiEditCtrl.cc
+    ${TORQUE_SRC}/gui/editor/guiEditFramePaletteCtrl.cc
     ${TORQUE_SRC}/gui/editor/guiEditFrameStripCtrl.cc
+    ${TORQUE_SRC}/gui/editor/guiEditFrameTimelineCtrl.cc
     ${TORQUE_SRC}/gui/editor/guiEditorExplorerTree.cc
     ${TORQUE_SRC}/gui/editor/guiGraphCtrl.cc
     ${TORQUE_SRC}/gui/editor/guiInspector.cc

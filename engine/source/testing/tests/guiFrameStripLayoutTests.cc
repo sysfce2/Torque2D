@@ -31,6 +31,10 @@
 #include "gui/editor/guiEditFrameStripCtrl.h"
 #endif
 
+#ifndef _GUI_EDIT_FRAME_TIMELINE_CTRL_H_
+#include "gui/editor/guiEditFrameTimelineCtrl.h"
+#endif
+
 //-----------------------------------------------------------------------------
 // Where cell N of a frame grid sits, and which cell a point lands on.
 //
@@ -362,6 +366,154 @@ TEST( GuiFrameStripLayoutTests, TheAdvanceIsACellAndItsGap )
         << "The one number the rest of the layout is built from.";
     ASSERT_EQ( GuiEditFrameStripCtrl::getCellAdvance( sCell, 0 ), sCell )
         << "No gap means cells touch.";
+
+    SUCCEED();
+}
+
+//-----------------------------------------------------------------------------
+// insertionAt -- where a dragged frame would land.
+//
+// A different question from cellAt, with a different shape of answer. cellAt
+// asks "which cell is this", and the gaps belong to nobody; this asks "where
+// would it go", and every point has an answer including the gaps, the ends, and
+// an empty timeline. Getting the two confused is how a drop lands one slot off.
+//
+// Cells are 20 with a 4 gap, so with three of them the centres are at 10, 34
+// and 58.
+//-----------------------------------------------------------------------------
+
+TEST( GuiFrameStripLayoutTests, LeftOfEverythingInsertsAtTheStart )
+{
+    ASSERT_EQ( GuiEditFrameTimelineCtrl::insertionAt( Point2I( 0, 5 ), 3, sCell, sPad ), 0 )
+        << "The very first pixel is before the first frame.";
+    ASSERT_EQ( GuiEditFrameTimelineCtrl::insertionAt( Point2I( -20, 5 ), 3, sCell, sPad ), 0 )
+        << "So is anywhere left of the strip, which a drag arriving from the palette is.";
+
+    SUCCEED();
+}
+
+TEST( GuiFrameStripLayoutTests, RightOfEverythingAppends )
+{
+    ASSERT_EQ( GuiEditFrameTimelineCtrl::insertionAt( Point2I( 500, 5 ), 3, sCell, sPad ), 3 )
+        << "Past the last frame is the end of the list, not off it.";
+
+    SUCCEED();
+}
+
+TEST( GuiFrameStripLayoutTests, TheBoundaryIsTheCellCentreNotItsEdge )
+{
+    // This is the whole design of insertionAt. Halfway across a cell is where a
+    // person expects "before this one" to become "after it"; using the cell's
+    // edge instead makes the caret lag the pointer by half a frame.
+    ASSERT_EQ( GuiEditFrameTimelineCtrl::insertionAt( Point2I( 9, 5 ), 3, sCell, sPad ), 0 )
+        << "One pixel left of the first cell's centre is still before it.";
+    ASSERT_EQ( GuiEditFrameTimelineCtrl::insertionAt( Point2I( 10, 5 ), 3, sCell, sPad ), 1 )
+        << "Its centre is where it flips to after.";
+
+    ASSERT_EQ( GuiEditFrameTimelineCtrl::insertionAt( Point2I( 33, 5 ), 3, sCell, sPad ), 1 )
+        << "The same one cell along.";
+    ASSERT_EQ( GuiEditFrameTimelineCtrl::insertionAt( Point2I( 34, 5 ), 3, sCell, sPad ), 2 )
+        << "And it flips at that cell's centre too.";
+
+    SUCCEED();
+}
+
+TEST( GuiFrameStripLayoutTests, TheGapStillHasAnAnswer )
+{
+    // Unlike cellAt, which returns -1 here. A drag hovering over the gap between
+    // two frames is asking the clearest question there is.
+    ASSERT_EQ( GuiEditFrameTimelineCtrl::insertionAt( Point2I( 21, 5 ), 3, sCell, sPad ), 1 )
+        << "Between cell 0 and cell 1 is slot 1, not nothing.";
+
+    SUCCEED();
+}
+
+TEST( GuiFrameStripLayoutTests, AnEmptyTimelineTakesTheFirstFrame )
+{
+    ASSERT_EQ( GuiEditFrameTimelineCtrl::insertionAt( Point2I( 40, 5 ), 0, sCell, sPad ), 0 )
+        << "The first frame dragged into an empty animation goes at slot 0, wherever it was dropped.";
+
+    SUCCEED();
+}
+
+//-----------------------------------------------------------------------------
+// getCaretRect -- and it must agree with insertionAt, because the caret is the
+// promise the drop then has to keep.
+//-----------------------------------------------------------------------------
+
+TEST( GuiFrameStripLayoutTests, TheCaretSitsBetweenTwoCellsAndTouchesNeither )
+{
+    const RectI caret = GuiEditFrameTimelineCtrl::getCaretRect( 1, 3, sCell, sPad, sCell );
+
+    const RectI before = GuiEditFrameStripCtrl::getCellRect( 0, 3, sCell, sPad );
+    const RectI after = GuiEditFrameStripCtrl::getCellRect( 1, 3, sCell, sPad );
+
+    ASSERT_GE( caret.point.x, before.point.x + before.extent.x )
+        << "The caret starts at or after the left neighbour's right edge.";
+    ASSERT_LE( caret.point.x + caret.extent.x, after.point.x )
+        << "And ends at or before the right neighbour's left edge.";
+
+    SUCCEED();
+}
+
+TEST( GuiFrameStripLayoutTests, TheCaretForSlotZeroIsAtTheStart )
+{
+    const RectI caret = GuiEditFrameTimelineCtrl::getCaretRect( 0, 3, sCell, sPad, sCell );
+
+    ASSERT_EQ( caret.point.x, 0 )
+        << "There is no gap before the first cell to sit in, so it goes at the edge.";
+
+    SUCCEED();
+}
+
+TEST( GuiFrameStripLayoutTests, TheAppendCaretStaysInsideTheContent )
+{
+    // There is no trailing gap after the last cell -- getContentExtent leaves
+    // none, deliberately -- so the append caret overlaps that cell's last pixels
+    // rather than sitting past the content, where it would simply be clipped away
+    // and the user would see no caret at all.
+    const S32 count = 3;
+    const Point2I content = GuiEditFrameStripCtrl::getContentExtent( count, count, sCell, sPad );
+    const RectI caret = GuiEditFrameTimelineCtrl::getCaretRect( count, count, sCell, sPad, sCell );
+    const RectI last = GuiEditFrameStripCtrl::getCellRect( count - 1, count, sCell, sPad );
+
+    ASSERT_EQ( caret.point.x + caret.extent.x, content.x )
+        << "The append caret ends exactly at the right edge of the content.";
+    ASSERT_GT( caret.point.x, last.point.x )
+        << "And is at the far end of the last cell, so it reads as after it.";
+
+    SUCCEED();
+}
+
+TEST( GuiFrameStripLayoutTests, TheCaretIsVisibleOnAnEmptyTimeline )
+{
+    // An empty animation has no cells and therefore no content width, and the
+    // caret must still be somewhere drawable -- this is the first thing a user
+    // building an animation from nothing will see.
+    const RectI caret = GuiEditFrameTimelineCtrl::getCaretRect( 0, 0, sCell, sPad, sCell );
+
+    ASSERT_EQ( caret.point.x, 0 ) << "At the start.";
+    ASSERT_GT( caret.extent.x, 0 ) << "With a width.";
+    ASSERT_EQ( caret.extent.y, sCell ) << "And the height it was asked for.";
+
+    SUCCEED();
+}
+
+TEST( GuiFrameStripLayoutTests, EveryInsertionPointHasItsOwnCaret )
+{
+    // Two slots must never share a caret position: if they did, the user could
+    // not tell from the picture which of two places a drop was about to go.
+    const S32 count = 4;
+    S32 previousX = -1;
+
+    for ( S32 i = 0; i <= count; ++i )
+    {
+        const RectI caret = GuiEditFrameTimelineCtrl::getCaretRect( i, count, sCell, sPad, sCell );
+
+        ASSERT_GT( caret.point.x, previousX )
+            << "Each insertion point is strictly right of the one before it.";
+        previousX = caret.point.x;
+    }
 
     SUCCEED();
 }
