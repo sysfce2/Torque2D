@@ -135,11 +135,18 @@ void AnimationAsset::onRemove()
 
 //------------------------------------------------------------------------------
 
-void AnimationAsset::onAssetRefresh( void ) 
+void AnimationAsset::onAssetRefresh( void )
 {
     // Ignore if not yet added to the sim.
     if ( !isProperlyAdded() )
         return;
+
+    // Re-validate the frames.  A refresh reaches us both when we were changed
+    // ourselves and when the image asset we depend on was, and the image may have
+    // been re-cut into a different number of cells.  Without this the validated
+    // list keeps indices from the old cut, and getImageFrameArea() clamps them to
+    // the last frame -- so the animation plays the wrong art and says nothing.
+    validateFrames();
 
     // Call parent.
     Parent::onAssetRefresh();
