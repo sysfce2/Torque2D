@@ -105,18 +105,18 @@ function AssetInspector::onAdd(%this)
 	%this.inspector = %this.createInspector();
 	%this.insScroller.add(%this.inspector);
 
-	// The image asset's own pane, in place of the generic inspector for the one
-	// asset kind that has one so far. It shares the Inspector page with the
-	// inspector rather than taking a tab of its own -- it IS the inspector, for
-	// that kind of asset -- and chooseInspector decides which of the two is on
-	// show. Neither is ever rebuilt or freed.
-	%this.imageScroller = %this.createScroller();
-	%this.imageScroller.setVisible(false);
-	%this.insPage.add(%this.imageScroller);
+	// An asset kind with a pane of its own gets it here, sharing the Inspector
+	// page with the generic inspector rather than taking a tab -- for that kind
+	// of asset the pane IS the inspector, and chooseInspector decides which one is
+	// on show. None of them is ever rebuilt or freed.
+	%this.registerPane("Image", %this.createImagePane());
+	%this.registerPane("Animation", %this.createAnimationPane());
 
-	%this.imagePane = %this.createImagePane();
-	%this.imageScroller.add(%this.imagePane);
-	%this.imagePane.build();
+	// Named handles for the two the tests and the load methods reach for
+	// directly. The registry is the truth; these are just shorter.
+	%this.imageScroller = %this.paneScroller["Image"];
+	%this.imagePane = %this.pane["Image"];
+	%this.animationPane = %this.pane["Animation"];
 
 	//Particle Graph Tool
 	%this.scaleGraphPage = %this.createTabPage("Scale Graph", "AssetParticleGraphTool", "");
@@ -235,28 +235,85 @@ function AssetInspector::createImagePane(%this)
 	};
 }
 
-// Which of the two inspectors the Inspector page is showing. The one standing
-// down is hidden rather than emptied, so nothing it holds is ever freed while
-// the engine might be dispatching on it.
-function AssetInspector::chooseInspector(%this, %useImagePane)
+// Give a custom pane its own scroller on the Inspector page and remember it
+// under a key. Built once, here, and never rebuilt or freed.
+function AssetInspector::registerPane(%this, %key, %pane)
 {
-	%this.insScroller.setVisible(!%useImagePane);
-	%this.imageScroller.setVisible(%useImagePane);
+	%scroller = %this.createScroller();
+	%scroller.setVisible(false);
+	%this.insPage.add(%scroller);
 
-	if(!%useImagePane)
+	%scroller.add(%pane);
+	%pane.build();
+
+	%this.paneScroller[%key] = %scroller;
+	%this.pane[%key] = %pane;
+	%this.paneKeys = (%this.paneKeys $= "") ? %key : (%this.paneKeys SPC %key);
+}
+
+function AssetInspector::createAnimationPane(%this)
+{
+	%width = 686;
+
+	return new GuiChainCtrl()
 	{
-		%this.imagePane.unbind();
+		class = "AssetAnimationInspectorPane";
+		superclass = "AssetInspectorPane";
+		HorizSizing = "width";
+		Position = "0 0";
+		Extent = %width SPC 320;
+		IsVertical = true;
+		ChildSpacing = 6;
+		paneWidth = %width;
+	};
+}
+
+// Which inspector the Inspector page is showing: a registered pane by key, or ""
+// for the generic one. The panes standing down are hidden rather than emptied,
+// so nothing they hold is ever freed while the engine might be dispatching on it
+// -- but they are unbound, so a stale target cannot be written to.
+function AssetInspector::chooseInspector(%this, %key)
+{
+	%this.insScroller.setVisible(%key $= "");
+	%this.activePane = "";
+
+	%count = getWordCount(%this.paneKeys);
+	for(%i = 0; %i < %count; %i++)
+	{
+		%thisKey = getWord(%this.paneKeys, %i);
+		%chosen = (%thisKey $= %key);
+
+		%this.paneScroller[%thisKey].setVisible(%chosen);
+
+		if(%chosen)
+		{
+			%this.activePane = %this.pane[%thisKey];
+		}
+		else
+		{
+			%this.pane[%thisKey].unbind();
+		}
 	}
 }
 
+// The pane currently standing in for the inspector, or "" when the generic one
+// is on show. The one accessor everything below goes through, so there is no
+// second place that has to know how many panes there are.
+function AssetInspector::activePaneObject(%this)
+{
+	return %this.activePane;
+}
+
 // What the title bar's delete button acts on. The generic inspector knows what
-// it was handed; the image pane has to be asked, because it is not one.
+// it was handed; a pane has to be asked, because it is not one.
 function AssetInspector::inspectedObject(%this)
 {
-	if(%this.imageScroller.isVisible())
+	%pane = %this.activePaneObject();
+	if(isObject(%pane))
 	{
-		return %this.imagePane.target;
+		return %pane.target;
 	}
+
 	return %this.inspector.getInspectObject();
 }
 
@@ -265,10 +322,23 @@ function AssetInspector::inspectedObject(%this)
 // is the one it is bound to.
 function AssetInspector::onAssetRefreshed(%this, %asset)
 {
-	if(%this.imageScroller.isVisible())
+	%pane = %this.activePaneObject();
+	if(isObject(%pane))
 	{
-		%this.imagePane.onAssetRefreshed(%asset);
+		%pane.onAssetRefreshed(%asset);
 	}
+}
+
+// The four fields no asset kind wants to see, and the inspect call that follows
+// them. Repeated verbatim in five load methods before this.
+function AssetInspector::inspectStock(%this, %asset)
+{
+	%this.inspector.clearHiddenFields();
+	%this.inspector.addHiddenField("hidden");
+	%this.inspector.addHiddenField("locked");
+	%this.inspector.addHiddenField("AssetInternal");
+	%this.inspector.addHiddenField("AssetPrivate");
+	%this.inspector.inspect(%asset);
 }
 
 function AssetInspector::hideInspector(%this)
@@ -280,7 +350,7 @@ function AssetInspector::hideInspector(%this)
 	%this.deleteAssetButton.visible = false;
 
 	// Nothing is selected, so nothing is bound. The pane keeps its rows.
-	%this.chooseInspector(false);
+	%this.chooseInspector("");
 }
 
 function AssetInspector::resetInspector(%this)
@@ -299,7 +369,7 @@ function AssetInspector::resetInspector(%this)
 
 	// Back to the generic inspector. The one asset kind with a pane of its own
 	// says so straight after.
-	%this.chooseInspector(false);
+	%this.chooseInspector("");
 }
 
 function AssetInspector::loadImageAsset(%this, %imageAsset, %assetID)
@@ -310,7 +380,7 @@ function AssetInspector::loadImageAsset(%this, %imageAsset, %assetID)
 	%this.tabBook.selectPage(0);
 	%this.titlebar.setText("Image Asset:" SPC %imageAsset.AssetName);
 
-	%this.chooseInspector(true);
+	%this.chooseInspector("Image");
 	%this.imagePane.bind(%imageAsset, %assetID);
 
 	%this.imageFrameEditPage.inspect(%imageAsset);
@@ -322,12 +392,19 @@ function AssetInspector::loadAnimationAsset(%this, %animationAsset, %assetID)
 	%this.resetInspector();
 	%this.titlebar.setText("Animation Asset:" SPC %animationAsset.AssetName);
 
-	%this.inspector.clearHiddenFields();
-	%this.inspector.addHiddenField("hidden");
-	%this.inspector.addHiddenField("locked");
-	%this.inspector.addHiddenField("AssetInternal");
-	%this.inspector.addHiddenField("AssetPrivate");
-	%this.inspector.inspect(%animationAsset);
+	// Named cells fall back to the generic inspector, and not out of caution: the
+	// engine's named-frame API does not round-trip -- its getter formats strings
+	// through %d, and the field joins with commas while the setter splits on
+	// whitespace, so a named list does not survive its own TAML file. A pane built
+	// on that would be a pane that quietly loses work.
+	if(%animationAsset.getNamedCellsMode())
+	{
+		%this.inspectStock(%animationAsset);
+		return;
+	}
+
+	%this.chooseInspector("Animation");
+	%this.animationPane.bind(%animationAsset, %assetID);
 }
 
 function AssetInspector::loadParticleAsset(%this, %particleAsset, %assetID)
@@ -392,12 +469,7 @@ function AssetInspector::loadFontAsset(%this, %fontAsset, %assetID)
 	%this.resetInspector();
 	%this.titlebar.setText("Font Asset:" SPC %fontAsset.AssetName);
 
-	%this.inspector.clearHiddenFields();
-	%this.inspector.addHiddenField("hidden");
-	%this.inspector.addHiddenField("locked");
-	%this.inspector.addHiddenField("AssetInternal");
-	%this.inspector.addHiddenField("AssetPrivate");
-	%this.inspector.inspect(%fontAsset);
+	%this.inspectStock(%fontAsset);
 }
 
 function AssetInspector::loadAudioAsset(%this, %audioAsset, %assetID)
@@ -405,12 +477,7 @@ function AssetInspector::loadAudioAsset(%this, %audioAsset, %assetID)
 	%this.resetInspector();
 	%this.titlebar.setText("Audio Asset:" SPC %audioAsset.AssetName);
 
-	%this.inspector.clearHiddenFields();
-	%this.inspector.addHiddenField("hidden");
-	%this.inspector.addHiddenField("locked");
-	%this.inspector.addHiddenField("AssetInternal");
-	%this.inspector.addHiddenField("AssetPrivate");
-	%this.inspector.inspect(%audioAsset);
+	%this.inspectStock(%audioAsset);
 }
 
 function AssetInspector::loadSpineAsset(%this, %spineAsset, %assetID)
@@ -418,12 +485,7 @@ function AssetInspector::loadSpineAsset(%this, %spineAsset, %assetID)
 	%this.resetInspector();
 	%this.titlebar.setText("Spine Asset:" SPC %spineAsset.AssetName);
 
-	%this.inspector.clearHiddenFields();
-	%this.inspector.addHiddenField("hidden");
-	%this.inspector.addHiddenField("locked");
-	%this.inspector.addHiddenField("AssetInternal");
-	%this.inspector.addHiddenField("AssetPrivate");
-	%this.inspector.inspect(%spineAsset);
+	%this.inspectStock(%spineAsset);
 }
 
 function AssetInspector::deleteAsset(%this)

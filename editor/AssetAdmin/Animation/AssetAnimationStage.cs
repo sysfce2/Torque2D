@@ -563,6 +563,30 @@ function AssetAnimationStage::keepFrameRate(%this, %beforeCount)
 	%this.committing = false;
 }
 
+// The inspector wrote something. Most of its fields do not concern the stage --
+// the refresh they raise is absorbed like any other -- but changing the image
+// asset moves what every frame number means, so the palette and the timeline
+// both have to be re-pointed at it.
+function AssetAnimationStage::onInspectorCommit(%this)
+{
+	if(!%this.built || %this.busy || !isObject(%this.animationAsset))
+	{
+		return;
+	}
+
+	%imageAssetId = %this.animationAsset.getImage();
+	if(%imageAssetId $= %this.imageAssetId)
+	{
+		return;
+	}
+
+	%this.imageAssetId = %imageAssetId;
+	%this.palettePane.load(%imageAssetId);
+	%this.timelinePane.load(%imageAssetId, trim(%this.animationAsset.getAnimationFrames()));
+
+	%this.admin.transportBar.refresh();
+}
+
 function AssetAnimationStage::setCycle(%this, %on)
 {
 	if(!isObject(%this.animationAsset))
