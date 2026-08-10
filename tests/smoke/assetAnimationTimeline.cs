@@ -211,6 +211,70 @@ function aniStepPreview2()
 	aniCheck("an outside change reloads the timeline", $aniTimeline.getFrames() $= "30 31 32");
 	aniCheck("and still did not rebuild the preview", AssetAdmin.previewSprite == $aniSprite);
 
+	schedule(300, 0, "aniStepDrop");
+}
+
+//-----------------------------------------------------------------------------
+// The drop, and the two traps in GuiDragAndDropCtrl that shape it.
+//
+// The callbacks are called directly with a real payload parked at real
+// coordinates. That is not a shortcut around the interesting part -- it IS the
+// interesting part. GuiDragAndDropCtrl hit-tests from its own parent and
+// findHitControl answers "me" without testing its bounds, so the drop arrives
+// here from anywhere on screen and the boundary check is the timeline's own.
+//-----------------------------------------------------------------------------
+
+function aniMakePayload(%frame, %globalPoint)
+{
+	// The drop reads the cursor from the payload's middle, because the position
+	// it is handed is in the drag control's parent's space and useless here.
+	%payload = new GuiSpriteCtrl()
+	{
+		Position = "0 0";
+		Extent = "40 40";
+		frameIndex = %frame;
+	};
+	ThemeManager.setProfile(%payload, "emptyProfile");
+	AssetAdmin.content.add(%payload);
+
+	%payload.setPosition(getWord(%globalPoint, 0) - 20, getWord(%globalPoint, 1) - 20);
+	return %payload;
+}
+
+function aniStepDrop()
+{
+	%pane = $aniStage.timelinePane;
+	$aniStage.timelinePane.setFrames("10 11 12 13");
+
+	// Parked over the library, which is nowhere near the timeline.
+	%away = AssetAdmin.libWindow.getGlobalPosition();
+	%payload = aniMakePayload(99,
+		(getWord(%away, 0) + 40) SPC (getWord(%away, 1) + 40));
+
+	%pane.onControlDropped(%payload, "0 0");
+	aniCheck("a drop outside the timeline changes nothing",
+		$aniTimeline.getFrames() $= "10 11 12 13");
+	%payload.delete();
+
+	// Over the left half of slot 2, which is before it.
+	%slotRect = $aniTimeline.getSlotRect(2);
+	%point = (getWord(%slotRect, 0) + 2) SPC
+		(getWord(%slotRect, 1) + (getWord(%slotRect, 3) / 2));
+
+	%payload = aniMakePayload(99, %point);
+	%pane.onControlDropped(%payload, "0 0");
+	aniCheck("a drop on a slot's left half goes in before it (" @ $aniTimeline.getFrames() @ ")",
+		$aniTimeline.getFrames() $= "10 11 99 12 13");
+	%payload.delete();
+
+	// And the caret agrees with where the drop landed, which is the promise the
+	// user was shown.
+	%payload = aniMakePayload(98, %point);
+	aniCheck("the caret shows the slot the drop would use",
+		$aniTimeline.showCaretAt(%payload.getGlobalPosition()) >= 0);
+	%pane.onControlDragExit(%payload, "0 0");
+	%payload.delete();
+
 	schedule(300, 0, "aniStepTransport");
 }
 
