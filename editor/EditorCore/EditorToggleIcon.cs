@@ -48,21 +48,23 @@ function EditorToggleIcon::onAdd(%this)
 	%this.textOffset = "0 0";
 	%this.textExtent = "0 0";
 
-	// 16 is the size the segmented rows and the header panes have always drawn at.
-	// A creator sitting a toggle beside an EditorIconButton wants 20, which is
-	// what that one uses -- same 24 x 24 button, a visibly bigger picture on it,
-	// and a row of the two together looked mismatched until this could be said.
+	// iconSize is the PICTURE, and the sprite holding it is deliberately bigger --
+	// the same arrangement, and the same reason, as EditorIconButton: a sprite
+	// clamps its picture to its own content rect, so a control the same size as
+	// the artwork loses a pixel or two of it to the profile's insets. The two
+	// widgets are frequently sat next to each other and have to agree.
 	%iconSize = (%this.iconSize $= "") ? 16 : %this.iconSize;
+	%holder = %iconSize + 4;
 
 	%this.icon = new GuiSpriteCtrl()
 	{
 		HorizSizing = "center";
 		VertSizing = "center";
-		Extent = %iconSize SPC %iconSize;
-		MinExtent = %iconSize SPC %iconSize;
+		Extent = %holder SPC %holder;
+		MinExtent = %holder SPC %holder;
 		Position = "0 0";
 		Image = "EditorCore:EditorIcons16";
-		ImageSize = "16 16";
+		ImageSize = %iconSize SPC %iconSize;
 		constrainProportions = "1";
 		fullSize = "0";
 		Frame = %this.frameOff;
