@@ -113,6 +113,14 @@ function aniStep3()
 	$aniPalette = $aniStage.palettePane.strip;
 	$aniTimeline = $aniStage.timelinePane.strip;
 
+	// A sprite built with an Animation on it is already running -- nothing
+	// pressed play -- so choosing an animation has to arrive with the transport
+	// already saying Stop. It said Play over a preview that was busy playing,
+	// because the flag was initialised false rather than read off the sprite.
+	aniCheck("choosing an animation arrives playing", $aniStage.playing);
+	aniCheck("so the transport offers Stop", AssetAdmin.transportBar.stopButton.isVisible());
+	aniCheck("and not Play", !AssetAdmin.transportBar.playButton.isVisible());
+
 	// The panes must be sized by their frames, not left at the extent they were
 	// built with. setFrameSize is the only thing that lays the tree out, so
 	// sizing the frames before the panes were added produced exactly this: the
@@ -252,6 +260,24 @@ function aniStepDrop()
 	%pane = $aniStage.timelinePane;
 	$aniStage.timelinePane.setFrames("10 11 12 13");
 
+	// What the thing under the cursor is actually showing.
+	//
+	// It showed frame 0 whatever was picked up, and only became right once it was
+	// dropped. GuiSpriteCtrl::setImage returns early when the control is not
+	// awake -- it keeps the asset id and discards the frame -- and a payload is
+	// built detached, so the frame never landed. onWake then re-applies the image
+	// from the Frame FIELD, which nothing had set.
+	//
+	// Asserted on the real makePayload rather than on a sprite built here, because
+	// the bug was entirely in how that one is built.
+	%payload = $aniStage.palettePane.strip.makePayload(7);
+	AssetAdmin.content.add(%payload);
+
+	aniCheck("a drag payload shows the frame it was made for (" @ %payload.getImageFrame() @ ")",
+		%payload.getImageFrame() == 7);
+	aniCheck("and carries it for the drop", %payload.frameIndex == 7);
+	%payload.delete();
+
 	// Parked over the library, which is nowhere near the timeline.
 	%away = AssetAdmin.libWindow.getGlobalPosition();
 	%payload = aniMakePayload(99,
@@ -296,8 +322,57 @@ function aniStepTransport()
 
 	$aniStage.timelinePane.setFrames("40 41 42 43 44 45");
 
+	// The bar is as tall as its tallest button, and the tallest button fits in it.
+	//
+	// A chain does not grow to fit a taller child -- and worse, GuiChainCtrl is
+	// born VERTICAL and its resize refuses to change whichever axis is currently
+	// the length, so an Extent set before IsVertical silently kept the
+	// constructor's 30. The big play button was then centred in 30 and lost three
+	// pixels off each end.
+	%barHeight = getWord(%bar.getExtent(), 1);
+	%playHeight = getWord(%bar.playButton.getExtent(), 1);
+
+	aniCheck("the bar is as tall as its biggest button (" @ %barHeight @ " vs " @ %playHeight @ ")",
+		%barHeight >= %playHeight);
+	aniCheck("so the play button is not clipped at the top",
+		getWord(%bar.playButton.getPosition(), 1) >= 0);
+	aniCheck("nor at the bottom",
+		getWord(%bar.playButton.getPosition(), 1) + %playHeight <= %barHeight);
+
+	// A toggle draws a box clamped inside its borders; a push button paints its
+	// whole rect. Same extent means the toggle LOOKS smaller, so it is built
+	// bigger by exactly the border and the two come out matching.
+	%inset = %bar.chromeInset();
+	%toggleDrawn = getWord(%bar.loopButton.getExtent(), 0) - getWord(%inset, 0);
+
+	aniCheck("a toggle draws the same size as a push button (" @ %toggleDrawn @ ")",
+		%toggleDrawn == $AssetAnimationTransportBar::buttonSize);
+
+	// Every button draws the same size of picture, whatever size the button is.
+	//
+	// GuiSpriteCtrl::growTo animates the PICTURE and leaves the sprite control
+	// alone, so a button that scaled both together had its icon animate from 32
+	// down to 28 on the first hover -- it looked like the icon exploded and never
+	// went back. The big play button is a bigger button, not a bigger icon.
+	%rewindIcon = %bar.getObject(0).icon;
+	aniCheck("the play button's picture matches the small buttons' (" @
+		%bar.playButton.icon.imageSize @ " vs " @ %rewindIcon.imageSize @ ")",
+		%bar.playButton.icon.imageSize $= %rewindIcon.imageSize);
+	aniCheck("and so does a toggle's",
+		%bar.loopButton.icon.imageSize $= %rewindIcon.imageSize);
+
+	// The sprite holding it must be bigger than the picture at its hovered size,
+	// or the hover is clamped away by the sprite's own content rect.
+	aniCheck("the picture has room to grow into (" @ %rewindIcon.getExtent() @ ")",
+		getWord(%rewindIcon.getExtent(), 0) >=
+			getWord(%rewindIcon.imageSize, 0) + $EditorIconButton::hoverGrowth);
+
 	// Play and Stop are two buttons with one hidden, not one toggle, so "which is
 	// on show" is the only state there is and it cannot fall out of step.
+	//
+	// Stopped explicitly rather than relying on an earlier step having done it,
+	// so this cannot pass by inheritance.
+	$aniStage.stop();
 	aniCheck("it offers Play while stopped", %bar.playButton.isVisible());
 	aniCheck("and not Stop", !%bar.stopButton.isVisible());
 

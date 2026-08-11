@@ -102,6 +102,11 @@ function GuiEditFramePaletteCtrl::onFrameDragBegan(%this, %frame, %x, %y)
 	%dragCtrl.add(%payload);
 	%host.add(%dragCtrl);
 
+	// Again, now that it is on the canvas and awake. The fields above are what
+	// onWake reads, and this is what makes the frame right whichever order the
+	// waking happens in -- setImageFrame on an awake control is unambiguous.
+	%payload.setImageFrame(%frame);
+
 	// Grabbed by the middle, which is what lets the drop target work out where
 	// the cursor is from the payload alone -- the position the drop callback is
 	// handed is in the drag control's parent's space and cannot be used.
@@ -123,12 +128,20 @@ function GuiEditFramePaletteCtrl::makePayload(%this, %frame)
 		fullSize = "1";
 		constrainProportions = "1";
 
+		// The FIELDS, not setImage(). A payload is built detached, and
+		// GuiSpriteCtrl::setImage returns early when the control is not awake --
+		// it records the asset id and drops the frame on the floor. Then onWake
+		// re-applies the image from mImageAssetId and mFrame, so whatever the
+		// Frame field says is what actually gets shown. Setting the image the
+		// obvious way left every dragged frame showing frame 0, right up until it
+		// was dropped and the correct one went in.
+		Image = %this.getImageAsset();
+		Frame = %frame;
+
 		// What the drop reads back. The payload IS the message.
 		frameIndex = %frame;
 	};
 	ThemeManager.setProfile(%payload, "emptyProfile");
-
-	%payload.setImage(%this.getImageAsset(), %frame);
 
 	return %payload;
 }

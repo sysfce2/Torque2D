@@ -45,7 +45,6 @@
 
 $AssetAnimationTransportBar::buttonSize = 24;
 $AssetAnimationTransportBar::playSize = 36;
-$AssetAnimationTransportBar::iconSize = 20;
 $AssetAnimationTransportBar::spacing = 4;
 $AssetAnimationTransportBar::gap = 16;
 
@@ -80,21 +79,37 @@ function AssetAnimationTransportBar::onAdd(%this)
 		$AssetAnimationTransportBar::buttonSize);
 }
 
+// How much bigger a toggle has to be than a push button to LOOK the same size.
+//
+// They draw differently. A GuiButtonCtrl paints its chrome across the whole
+// control less its margins; a GuiCheckBoxCtrl paints a box that
+// GuiCheckBoxCtrl::onRender clamps into the CONTENT rect -- inside the borders
+// and padding as well. iconButtonProfile has a 2 pixel border on all four sides,
+// so a 24 pixel toggle drew a 20 pixel box beside a 24 pixel button, and no
+// amount of boxExtent fixed it: the clamp will not let the box out.
+//
+// So the toggle is built that much larger and its box comes out the right size.
+// Read from the profile rather than written as 4, because a theme is free to
+// give the button a different border.
+function AssetAnimationTransportBar::chromeInset(%this)
+{
+	%profile = ThemeManager.activeTheme.iconButtonProfile;
+
+	return (%profile.borderLeft.border + %profile.borderRight.border) SPC
+		(%profile.borderTop.border + %profile.borderBottom.border);
+}
+
 function AssetAnimationTransportBar::addToggle(%this, %name, %frameOn, %frameOff, %tipOn, %tipOff)
 {
 	%size = $AssetAnimationTransportBar::buttonSize;
+	%inset = %this.chromeInset();
 
 	%button = new GuiCheckBoxCtrl()
 	{
 		class = "EditorToggleIcon";
 		Position = "0 0";
-		Extent = %size SPC %size;
-
-		// Matching EditorIconButton, which draws its picture at 20 in the same
-		// 24 pixel button. At the toggle's own default of 16 the row read as two
-		// sizes of button rather than one.
-		iconSize = $AssetAnimationTransportBar::iconSize;
-
+		VertSizing = "center";
+		Extent = (%size + getWord(%inset, 0)) SPC (%size + getWord(%inset, 1));
 		frameOn = %frameOn;
 		frameOff = %frameOff;
 		tipOn = %tipOn;
@@ -111,10 +126,23 @@ function AssetAnimationTransportBar::addToggle(%this, %name, %frameOn, %frameOff
 
 function AssetAnimationTransportBar::addButton(%this, %method, %frame, %tooltip, %size)
 {
+	%size = (%size $= "") ? $AssetAnimationTransportBar::buttonSize : %size;
+
+	// Said in the block, not set afterwards. EditorIconButton forces its own
+	// extent in onAdd and its hover handlers animate the icon to sizes of their
+	// own, so a resize applied after the add survived exactly until the pointer
+	// first crossed it -- and the chain had already sized itself around the
+	// smaller button by then, which is what clipped the big one.
 	%button = new GuiButtonCtrl()
 	{
 		class = "EditorIconButton";
 		Position = "0 0";
+		VertSizing = "center";
+		// buttonSize only. The icon is deliberately left at its default, so the
+		// big play button is a bigger BUTTON with the same picture on it as the
+		// rest -- which is what makes it easy to find without making it look like
+		// a different kind of control.
+		buttonSize = %size;
 		Frame = %frame;
 		Command = %this.getId() @ "." @ %method @ "();";
 		Tooltip = %tooltip;
@@ -122,15 +150,6 @@ function AssetAnimationTransportBar::addButton(%this, %method, %frame, %tooltip,
 	ThemeManager.setProfile(%button, "iconButtonProfile");
 	ThemeManager.setProfile(%button, "tipProfile", "TooltipProfile");
 	%this.add(%button);
-
-	// After the add, because EditorIconButton::onAdd sets its own 24 x 24 and
-	// would undo anything the new{} block said. The icon inside it is sized
-	// against the button, so both grow together.
-	if(%size !$= "" && %size != $AssetAnimationTransportBar::buttonSize)
-	{
-		%button.setExtent(%size, %size);
-		%button.icon.setExtent(%size - 4, %size - 4);
-	}
 
 	return %button;
 }

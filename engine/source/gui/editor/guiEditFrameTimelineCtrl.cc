@@ -54,9 +54,11 @@ GuiEditFrameTimelineCtrl::GuiEditFrameTimelineCtrl()
 //                            it stays legible against the selected cell it is
 //                            frequently sitting on top of
 //   font    HighlightState   the insertion caret
+//   font    NormalState      the frame numbers (drawn by the base class)
 //
-// The strip wears listBoxProfile, which has all of them set for exactly this
-// kind of use.
+// The strips wear frameGridProfile, which exists for this and nothing else --
+// BaseTheme::makeFrameGridProfile says what each field is chosen to be and why
+// borrowing listBoxProfile got two of them wrong.
 //-----------------------------------------------------------------------------
 
 //-----------------------------------------------------------------------------

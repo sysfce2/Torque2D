@@ -127,13 +127,17 @@ function AssetAnimationStage::select(%this, %imageAsset, %animationAsset, %asset
 	%this.timelinePane.load(%this.imageAssetId, trim(%animationAsset.getAnimationFrames()));
 
 	%this.admin.transportBarContainer.setVisible(true);
-	%this.admin.transportBar.refresh();
 
 	// Adopt the sprite the preview has already made. displayAnimationAsset builds
 	// it and announces it BEFORE this runs -- the tile displays first and selects
 	// second -- so on a first selection that announcement arrives while there is
 	// no stage to hear it. Asking here covers both orders.
+	//
+	// Before the bar is refreshed, because adopting the sprite is what settles
+	// whether the animation is playing.
 	%this.onPreviewRebuilt(%this.admin.previewSprite);
+
+	%this.admin.transportBar.refresh();
 }
 
 //-----------------------------------------------------------------------------
@@ -309,6 +313,13 @@ function AssetAnimationStage::onPreviewRebuilt(%this, %sprite)
 
 	%this.previewSprite = %sprite;
 	%this.timelinePane.setPreviewSprite(%sprite);
+
+	// A sprite built with an Animation on it is ALREADY RUNNING -- nothing had to
+	// press play -- so the editor's idea of the playing state has to be read off
+	// the sprite rather than assumed. It was initialised false, so selecting an
+	// animation put a Play button over a preview that was busy playing.
+	%this.playing = !%sprite.getIsAnimationFinished();
+	%this.refreshTransport();
 }
 
 // Put a finished animation back in a state where it can be moved.

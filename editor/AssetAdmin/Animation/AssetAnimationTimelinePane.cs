@@ -34,7 +34,7 @@ $AssetAnimationTimelinePane::captionHeight = 20;
 
 function AssetAnimationTimelinePane::onAdd(%this)
 {
-	ThemeManager.setProfile(%this, "panelProfile");
+	ThemeManager.setProfile(%this, "emptyProfile");
 
 	%this.caption = new GuiControl()
 	{
@@ -60,7 +60,7 @@ function AssetAnimationTimelinePane::onAdd(%this)
 		vScrollBar = "alwaysOff";
 		constantThumbHeight = false;
 		scrollBarThickness = 14;
-		showArrowButtons = false;
+		showArrowButtons = true;
 	};
 	ThemeManager.setProfile(%this.scroller, "scrollingPanelProfile");
 	ThemeManager.setProfile(%this.scroller, "tinyThumbProfile", "ThumbProfile");
@@ -68,9 +68,6 @@ function AssetAnimationTimelinePane::onAdd(%this)
 	ThemeManager.setProfile(%this.scroller, "tinyScrollArrowProfile", "ArrowProfile");
 	%this.add(%this.scroller);
 
-	// listBoxProfile for its canKeyFocus. Without a profile that allows focus the
-	// strip never becomes first responder and the Delete key never arrives, which
-	// looks exactly like a broken key handler.
 	// The mirror of the palette: "fill" down the axis whose bar is alwaysOff, so
 	// the row is as tall as the scroller, and "right" across, where the strip
 	// sets its own width from its cells and the bar scrolls it.
@@ -85,7 +82,10 @@ function AssetAnimationTimelinePane::onAdd(%this)
 		CellPad = 4;
 		ShowFrameNumbers = true;
 	};
-	ThemeManager.setProfile(%this.strip, "listBoxProfile");
+	// frameGridProfile, not listBoxProfile: the grids read six of its colors for
+	// things a list has no equivalent of, and BaseTheme documents which is which.
+	// It also carries the canKeyFocus the Delete key depends on.
+	ThemeManager.setProfile(%this.strip, "frameGridProfile");
 	%this.scroller.add(%this.strip);
 }
 

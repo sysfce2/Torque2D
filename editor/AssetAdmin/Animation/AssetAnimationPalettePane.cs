@@ -32,7 +32,7 @@ $AssetAnimationPalettePane::captionHeight = 20;
 
 function AssetAnimationPalettePane::onAdd(%this)
 {
-	ThemeManager.setProfile(%this, "panelProfile");
+	ThemeManager.setProfile(%this, "emptyProfile");
 
 	%this.caption = new GuiControl()
 	{
@@ -67,7 +67,7 @@ function AssetAnimationPalettePane::onAdd(%this)
 		vScrollBar = "alwaysOn";
 		constantThumbHeight = false;
 		scrollBarThickness = 14;
-		showArrowButtons = false;
+		showArrowButtons = true;
 	};
 	ThemeManager.setProfile(%this.scroller, "scrollingPanelProfile");
 	ThemeManager.setProfile(%this.scroller, "tinyThumbProfile", "ThumbProfile");
@@ -94,7 +94,10 @@ function AssetAnimationPalettePane::onAdd(%this)
 		CellPad = 4;
 		ShowFrameNumbers = true;
 	};
-	ThemeManager.setProfile(%this.strip, "emptyProfile");
+	// The same profile the timeline wears, so hover and frame numbers look the
+	// same in both grids -- which matters when a frame is being dragged from one
+	// to the other.
+	ThemeManager.setProfile(%this.strip, "frameGridProfile");
 	%this.scroller.add(%this.strip);
 }
 

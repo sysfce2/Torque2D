@@ -321,8 +321,8 @@ function AssetAdmin::buildTransportBar(%this)
 	// and rides the bottom of the preview as the frame grows. The position is set
 	// against the extent the background has now, which is why it is a gap rather
 	// than a coordinate.
-	%barGap = 8;
-	%barTop = getWord(%this.background.extent, 1) - $AssetAnimationTransportBar::buttonSize - %barGap;
+	%barGap = 16;
+	%barTop = (getWord(%this.background.extent, 1) - $AssetAnimationTransportBar::playSize) - %barGap;
 
 	%this.transportBar = new GuiChainCtrl()
 	{
@@ -331,11 +331,29 @@ function AssetAdmin::buildTransportBar(%this)
 		HorizSizing = "center";
 		VertSizing = "top";
 		Position = "0" SPC %barTop;
-		Extent = "160" SPC $AssetAnimationTransportBar::buttonSize;
+
+		// IsVertical BEFORE Extent, and the order is the whole thing.
+		//
+		// A chain sizes itself along its LENGTH and leaves the cross axis alone --
+		// and GuiChainCtrl::resize enforces that by refusing whichever axis is
+		// currently the length. A GuiChainCtrl is born VERTICAL, so an Extent
+		// applied before this line is read as "you may not change my height", the
+		// height stays at the constructor's mEditOpenSpace of 30, and the 36 pixel
+		// play button is laid out centred in 30 -- three pixels off the top and
+		// three off the bottom, which is exactly how it was being clipped.
+		//
+		// Fields are applied in the order they are written, so this is a
+		// one-line-of-difference bug and worth the paragraph.
 		IsVertical = false;
+
+		// The tallest button. Nothing computes this: a chain never grows to fit a
+		// taller child. (IsExtentDynamic would not help either -- it is a
+		// GuiGridCtrl field and a chain never reads it.)
+		Extent = "160" SPC $AssetAnimationTransportBar::playSize;
+
 		ChildSpacing = $AssetAnimationTransportBar::spacing;
-		IsExtentDynamic = true;
 	};
+	ThemeManager.setProfile(%this.transportBar, "emptyProfile");
 	%this.transportBarContainer.add(%this.transportBar);
 
 	%this.background.add(%this.transportBarContainer);
