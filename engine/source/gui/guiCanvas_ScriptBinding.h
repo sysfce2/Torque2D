@@ -116,6 +116,30 @@ ConsoleMethodWithDocs( GuiCanvas, popLayer, ConsoleVoid, 2, 3, ( layer ))
    Canvas->popDialogControl(layer);
 }
 
+/*! Throw away the accelerator table and build it again from the topmost control.
+    Call this after changing which controls are on show by any means other than
+    pushing or popping a dialog - those two do it for themselves.
+    The table holds raw pointers and is not filtered by whether a control is still
+    parented, active or visible, so a control taken out of the tree keeps answering
+    its shortcut until this is called, and one just put in has none.
+    @return No return value.
+    @sa getAcceleratorCount
+*/
+ConsoleMethodWithDocs( GuiCanvas, rebuildAcceleratorMap, ConsoleVoid, 2, 2, ())
+{
+   Canvas->rebuildAcceleratorMap();
+}
+
+/*! How many accelerators the canvas is currently listening for. There is no way
+    to ask which - this is for confirming that a rebuild changed something.
+    @return The number of entries in the accelerator table.
+    @sa rebuildAcceleratorMap
+*/
+ConsoleMethodWithDocs( GuiCanvas, getAcceleratorCount, ConsoleInt, 2, 2, ())
+{
+   return (S32)Canvas->getAcceleratorCount();
+}
+
 /*! Use the cursorOn method to enable the cursor.
     @return No return value
 */

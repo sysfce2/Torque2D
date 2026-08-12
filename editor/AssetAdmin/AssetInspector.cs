@@ -374,6 +374,7 @@ function AssetInspector::hideInspector(%this)
 	%this.emitterButtonBar.visible = false;
 	%this.deleteAssetButton.visible = false;
 	%this.documentButtonBar.visible = false;
+	%this.document = "";
 
 	// Nothing is selected, so nothing is bound. The pane keeps its rows.
 	%this.chooseInspector("");
@@ -399,30 +400,32 @@ function AssetInspector::beginDocument(%this, %asset)
 
 	AssetAdmin.undoRecorder.track(%asset);
 
+	%this.document = %asset;
 	%this.documentButtonBar.visible = true;
 	%this.refreshDocumentBar();
 }
 
-// The asset the document buttons act on.
+// The asset the document commands act on: the one beginDocument was handed,
+// which is the one with a file.
 //
-// inspectedObject() answers with the emitter when one is selected in the title
-// dropdown, because that is what the field rows are editing. An emitter is not a
-// document, so ask it who owns it.
+// Remembered rather than worked out from what is on screen. Deducing it went
+// through inspectedObject(), and that has two holes: it is answered by the
+// active pane, which every load method binds AFTER calling beginDocument, so
+// during the refresh that follows a load there is no pane to ask yet; and when
+// there is no pane it falls through to whatever the generic inspector was last
+// given, which nothing clears when the selection goes away. Neither showed while
+// only the document bar asked - the bar is hidden in exactly those moments - but
+// the menus are never hidden, and both "this asset" and "no asset" are things
+// they have to be able to say.
+//
+// It also settles the particle case for free. An emitter is what the rows edit
+// and what inspectedObject answers with, but an emitter has no file of its own;
+// saving one means saving the particle asset that owns it. That asset is what
+// beginDocument was given, so it is what comes back here whichever emitter the
+// title dropdown is showing.
 function AssetInspector::documentAsset(%this)
 {
-	%asset = %this.inspectedObject();
-
-	if(!isObject(%asset))
-	{
-		return 0;
-	}
-
-	if(%this.titleDropDown.visible && %this.titleDropDown.getSelectedItem() != 0)
-	{
-		return %asset.getOwner();
-	}
-
-	return %asset;
+	return isObject(%this.document) ? %this.document : 0;
 }
 
 function AssetInspector::refreshDocumentBar(%this)
@@ -430,6 +433,14 @@ function AssetInspector::refreshDocumentBar(%this)
 	if(%this.documentButtonBar.visible)
 	{
 		%this.documentButtonBar.refreshEnabled();
+	}
+
+	// Outside the guard above, deliberately. The bar is hidden whenever nothing
+	// is selected; the menus never are, and "nothing is selected" is exactly what
+	// they have to be able to say. The predicates answer correctly either way.
+	if(isObject(AssetAdmin.menus))
+	{
+		AssetAdmin.menus.refresh();
 	}
 }
 
@@ -751,10 +762,12 @@ function AssetInspector::loadSpineAsset(%this, %spineAsset, %assetID)
 
 function AssetInspector::deleteAsset(%this)
 {
-	%asset = %this.inspectedObject();
-	if(%this.titleDropDown.visible && %this.titleDropDown.getSelectedItem() != 0)
+	// The asset, never the emitter showing in its place - deleting one emitter of
+	// a particle is RemoveEmitter's job, and this offers to take files off disk.
+	%asset = %this.documentAsset();
+	if(!isObject(%asset))
 	{
-		%asset = %asset.getOwner();
+		return;
 	}
 
 	%width = 700;

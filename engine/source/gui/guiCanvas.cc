@@ -1042,6 +1042,15 @@ void GuiCanvas::setContentControl(GuiControl *gui)
    resetUpdateRegions();
 
    //rebuild the accelerator map
+   //
+   // Deliberately NOT rebuildAcceleratorMap(): this walks down from the top until
+   // it reaches a control that takes input, so a new content control that lets
+   // input through leaves whatever is under it still able to answer a shortcut.
+   // The dialog paths take the topmost control and nothing else, which is what
+   // stops a menu's dropdown from leaving the editor's own accelerators live
+   // underneath it. The two are the same in every ordinary case - mUseInput
+   // defaults to true, so this loop almost always stops on its first pass - but
+   // they are not the same rule, and sharing one would quietly change the other.
    mAcceleratorMap.clear();
 
    for(iterator i = end(); i != begin() ; )
@@ -1066,6 +1075,16 @@ GuiControl *GuiCanvas::getContentControl()
    if(size() > 0)
       return (GuiControl *) first();
    return NULL;
+}
+
+void GuiCanvas::rebuildAcceleratorMap()
+{
+   mAcceleratorMap.clear();
+   if (size() > 0)
+   {
+      GuiControl *ctrl = static_cast<GuiControl*>(last());
+      ctrl->buildAcceleratorMap();
+   }
 }
 
 void GuiCanvas::pushDialogControl(GuiControl *gui, S32 layer)
@@ -1106,12 +1125,7 @@ void GuiCanvas::pushDialogControl(GuiControl *gui, S32 layer)
    resetUpdateRegions();
 
    //rebuild the accelerator map
-   mAcceleratorMap.clear();
-   if (size() > 0)
-   {
-      GuiControl *ctrl = static_cast<GuiControl*>(last());
-      ctrl->buildAcceleratorMap();
-   }
+   rebuildAcceleratorMap();
    refreshMouseControl();
 }
 
@@ -1169,12 +1183,7 @@ void GuiCanvas::popDialogControl(GuiControl *gui)
    resetUpdateRegions();
 
    //rebuild the accelerator map
-   mAcceleratorMap.clear();
-   if (size() > 0)
-   {
-      GuiControl *ctrl = static_cast<GuiControl*>(last());
-      ctrl->buildAcceleratorMap();
-   }
+   rebuildAcceleratorMap();
    refreshMouseControl();
 }
 

@@ -200,6 +200,18 @@ function adsStep3()
 	adsCheck("Undo is greyed with nothing done yet", !$adsInspector.getUndoAssetEnabled());
 	adsCheck("Redo is greyed with nothing undone yet", !$adsInspector.getRedoAssetEnabled());
 
+	// The File and Edit menus offer the same five commands as the bar beside them
+	// and answer to the same predicates. Held by handle, never looked up by text:
+	// Undo and Redo carry the step label in their text and it changes underneath.
+	$adsMenus = AssetAdmin.menus;
+	adsCheck("the Asset Manager has a menu set", isObject($adsMenus));
+	adsCheck("menu Save is greyed too", !$adsMenus.save.Active);
+	adsCheck("menu Revert is greyed too", !$adsMenus.revert.Active);
+	adsCheck("menu Undo is greyed too", !$adsMenus.undo.Active);
+	adsCheck("menu Redo is greyed too", !$adsMenus.redo.Active);
+	adsCheck("Save All is greyed with nothing unsaved anywhere", !$adsMenus.saveAll.Active);
+	adsCheck("Duplicate is offered, because there is a document", $adsMenus.duplicate.Active);
+
 	adsCheck("the tile is not marked", !$adsTile.dirtyMark.isVisible());
 
 	// Everything below compares against this.
@@ -228,6 +240,13 @@ function adsStep4()
 
 	adsCheck("Save is offered now", $adsInspector.getSaveAssetEnabled());
 	adsCheck("Revert is offered now", $adsInspector.getRevertAssetEnabled());
+	adsCheck("and the menu followed", $adsMenus.save.Active && $adsMenus.revert.Active);
+	adsCheck("Save All woke up with it", $adsMenus.saveAll.Active);
+
+	// The step label is the one thing the menu says that the bar only whispers in
+	// a tooltip.
+	adsCheck("menu Undo names the step (" @ $adsMenus.undo.getText() @ ")",
+		$adsMenus.undo.Active && strstr($adsMenus.undo.getText(), "Undo") == 0);
 	adsCheck("the tile is marked unsaved", $adsTile.dirtyMark.isVisible());
 	adsCheck("the mark is a control of its own, not part of the caption",
 		$adsTile.caption.getText() $= $adsTile.assetName);
@@ -310,6 +329,8 @@ function adsStep7()
 	adsCheck("and the count went with it", AssetDatabase.getDirtyAssetCount() == 0);
 	adsCheck("the tile mark cleared", !$adsTile.dirtyMark.isVisible());
 	adsCheck("Save is greyed again", !$adsInspector.getSaveAssetEnabled());
+	adsCheck("and so is the menu's", !$adsMenus.save.Active);
+	adsCheck("with nothing unsaved anywhere, Save All went too", !$adsMenus.saveAll.Active);
 
 	$adsFileAfterSave = adsReadAssetFile($adsAssetId);
 	adsCheck("the file changed this time", $adsFileAfterSave !$= $adsFileAtStart);

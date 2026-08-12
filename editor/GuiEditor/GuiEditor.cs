@@ -72,7 +72,21 @@ function GuiEditor::create( %this )
     // Copy, cut and paste, which is undo's machinery plus a deep clone.
     exec("./scripts/GuiEditorClipboard.cs");
 
+    // File, Edit, Layout and Select, which this editor owns and lends to the
+    // shared bar for as long as it is the one open.
+    exec("./scripts/GuiEditorMenus.cs");
+
 	%this.guiPage = EditorCore.RegisterEditor("Gui Editor", %this);
+
+    // Built here, because a menu can only be built into the bar and EditorCore
+    // has made it by now - every editor module depends on EditorCore. The set
+    // takes itself back off again immediately; open() puts it on.
+    %this.menus = new ScriptObject()
+    {
+        class = "GuiEditorMenus";
+        superclass = "EditorMenuSet";
+        tool = %this;
+    };
 
     // What the control palette can offer and what each entry looks like. Built
     // before the palette window, which reads it as it populates. Generated from
@@ -362,6 +376,12 @@ function GuiEditor::destroy( %this )
 	{
 		%this.clipboard.delete();
 	}
+
+	// Takes itself off the bar first if it is still on it.
+	if(isObject(%this.menus))
+	{
+		%this.menus.delete();
+	}
 }
 
 function GuiEditor::open(%this, %content)
@@ -373,19 +393,11 @@ function GuiEditor::open(%this, %content)
         %this.adoptTheme("");
     }
 
-    EditorCore.menuBar.setMenuActive("File", true);
-    EditorCore.menuBar.setMenuActive("Edit", true);
-    EditorCore.menuBar.setMenuActive("Layout", true);
-    EditorCore.menuBar.setMenuActive("Select", true);
-
-    // Undo and Redo are greyed from the stacks, Cut and Copy from the selection,
-    // and Paste from whether anything has been copied. All three of the last are
-    // cached against what the menu was last told, so they are forced here: the
-    // menu looks new every time the editor is opened.
-    %this.undoRecorder.forceRefreshMenu();
-    %this.clipboard.forceRefreshMenu();
-    %this.brain.toggleMenuItems();
-    %this.refreshFileMenu();
+    // Puts the four menus on the shared bar, and refreshes them on the way: Undo
+    // and Redo grey from the stacks, Cut and Copy from the selection, Paste from
+    // whether anything has been copied, and Revert from whether the document has
+    // a file. The menus look new every time the editor is opened.
+    EditorCore.setEditorMenus(%this.menus);
 
     // The window title is the other thing that looks new every time: the tools
     // window was built with a placeholder and has not been told about the
@@ -398,10 +410,7 @@ function GuiEditor::open(%this, %content)
 function GuiEditor::close(%this)
 {
     editorMode(false);
-    EditorCore.menuBar.setMenuActive("File", false);
-    EditorCore.menuBar.setMenuActive("Edit", false);
-    EditorCore.menuBar.setMenuActive("Layout", false);
-    EditorCore.menuBar.setMenuActive("Select", false);
+    EditorCore.setEditorMenus("");
 }
 
 //MENU FUNCTIONS---------------------------------------------------------------
@@ -657,18 +666,13 @@ function GuiEditor::refreshDocumentTitle(%this)
 }
 
 // Revert is the only File item whose offer changes, and what it turns on is
-// whether the document has a file to go back to.
-//
-// Deliberately NOT called from refreshDocumentTitle, which runs on every edit:
-// setMenuActive walks the whole menu tree by item text and re-applies every
-// item's profile, which is the cost GuiEditorUndoRecorder::refreshMenu keeps a
-// cache to avoid paying per keystroke. Whether the document has a file changes
-// far more rarely than the document does - on a save, a new one and an open -
-// so this is called from those three and from open(), where the menu is
-// rebuilt-looking.
+// whether the document has a file to go back to. That changes far more rarely
+// than the document does - on a save, a new one and an open - so it is called
+// from those three rather than from refreshDocumentTitle, which runs on every
+// edit. The menu set refreshes it for itself when it goes back on the bar.
 function GuiEditor::refreshFileMenu(%this)
 {
-	EditorCore.menuBar.setMenuActive("Revert", %this.filePath !$= "");
+	%this.menus.refreshFile();
 }
 
 //-----------------------------------------------------------------------------

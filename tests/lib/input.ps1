@@ -143,3 +143,60 @@ function Send-EngineKey {
     Start-Sleep -Milliseconds 120
     [TorqueInput]::PostMessage($Hwnd, $script:WM_KEYUP,   [IntPtr]$vk, [IntPtr]$up) | Out-Null
 }
+
+# The letter keys menu accelerators are built out of. vk, scan code; none of them
+# is an extended key, unlike everything in $EngineKeys above.
+$script:EngineChars = @{
+    'A' = @(0x41, 0x1E)
+    'N' = @(0x4E, 0x31)
+    'S' = @(0x53, 0x1F)
+    'V' = @(0x56, 0x2F)
+    'Z' = @(0x5A, 0x2C)
+}
+$script:EngineMods = @{
+    'CTRL'  = @(0x11, 0x1D)
+    'SHIFT' = @(0x10, 0x2A)
+}
+
+# A chord: Ctrl+S, Ctrl-Shift+Z. Posted as the four or six messages a real
+# keyboard sends, because that is how the engine learns a modifier is held - it
+# does not ask Windows, it tracks the key events (winWindow.cc, modifierKeys).
+#
+# The modifier is always released, whatever happens to the key in between. A
+# stuck Ctrl would silently change the meaning of every press for the rest of the
+# run.
+function Send-EngineChord {
+    param([IntPtr]$Hwnd, [string]$Key, [switch]$Ctrl, [switch]$Shift)
+
+    if (-not $script:EngineChars.ContainsKey($Key)) { throw "Send-EngineChord: unknown key '$Key'" }
+
+    function script:PostKey([IntPtr]$h, [int]$vk, [int]$scan, [bool]$make) {
+        # repeat count 1 | scan << 16, no extended bit
+        $lp = 0x00000001 -bor ($scan -shl 16)
+        if (-not $make) { $lp = $lp -bor (1 -shl 30) -bor [int]::MinValue }
+        $msg = if ($make) { $script:WM_KEYDOWN } else { $script:WM_KEYUP }
+        [TorqueInput]::PostMessage($h, $msg, [IntPtr]$vk, [IntPtr]$lp) | Out-Null
+    }
+
+    $held = @()
+    if ($Ctrl)  { $held += 'CTRL' }
+    if ($Shift) { $held += 'SHIFT' }
+
+    try {
+        foreach ($m in $held) {
+            script:PostKey $Hwnd $script:EngineMods[$m][0] $script:EngineMods[$m][1] $true
+            Start-Sleep -Milliseconds 60
+        }
+
+        script:PostKey $Hwnd $script:EngineChars[$Key][0] $script:EngineChars[$Key][1] $true
+        Start-Sleep -Milliseconds 120
+        script:PostKey $Hwnd $script:EngineChars[$Key][0] $script:EngineChars[$Key][1] $false
+    }
+    finally {
+        [array]::Reverse($held)
+        foreach ($m in $held) {
+            Start-Sleep -Milliseconds 60
+            script:PostKey $Hwnd $script:EngineMods[$m][0] $script:EngineMods[$m][1] $false
+        }
+    }
+}

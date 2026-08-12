@@ -46,6 +46,10 @@ function AssetAdmin::create(%this)
 	exec("./DuplicateAssetDialog.cs");
 	exec("./AssetAdminConfirmSaveDialog.cs");
 
+	// File and Edit, which this editor owns and lends to the shared bar for as
+	// long as it is the one open.
+	exec("./AssetAdminMenus.cs");
+
 	// Undo, redo and the record of what is unsaved. Built before the inspector,
 	// which asks it what to grey out as soon as it has a document bar.
 	%this.undoRecorder = new ScriptObject() { class = "AssetUndoRecorder"; };
@@ -70,6 +74,15 @@ function AssetAdmin::create(%this)
 	%this.frameRange = new ScriptObject() { class = "AssetAnimationFrameRange"; };
 
 	%this.buildTransportBar();
+
+	// After the inspector, which its refresh asks what to grey out. Built into
+	// the shared bar and taken straight back off again; open() puts it on.
+	%this.menus = new ScriptObject()
+	{
+		class = "AssetAdminMenus";
+		superclass = "EditorMenuSet";
+		tool = %this;
+	};
 
 	EditorCore.FinishRegistration(%this.guiPage);
 
@@ -404,6 +417,11 @@ function AssetAdmin::destroy(%this)
 	{
 		%this.undoRecorder.delete();
 	}
+	// Takes itself off the bar first if it is still on it.
+	if(isObject(%this.menus))
+	{
+		%this.menus.delete();
+	}
 }
 
 function AssetAdmin::open(%this)
@@ -412,6 +430,61 @@ function AssetAdmin::open(%this)
 
 	%this.assetScene.setScenePause(false);
 	%this.isOpen = true;
+
+	// After loadAssets, so what the menus grey themselves against is the library
+	// as it stands rather than as it was left.
+	EditorCore.setEditorMenus(%this.menus);
+}
+
+//-----------------------------------------------------------------------------
+// Making one.
+//
+// Reached two ways: the New button on each library group, and the File menu's
+// New Asset submenu. Named methods rather than one newAsset(%kind), because both
+// callers want to name a command - the menu carries its command as a string, and
+// a string that reads AssetAdmin.newImageAsset() can be found by searching for
+// it. "Bitmap Font" would defeat a title built out of the type name anyway.
+//-----------------------------------------------------------------------------
+
+function AssetAdmin::openNewAssetDialog(%this, %class, %title, %height)
+{
+	%width = 700;
+	%dialog = new GuiControl()
+	{
+		class = %class;
+		superclass = "EditorDialog";
+		dialogSize = (%width + 8) SPC (%height + 8);
+		dialogCanClose = true;
+		dialogText = %title;
+	};
+	%dialog.init(%width, %height);
+
+	Canvas.pushDialog(%dialog);
+}
+
+function AssetAdmin::newImageAsset(%this)
+{
+	%this.openNewAssetDialog("NewImageAssetDialog", "New Image Asset", 340);
+}
+
+function AssetAdmin::newAnimationAsset(%this)
+{
+	%this.openNewAssetDialog("NewAnimationAssetDialog", "New Animation Asset", 390);
+}
+
+function AssetAdmin::newParticleAsset(%this)
+{
+	%this.openNewAssetDialog("NewParticleAssetDialog", "New Particle Asset", 440);
+}
+
+function AssetAdmin::newFontAsset(%this)
+{
+	%this.openNewAssetDialog("NewFontAssetDialog", "New Bitmap Font Asset", 340);
+}
+
+function AssetAdmin::newAudioAsset(%this)
+{
+	%this.openNewAssetDialog("NewAudioAssetDialog", "New Audio Asset", 340);
 }
 
 //-----------------------------------------------------------------------------
@@ -515,4 +588,6 @@ function AssetAdmin::close(%this)
 
 	%this.assetScene.setScenePause(true);
 	%this.isOpen = false;
+
+	EditorCore.setEditorMenus("");
 }

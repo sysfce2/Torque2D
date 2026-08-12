@@ -254,6 +254,23 @@ public:
    /// Removes a specific dialog control
    /// @param   gui   Dialog to remove from the dialog stack
    virtual void popDialogControl(GuiControl *gui);
+
+   /// Throws away the accelerator table and walks the topmost control to build it
+   /// again.
+   ///
+   /// Pushing and popping a dialog do this for themselves, and for a long time
+   /// they were the only things that ever changed which controls were on show.
+   /// They are not any more: the editor swaps whole menus in and out of its menu
+   /// bar when the open editor changes, and nothing about that touches the dialog
+   /// stack. Without this the menus that just arrived have dead shortcuts and the
+   /// ones that just left still have live ones - the table holds raw pointers and
+   /// is not filtered by whether a control is still parented, active or visible.
+   void rebuildAcceleratorMap();
+
+   /// How many accelerators the canvas is currently listening for. There is no
+   /// way to ask which one is which; this exists so a test can see that a rebuild
+   /// changed something, since nothing else about the table is observable.
+   inline U32 getAcceleratorCount() const { return (U32)mAcceleratorMap.size(); }
    ///@}
 
    /// This turns on/off front-buffer rendering

@@ -55,11 +55,6 @@ function GuiEditorUndoRecorder::onAdd(%this)
 	%this.hierCtrlCount = 0;
 	%this.watchCount = 0;
 	%this.replayTouched = "";
-
-	// What the Edit menu was last told, so a run of nudges does not walk the
-	// whole menu tree once per key.
-	%this.menuUndo = -1;
-	%this.menuRedo = -1;
 }
 
 function GuiEditorUndoRecorder::onRemove(%this)
@@ -1019,34 +1014,14 @@ function GuiEditorUndoRecorder::redoCount(%this)
 	return isObject(%manager) ? %manager.getRedoCount() : 0;
 }
 
-// setMenuActive walks the whole menu tree by item text and re-applies every
-// item's profile, so it is worth knowing what it was last told: a run of
-// nudges would otherwise do that once per key press.
+// Called on every recorded change, which is often - a run of nudges is one per
+// key press. That used to be worth caching against, because greying an item meant
+// walking the whole menu tree by item text and re-applying every item's profile.
+// The set holds the two items by handle now, and this is two flag writes.
 function GuiEditorUndoRecorder::refreshMenu(%this)
 {
-	%undo = %this.undoCount();
-	%redo = %this.redoCount();
-
-	if(%undo == %this.menuUndo && %redo == %this.menuRedo)
+	if(isObject(%this.owner) && isObject(%this.owner.menus))
 	{
-		return;
+		%this.owner.menus.refreshUndo(%this.undoCount(), %this.redoCount());
 	}
-
-	%this.menuUndo = %undo;
-	%this.menuRedo = %redo;
-
-	if(isObject(EditorCore) && isObject(EditorCore.menuBar))
-	{
-		EditorCore.menuBar.setMenuActive("Undo", %undo > 0);
-		EditorCore.menuBar.setMenuActive("Redo", %redo > 0);
-	}
-}
-
-// The menu is rebuilt-looking every time the editor is opened, and the cache
-// above would otherwise decide there was nothing to say.
-function GuiEditorUndoRecorder::forceRefreshMenu(%this)
-{
-	%this.menuUndo = -1;
-	%this.menuRedo = -1;
-	%this.refreshMenu();
 }
