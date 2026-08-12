@@ -154,34 +154,6 @@ void AnimationAsset::onAssetRefresh( void )
 
 //------------------------------------------------------------------------------
 
-void AnimationAsset::copyTo(SimObject* object)
-{
-    // Call to parent.
-    Parent::copyTo(object);
-
-    // Cast to asset.
-    AnimationAsset* pAsset = static_cast<AnimationAsset*>(object);
-
-    // Sanity!
-    AssertFatal(pAsset != NULL, "AnimationAsset::copyTo() - Object is not the correct type.");
-
-    // Copy state.
-    pAsset->setImage( getImage().getAssetId() );
-
-    // Are we in named cells mode?
-    if ( !pAsset->getNamedCellsMode() )
-        pAsset->setAnimationFrames( Con::getData( TypeS32Vector, (void*)&getSpecifiedAnimationFrames(), 0 ) );
-    else
-        pAsset->setNamedAnimationFrames( Con::getData( TypeStringTableEntryVector, (void*)&getSpecifiedNamedAnimationFrames(), 0 ) );
-
-    pAsset->setAnimationTime( getAnimationTime() );
-    pAsset->setAnimationCycle( getAnimationCycle() );
-    pAsset->setRandomStart( getRandomStart() );
-    pAsset->setNamedCellsMode( getNamedCellsMode() );
-}
-
-//------------------------------------------------------------------------------
-
 void AnimationAsset::setImage( const char* pAssetId )
 {
     // Ignore no change.
@@ -204,6 +176,35 @@ void AnimationAsset::setAnimationFrames( const char* pAnimationFrames )
 {
     // Debug Profiling.
     PROFILE_SCOPE(AnimationAsset_SetAnimationFrames);
+
+    // Ignore no change, as every setter on AssetBase already does.
+    //
+    // This one did not, so writing the same frame list back counted as a change:
+    // it announced itself, marked the asset unsaved, and -- once the Asset Manager
+    // started recording undo -- left a step that put nothing back. The mode is
+    // part of the comparison because this setter also clears named-cells mode, so
+    // an identical list still has work to do if that mode is on.
+    if ( !mNamedCellsMode )
+    {
+        const U32 currentCount = StringUnit::getUnitCount( pAnimationFrames, " \t\n" );
+
+        if ( currentCount == (U32)mAnimationFrames.size() )
+        {
+            bool changed = false;
+
+            for( U32 frameIndex = 0; frameIndex < currentCount; ++frameIndex )
+            {
+                if ( dAtoi( StringUnit::getUnit( pAnimationFrames, frameIndex, " \t\n" ) ) != mAnimationFrames[frameIndex] )
+                {
+                    changed = true;
+                    break;
+                }
+            }
+
+            if ( !changed )
+                return;
+        }
+    }
 
     // Clear any existing frames.
     mAnimationFrames.clear();
@@ -229,19 +230,51 @@ void AnimationAsset::setAnimationFrames( const char* pAnimationFrames )
 
 //------------------------------------------------------------------------------
 
+// The comma is not decoration. This field is a TypeStringTableEntryVector, and
+// that type's getter -- the one TAML writes through, and the one copyFieldsFrom
+// reads through -- joins its entries with commas (consoleTypes.cc, ConsoleGetType
+// for TypeStringTableEntryVector). Splitting on whitespace alone meant everything
+// that was written came back as a single frame named "head,body,tail": a named
+// cells animation did not survive being saved and loaded, nor being copied.
+//
+// Numbered frames never had the problem, because TypeS32Vector's getter joins
+// with spaces, which is what the sibling setter below already splits on.
 void AnimationAsset::setNamedAnimationFrames( const char* pAnimationFrames )
 {
+    // Ignore no change, for the same reason as the numbered setter above.
+    if ( mNamedCellsMode )
+    {
+        const U32 currentCount = StringUnit::getUnitCount( pAnimationFrames, " \t\n," );
+
+        if ( currentCount == (U32)mNamedAnimationFrames.size() )
+        {
+            bool changed = false;
+
+            for( U32 frameIndex = 0; frameIndex < currentCount; ++frameIndex )
+            {
+                if ( StringTable->insert( StringUnit::getUnit( pAnimationFrames, frameIndex, " \t\n," ) ) != mNamedAnimationFrames[frameIndex] )
+                {
+                    changed = true;
+                    break;
+                }
+            }
+
+            if ( !changed )
+                return;
+        }
+    }
+
     // Clear any existing frames.
     mNamedAnimationFrames.clear();
 
     // Fetch frame count.
-    const U32 frameCount = StringUnit::getUnitCount( pAnimationFrames, " \t\n" );
+    const U32 frameCount = StringUnit::getUnitCount( pAnimationFrames, " \t\n," );
 
     // Iterate frames.
     for( U32 frameIndex = 0; frameIndex < frameCount; ++frameIndex )
     {
         // Store frame.
-        mNamedAnimationFrames.push_back( StringTable->insert( StringUnit::getUnit( pAnimationFrames, frameIndex, " \t\n" ) ) );
+        mNamedAnimationFrames.push_back( StringTable->insert( StringUnit::getUnit( pAnimationFrames, frameIndex, " \t\n," ) ) );
     }
 
     mNamedCellsMode = true;

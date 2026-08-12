@@ -270,53 +270,57 @@ void ImageAsset::setImageFile( const char* pImageFile )
 
 //------------------------------------------------------------------------------
 
-void ImageAsset::copyTo(SimObject* object)
+// The two things about an image that no persist field describes: the explicit
+// cells and the image layers. Both are written as TAML custom nodes, so the
+// generic field copy in AssetBase::copyTo cannot see either of them.
+//
+// Neither loop redraws. insertLayer only loads a layer's bitmap when the target
+// is owned, so a copy into an unowned scratch object touches no texture at all
+// -- which is what lets a snapshot be taken with no GL context. A copy onto a
+// live asset does want the composite rebuilt, so that happens once, at the end,
+// rather than once per layer.
+void ImageAsset::copyAssetStateTo( AssetBase* pTarget )
 {
-    // Call to parent.
-    Parent::copyTo(object);
-
     // Cast to asset.
-    ImageAsset* pAsset = static_cast<ImageAsset*>(object);
+    ImageAsset* pAsset = dynamic_cast<ImageAsset*>( pTarget );
 
     // Sanity!
-    AssertFatal(pAsset != NULL, "ImageAsset::copyTo() - Object is not the correct type.");
+    AssertFatal( pAsset != NULL, "ImageAsset::copyAssetStateTo() - Object is not the correct type." );
 
-    // Copy state.
-    pAsset->setImageFile( getImageFile() );
-    pAsset->setForce16Bit( getForce16Bit() );
-    pAsset->setFilterMode( getFilterMode() );
-    pAsset->setExplicitMode( getExplicitMode() );
-    pAsset->setCellRowOrder( getCellRowOrder() );
-    pAsset->setCellOffsetX( getCellCountX() );
-    pAsset->setCellOffsetY( getCellCountY() );
-    pAsset->setCellStrideX( getCellStrideX() );
-    pAsset->setCellStrideY( getCellStrideY() );
-    pAsset->setCellCountX( getCellCountX() );
-    pAsset->setCellCountY( getCellCountY() );
-    pAsset->setCellWidth( getCellWidth() );
-    pAsset->setCellHeight( getCellHeight() );
-
-    // Finish if not in explicit mode.
-    if ( !getExplicitMode() )
-        return;
-
-    // Fetch the explicit cell count.
-    const S32 explicitCellCount = getExplicitCellCount();
-
-    // Finish if no explicit cells exist.
-    if ( explicitCellCount == 0 )
-        return;
-
-    // Copy explicit cells.
+    // Copy the explicit cells. Note this happens whatever ExplicitMode says: the
+    // cells outlive being switched out of explicit mode, and a copy that dropped
+    // them would quietly destroy the user's work the moment they toggled it off.
     pAsset->clearExplicitCells();
+    const S32 explicitCellCount = getExplicitCellCount();
     for( S32 index = 0; index < explicitCellCount; ++index )
     {
         // Fetch the cell pixel area.
-        const FrameArea::PixelArea& pixelArea = getImageFrameArea( index ).mPixelArea;
+        const FrameArea::PixelArea& pixelArea = mExplicitFrames[index];
 
         // Add the explicit cell.
         pAsset->addExplicitCell( pixelArea.mPixelOffset.x, pixelArea.mPixelOffset.y, pixelArea.mPixelWidth, pixelArea.mPixelHeight, pixelArea.mRegionName );
     }
+
+    // Copy the image layers. Layer zero is the base image, made from ImageFile
+    // and BlendColor, so it is never copied -- insertLayer builds it.
+    while( pAsset->getLayerCount() > 0 )
+        pAsset->removeLayer( 1, false );
+
+    const U32 layerCount = mImageLayers.size();
+    for( U32 index = 1; index < layerCount; ++index )
+    {
+        const ImageLayer& layer = mImageLayers[index];
+        pAsset->addLayer( layer.mImageFile, layer.mPosition, layer.mBlendColor, false );
+    }
+
+    // The base layer is built by the first insertLayer above, from whatever
+    // BlendColor the field copy already wrote, so it only needs setting when
+    // there were layers to build it.
+    if ( layerCount > 0 )
+        pAsset->setBlendColor( getBlendColor(), false );
+
+    // One rebuild, and only for a live asset.
+    pAsset->completeLayerChange( pAsset->getOwned() );
 }
 
 //------------------------------------------------------------------------------

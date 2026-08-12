@@ -375,6 +375,22 @@ function AssetLibraryWindow::onAssetRefreshed(%this, %assetID)
 	}
 }
 
+// An asset gained or lost unsaved changes. Only the tile's caption is affected --
+// no re-sort and no re-filter, because the mark is not part of the name anything
+// is sorted or searched by.
+function AssetLibraryWindow::onAssetDirtyChanged(%this, %assetID)
+{
+	for(%i = 0; %i < %this.dictionaryCount; %i++)
+	{
+		%button = %this.dictionary[%i].getButton(%assetID);
+		if(isObject(%button))
+		{
+			%button.refreshDirtyMark();
+			return;
+		}
+	}
+}
+
 function AssetLibraryWindow::unloadAssets(%this)
 {
 	for(%i = 0; %i < %this.dictionaryCount; %i++)

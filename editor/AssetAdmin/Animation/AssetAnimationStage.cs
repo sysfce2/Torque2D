@@ -545,19 +545,26 @@ function AssetAnimationStage::commitFrames(%this, %frames)
 	// sprite has already forgotten where it was.
 	%this.resumeSlot = isObject(%this.previewSprite) ? %this.previewSprite.getAnimationFrame() : -1;
 
-	// Guarded because the write comes straight back: every asset setter ends in
-	// refreshAsset, which rewrites the .animation.taml and fires onRefresh
-	// synchronously, inside this call.
+	// One transaction around both writes. Keep Frame Rate makes this path change
+	// the asset twice for a single thing the user did, and two undo steps for one
+	// dropped frame is two presses of undo to put it back.
+	AssetAdmin.undoRecorder.begin("Set Frames");
+
+	// Guarded because the change comes straight back: every asset setter ends in
+	// refreshAsset, which announces the change and fires onRefresh synchronously,
+	// inside this call.
 	%this.committing = true;
 	%this.animationAsset.setAnimationFrames(%frames);
 	%this.committing = false;
 
-	// Before the slot is forgotten, because this writes the asset a second time
-	// and every write restarts playback. Cleared only once BOTH are done, so the
+	// Before the slot is forgotten, because this changes the asset a second time
+	// and every change restarts playback. Cleared only once BOTH are done, so the
 	// one remembered slot covers the pair -- forgetting it in between left the
 	// second refresh with nothing to restore, and the preview back at frame zero
 	// after every edit.
 	%this.keepFrameRate(%before);
+
+	AssetAdmin.undoRecorder.end();
 
 	%this.resumeSlot = -1;
 }
@@ -671,8 +678,12 @@ function AssetAnimationStage::openRangeDialog(%this)
 		return;
 	}
 
+	// Six fields over three rows is 150, the answer line is 90 with room to grow
+	// into, and the buttons want 34 and a margin at the bottom. Plus the 34 the
+	// title bar and border take out of the window before the content sees any of
+	// it.
 	%width = 460;
-	%height = 260;
+	%height = 340;
 
 	%dialog = new GuiControl()
 	{
@@ -680,6 +691,7 @@ function AssetAnimationStage::openRangeDialog(%this)
 		superclass = "EditorDialog";
 		dialogSize = (%width + 8) SPC (%height + 8);
 		dialogCanClose = true;
+		dialogResizable = false;
 		dialogText = "Frame Range";
 		stage = %this;
 	};

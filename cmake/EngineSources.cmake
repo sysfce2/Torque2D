@@ -342,6 +342,7 @@ set(TORQUE_ENGINE_SOURCES
     # ---- testing ----
     ${TORQUE_SRC}/testing/unitTesting.cc
     # ---- testing/tests ----
+    ${TORQUE_SRC}/testing/tests/assetStateCopyTests.cc
     ${TORQUE_SRC}/testing/tests/guiControlReparentTests.cc
     ${TORQUE_SRC}/testing/tests/guiCursorHotSpotTests.cc
     ${TORQUE_SRC}/testing/tests/guiFrameStripLayoutTests.cc

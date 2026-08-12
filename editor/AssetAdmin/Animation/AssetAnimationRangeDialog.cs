@@ -68,10 +68,12 @@ function AssetAnimationRangeDialog::init(%this, %width, %height)
 	%this.pingPongBox = %form.createCheckboxItem(%item);
 
 	%item = %form.addFormItem("Mode", %half SPC 30);
+	// addItem, not add. GuiControl::add is what was being called here -- it takes a
+	// CONTROL and puts it inside this one -- so the list stayed empty, the box
+	// read "none", and the second choice could not be picked at all.
 	%this.modeDropDown = %form.createDropDownItem(%item);
-	%this.modeDropDown.add("Append to the timeline", 0);
-	%this.modeDropDown.add("Replace the timeline", 1);
-	%this.modeDropDown.setSelected(0);
+	%this.modeDropDown.addItem("Append to the timeline");
+	%this.modeDropDown.addItem("Replace the timeline");
 
 	%content.add(%form);
 
@@ -86,12 +88,19 @@ function AssetAnimationRangeDialog::init(%this, %width, %height)
 	%this.pingPongBox.Command = %command;
 	%this.modeDropDown.Command = %command;
 
+	// Below whatever the form actually came out as, rather than below a number
+	// written here: the grid decides its own height from how many rows six items
+	// make, and a seventh field would silently land underneath this.
+	%formBottom = getWord(%form.getPosition(), 1) + getWord(%form.getExtent(), 1);
+
+	// The answer line. textExtend grows it downward for a long answer, which is
+	// why the buttons sit well clear of where it starts rather than just under it.
 	%this.feedback = new GuiControl()
 	{
-		HorizSizing = "right";
-		VertSizing = "bottom";
-		Position = "12 168";
-		Extent = (%width - 24) SPC 70;
+		HorizSizing = "width";
+		VertSizing = "anchorTop";
+		Position = "12" SPC (%formBottom + 8);
+		Extent = (%width - 24) SPC 90;
 		text = "";
 		textWrap = true;
 		textExtend = true;
@@ -99,11 +108,16 @@ function AssetAnimationRangeDialog::init(%this, %width, %height)
 	ThemeManager.setProfile(%this.feedback, "infoProfile");
 	%content.add(%this.feedback);
 
+	// Measured from the room the content actually has, not from the dialog's own
+	// height -- the title bar and border take 34 of it, and buttons placed
+	// without allowing for that fall off the bottom.
+	%bottom = %this.contentHeight() - 12;
+
 	%this.cancelButton = new GuiButtonCtrl()
 	{
-		HorizSizing = "right";
-		VertSizing = "bottom";
-		Position = (%width - 222) SPC (%height - 42);
+		HorizSizing = "anchorRight";
+		VertSizing = "anchorBottom";
+		Position = (%width - 222) SPC (%bottom - 32);
 		Extent = "100 30";
 		Text = "Cancel";
 		Command = %this.getID() @ ".onClose();";
@@ -113,15 +127,21 @@ function AssetAnimationRangeDialog::init(%this, %width, %height)
 
 	%this.applyButton = new GuiButtonCtrl()
 	{
-		HorizSizing = "right";
-		VertSizing = "bottom";
-		Position = (%width - 112) SPC (%height - 44);
+		HorizSizing = "anchorRight";
+		VertSizing = "anchorBottom";
+		Position = (%width - 112) SPC (%bottom - 34);
 		Extent = "100 34";
 		Text = "Apply";
 		Command = %this.getID() @ ".onApply();";
 	};
 	ThemeManager.setProfile(%this.applyButton, "primaryButtonProfile");
 	%content.add(%this.applyButton);
+
+	// Down here with the rest of the starting values, and not beside the add()s
+	// that fill the list, because a drop down that has not been added to anything
+	// yet is not awake -- and the selection made on it then does not stick. The
+	// list showed "none" until the user opened it.
+	%this.modeDropDown.setSelected(0);
 
 	%this.startBox.setText(0);
 	%this.endBox.setText(mGetMax(0, %this.imageFrameCount() - 1));
@@ -141,9 +161,11 @@ function AssetAnimationRangeDialog::imageFrameCount(%this)
 	return %this.stage.imageAsset.getFrameCount();
 }
 
+// getSelectedItem, not getSelected: the latter is not a method on a drop down at
+// all, so this always answered "append" and Replace was unreachable.
 function AssetAnimationRangeDialog::mode(%this)
 {
-	return (%this.modeDropDown.getSelected() == 1) ? "replace" : "append";
+	return (%this.modeDropDown.getSelectedItem() == 1) ? "replace" : "append";
 }
 
 function AssetAnimationRangeDialog::validate(%this)

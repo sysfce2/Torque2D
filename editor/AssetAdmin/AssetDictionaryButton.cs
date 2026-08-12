@@ -36,12 +36,20 @@ $AssetDictionaryButton::gridCaption = 34;
 $AssetDictionaryButton::rowArt = 28;
 $AssetDictionaryButton::rowTextLeft = 36;
 
+// The square badge in the corner that says an asset has unsaved changes.
+$AssetDictionaryButton::dirtyMark = 16;
+
 function AssetDictionaryButton::onAdd(%this)
 {
 	%this.buildSearchKey();
 	%this.buildCaption();
+	%this.buildDirtyMark();
 
 	%this.call("load" @ %this.type, %this.assetID);
+
+	// The asset may already have unsaved changes -- a tile built by a duplicate,
+	// or the library being reopened on a project left mid-edit.
+	%this.refreshDirtyMark();
 
 	if(%this.viewMode $= "")
 	{
@@ -86,6 +94,43 @@ function AssetDictionaryButton::refreshKeys(%this)
 
 	%this.caption.setText(%this.assetName);
 	%this.Tooltip = %this.assetName;
+}
+
+// The badge that says this asset has changes that have not been saved.
+//
+// A control of its own rather than an asterisk on the end of the caption, so that
+// the mark never becomes part of the name: the library is searched and sorted by
+// what the caption holds, and a name that grows a " *" is a name that sorts
+// somewhere else and stops matching a search for itself.
+//
+// UseInput is off so it cannot swallow the click that selects the tile it sits on.
+function AssetDictionaryButton::buildDirtyMark(%this)
+{
+	%size = $AssetDictionaryButton::dirtyMark;
+
+	%this.dirtyMark = new GuiControl()
+	{
+		HorizSizing = "anchorRight";
+		VertSizing = "anchorTop";
+		Position = "0 0";
+		Extent = %size SPC %size;
+		MinExtent = "0 0";
+		Text = "*";
+		UseInput = false;
+		Visible = false;
+	};
+	ThemeManager.setProfile(%this.dirtyMark, "impactProfile");
+	%this.add(%this.dirtyMark);
+}
+
+// The asset's unsaved state changed. Only the badge appears or goes; nothing
+// about the tile's placement, its caption or its keys depends on it.
+function AssetDictionaryButton::refreshDirtyMark(%this)
+{
+	if(isObject(%this.dirtyMark))
+	{
+		%this.dirtyMark.setVisible(AssetDatabase.isAssetDirty(%this.assetID));
+	}
 }
 
 function AssetDictionaryButton::buildCaption(%this)
@@ -227,13 +272,14 @@ function AssetDictionaryButton::setViewMode(%this, %mode)
 {
 	%this.viewMode = %mode;
 
-	if(!isObject(%this.icon) || !isObject(%this.caption))
+	if(!isObject(%this.icon) || !isObject(%this.caption) || !isObject(%this.dirtyMark))
 	{
 		return;
 	}
 
 	%w = getWord(%this.getExtent(), 0);
 	%h = getWord(%this.getExtent(), 1);
+	%mark = $AssetDictionaryButton::dirtyMark;
 
 	if(%mode $= "rows")
 	{
@@ -245,13 +291,19 @@ function AssetDictionaryButton::setViewMode(%this, %mode)
 		%this.icon.setExtent(%art, %art);
 		%this.icon.setPosition(4, (%h - %art) / 2);
 
+		// The caption stops short of the badge rather than running under it: a row
+		// is one line of text with nothing above it to move the mark out of.
 		%this.caption.HorizSizing = "width";
 		%this.caption.VertSizing = "center";
-		%this.caption.setExtent(%w - %left - 4, %art);
+		%this.caption.setExtent(%w - %left - 8 - %mark, %art);
 		%this.caption.setPosition(%left, (%h - %art) / 2);
 		%this.caption.align = "left";
 		%this.caption.vAlign = "middle";
 		%this.caption.textWrap = false;
+
+		%this.dirtyMark.VertSizing = "center";
+		%this.dirtyMark.setExtent(%mark, %mark);
+		%this.dirtyMark.setPosition(%w - %mark - 4, (%h - %mark) / 2);
 	}
 	else
 	{
@@ -266,14 +318,25 @@ function AssetDictionaryButton::setViewMode(%this, %mode)
 		%this.caption.applySizing();
 
 		// And that fill is how the button's own border inset gets measured: what
-		// the caption reports back after filling IS the content rect.
+		// the caption reports back after filling IS the content rect, and where it
+		// sits IS that rect's origin.
+		%innerW = getWord(%this.caption.getExtent(), 0);
 		%innerH = getWord(%this.caption.getExtent(), 1);
+		%innerX = getWord(%this.caption.getPosition(), 0);
+		%innerY = getWord(%this.caption.getPosition(), 1);
 
 		%this.icon.HorizSizing = "center";
 		%this.icon.VertSizing = "anchorTop";
 		%this.icon.setExtent(%art, %art);
 		%this.icon.setPosition(0, (%innerH - %band - %art) / 2);
 		%this.icon.applySizing();
+
+		// Hard into the top right of the content rect, over the corner of the
+		// picture. Measured from the caption rather than from the button's own
+		// extent so the badge lands inside the border rather than under it.
+		%this.dirtyMark.VertSizing = "anchorTop";
+		%this.dirtyMark.setExtent(%mark, %mark);
+		%this.dirtyMark.setPosition(%innerX + %innerW - %mark, %innerY);
 	}
 }
 

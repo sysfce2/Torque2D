@@ -162,23 +162,6 @@ void FontAsset::setFontFile( const char* pFontFile )
 
 //------------------------------------------------------------------------------
 
-void FontAsset::copyTo(SimObject* object)
-{
-    // Call to parent.
-    Parent::copyTo(object);
-
-    // Cast to asset.
-    FontAsset* pAsset = static_cast<FontAsset*>(object);
-
-    // Sanity!
-    AssertFatal(pAsset != NULL, "FontAsset::copyTo() - Object is not the correct type.");
-
-    // Copy state.
-    pAsset->setFontFile( getFontFile() );
-}
-
-//------------------------------------------------------------------------------
-
 void FontAsset::initializeAsset( void )
 {
     // Call parent.

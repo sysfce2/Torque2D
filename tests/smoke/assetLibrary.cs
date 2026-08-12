@@ -191,6 +191,18 @@ function alStep1()
 	// Before anything can toggle a view and write one.
 	EditorPreferences.path = testRoot("shots/assetLibrarySmokePrefs.taml");
 
+	// And after something has already READ one. AssetLibraryWindow::onAdd takes
+	// its view mode from the preferences when the editor module loads, which is
+	// before the redirect above -- from the tester's own file, in their real
+	// application data folder. So a developer who last left the library in rows
+	// mode failed the "starts in grid mode" check below, on their machine only,
+	// for reasons nothing in this file mentioned.
+	//
+	// Put it back to the documented default. What the checks below are actually
+	// worth is that the tile LAYOUT matches the mode, and that survives this.
+	EditorPreferences.set("assetLibraryViewMode", "grid");
+	AssetAdmin.libWindow.setViewMode("grid");
+
 	alCheck("fixture asset module registered", alLoadFixtureAssets());
 
 	// Pages register in load order: EditorConsole, ProjectManager, AssetAdmin,

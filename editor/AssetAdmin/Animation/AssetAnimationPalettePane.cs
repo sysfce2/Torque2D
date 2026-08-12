@@ -70,9 +70,9 @@ function AssetAnimationPalettePane::onAdd(%this)
 		showArrowButtons = true;
 	};
 	ThemeManager.setProfile(%this.scroller, "scrollingPanelProfile");
-	ThemeManager.setProfile(%this.scroller, "tinyThumbProfile", "ThumbProfile");
-	ThemeManager.setProfile(%this.scroller, "tinyTrackProfile", "TrackProfile");
-	ThemeManager.setProfile(%this.scroller, "tinyScrollArrowProfile", "ArrowProfile");
+	ThemeManager.setProfile(%this.scroller, "scrollingPanelThumbProfile", "ThumbProfile");
+	ThemeManager.setProfile(%this.scroller, "scrollingPanelTrackProfile", "TrackProfile");
+	ThemeManager.setProfile(%this.scroller, "scrollingPanelArrowProfile", "ArrowProfile");
 	%this.add(%this.scroller);
 
 	// No class= on the grid. The C++ class owns that namespace, and setting class

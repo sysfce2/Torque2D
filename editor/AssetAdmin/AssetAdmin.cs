@@ -42,6 +42,13 @@ function AssetAdmin::create(%this)
 	exec("./Inspector/exec.cs");
 	exec("./Animation/exec.cs");
 	exec("./AssetPreviewSprite.cs");
+	exec("./AssetUndoRecorder.cs");
+	exec("./DuplicateAssetDialog.cs");
+	exec("./AssetAdminConfirmSaveDialog.cs");
+
+	// Undo, redo and the record of what is unsaved. Built before the inspector,
+	// which asks it what to grey out as soon as it has a document bar.
+	%this.undoRecorder = new ScriptObject() { class = "AssetUndoRecorder"; };
 
 	%this.guiPage = EditorCore.RegisterEditor("Asset Manager", %this);
 	%this.content = %this.createFrameSet();
@@ -392,6 +399,11 @@ function AssetAdmin::destroy(%this)
 	{
 		%this.frameRange.delete();
 	}
+	// Its onRemove drops every snapshot it is holding.
+	if(isObject(%this.undoRecorder))
+	{
+		%this.undoRecorder.delete();
+	}
 }
 
 function AssetAdmin::open(%this)
@@ -400,6 +412,96 @@ function AssetAdmin::open(%this)
 
 	%this.assetScene.setScenePause(false);
 	%this.isOpen = true;
+}
+
+//-----------------------------------------------------------------------------
+// Unsaved assets.
+//
+// Any number of assets can be left unsaved at once, and switching between them --
+// or away from the Asset Manager entirely -- deliberately does not ask about it.
+// That is the point: trying a particle out, going to look at the image it uses,
+// and coming back should not cost three dialogs.
+//
+// The question is asked once, at the moments the work would actually be lost:
+// closing the project and leaving the application. See EditorCore::guardedCommand.
+//
+// The window's X cannot ask. quit() is posted straight from the window procedure
+// with no script in between, and onPreExit runs inside shutdown, long past the
+// point where a dialog could be shown. The Gui Editor has always had the same
+// hole; it is not one this can close from here.
+//-----------------------------------------------------------------------------
+
+function AssetAdmin::hasUnsavedAssets(%this)
+{
+	return AssetDatabase.getDirtyAssetCount() > 0;
+}
+
+function AssetAdmin::saveAllAssets(%this)
+{
+	// Compiled before saving, because saving is what takes them off the list.
+	%query = new AssetQuery();
+	AssetDatabase.findAssetDirty(%query, true);
+
+	%count = %query.getCount();
+	for(%i = 0; %i < %count; %i++)
+	{
+		%assetId = %query.getAsset(%i);
+
+		if(AssetDatabase.saveAsset(%assetId))
+		{
+			%this.undoRecorder.onAssetSaved(%assetId);
+		}
+	}
+
+	%query.delete();
+
+	%this.inspector.refreshDocumentBar();
+}
+
+// Ask about the unsaved assets, then hand %command on to whatever guards after
+// this one.
+function AssetAdmin::guardAssets(%this, %command)
+{
+	%this.pendingCommand = %command;
+
+	%count = AssetDatabase.getDirtyAssetCount();
+	%noun = (%count == 1) ? "asset has" : "assets have";
+
+	// The message line is 64 with room to grow into, and the buttons want 34 and a
+	// margin. Plus the 34 the title bar and border take out of the window before
+	// the content sees any of it.
+	%width = 460;
+	%height = 170;
+	%dialog = new GuiControl()
+	{
+		class = "AssetAdminConfirmSaveDialog";
+		superclass = "EditorDialog";
+		dialogSize = (%width + 8) SPC (%height + 8);
+		dialogCanClose = true;
+		dialogResizable = false;
+		dialogText = "Unsaved Assets";
+		message = %count SPC %noun SPC "changes that have not been saved.";
+	};
+	%dialog.init(%width, %height);
+
+	Canvas.pushDialog(%dialog);
+}
+
+// Carry on with what the user originally asked for.
+function AssetAdmin::runPendingCommand(%this)
+{
+	%command = %this.pendingCommand;
+	%this.pendingCommand = "";
+
+	if(%command !$= "")
+	{
+		EditorCore.guardedCommandAfterAssets(%command);
+	}
+}
+
+function AssetAdmin::dropPendingCommand(%this)
+{
+	%this.pendingCommand = "";
 }
 
 function AssetAdmin::close(%this)

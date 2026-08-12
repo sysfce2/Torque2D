@@ -63,9 +63,9 @@ function AssetAnimationTimelinePane::onAdd(%this)
 		showArrowButtons = true;
 	};
 	ThemeManager.setProfile(%this.scroller, "scrollingPanelProfile");
-	ThemeManager.setProfile(%this.scroller, "tinyThumbProfile", "ThumbProfile");
-	ThemeManager.setProfile(%this.scroller, "tinyTrackProfile", "TrackProfile");
-	ThemeManager.setProfile(%this.scroller, "tinyScrollArrowProfile", "ArrowProfile");
+	ThemeManager.setProfile(%this.scroller, "scrollingPanelThumbProfile", "ThumbProfile");
+	ThemeManager.setProfile(%this.scroller, "scrollingPanelTrackProfile", "TrackProfile");
+	ThemeManager.setProfile(%this.scroller, "scrollingPanelArrowProfile", "ArrowProfile");
 	%this.add(%this.scroller);
 
 	// The mirror of the palette: "fill" down the axis whose bar is alwaysOff, so
@@ -186,10 +186,16 @@ function AssetAnimationTimelinePane::onControlDropped(%this, %payload, %position
 		return;
 	}
 
-	if(%this.strip.insertFrameAtPoint(%cursor, %payload.frameIndex))
-	{
-		%this.commitFrames();
-	}
+	// Deliberately no commitFrames() here. insertFrameAtPoint announces the change
+	// itself -- notifyFramesChanged fires onFramesChanged, which comes straight
+	// back to this pane's commitFrames -- so committing again wrote the asset
+	// twice for one dropped frame. That was invisible while a change just rewrote
+	// the same file; with undo it is a step that puts nothing back, so a dropped
+	// frame took two presses of undo to remove and left a dead redo behind it.
+	//
+	// insertFrame (the plain one the palette click uses) does NOT announce, which
+	// is why appendFrame above still has to.
+	%this.strip.insertFrameAtPoint(%cursor, %payload.frameIndex);
 }
 
 // The middle of the payload, which is where the cursor is holding it.

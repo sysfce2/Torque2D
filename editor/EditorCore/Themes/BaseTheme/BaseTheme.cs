@@ -2077,6 +2077,19 @@ function BaseTheme::makeTextDisplayProfile(%this)
 		borderRight = %spacerBorder;
 		borderBottom = %spacerBorder;
 	};
+
+	%this.impactProfile = new GuiControlProfile()
+	{
+		fillColor = %this.color5;
+		fontType = %this.font[3];
+		fontDirectory = %this.fontDirectory;
+		fontSize = 16;
+		fontColor = %this.color1;
+		align = "center";
+		vAlign = "middle";
+
+		borderDefault = %this.emptyBorder;
+	};
 }
 
 function BaseTheme::makeGuiEditorProfile(%this)

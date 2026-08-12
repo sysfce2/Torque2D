@@ -421,7 +421,13 @@ function AssetInspectorPane::commitValue(%this, %field, %value)
 		return;
 	}
 
-	// The write lands in refreshAsset, which comes straight back at
+	// Name the undo step after the field being changed, so the tooltip reads
+	// "Undo Cell Width" rather than "Undo Edit". Only the paths that know what
+	// they did can do this; a particle graph drag happens entirely in C++ and gets
+	// the generic name.
+	AssetAdmin.undoRecorder.setLabel(%field);
+
+	// The change lands in refreshAsset, which comes straight back at
 	// onAssetRefreshed. The values here are already what the asset holds, so the
 	// bounce has nothing to say; what follows it does.
 	%this.committing = true;

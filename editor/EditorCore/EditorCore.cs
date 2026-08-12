@@ -481,14 +481,35 @@ function EditorCore::close(%this)
 	}
 }
 
-// Run %command, unless there is a Gui being authored with changes in it - in
-// which case the Gui Editor asks about those first and runs it afterwards, or
-// not at all. Used by Close Project and Exit, which are the two commands in this
-// menu that discard a document without being able to give it back.
+// Run %command, unless an editor is holding something the command would discard
+// without being able to give it back. Used by Close Project and Exit.
 //
-// The Gui Editor is the only editor with a document to lose. If another ever
-// grows one, this is where it joins in.
+// Two editors have something to lose now, and they are asked one at a time. Each
+// guard either runs what it was given or takes the decision away and hands it on
+// once the user has answered, so the chain reads:
+//
+//   guardedCommand              the Asset Manager's unsaved assets, then...
+//   guardedCommandAfterAssets   the Gui Editor's unsaved document, then...
+//   eval                        the command itself
+//
+// A third editor with a document joins at the front of that chain, not by being
+// added to a list: the answers are not interchangeable, and each guard needs to
+// name the one that follows it.
 function EditorCore::guardedCommand(%this, %command)
+{
+	if(isObject(AssetAdmin) && AssetAdmin.hasUnsavedAssets())
+	{
+		AssetAdmin.guardAssets(%command);
+		return;
+	}
+
+	%this.guardedCommandAfterAssets(%command);
+}
+
+// The rest of the chain, once the Asset Manager has been dealt with. Discarding
+// unsaved assets comes back in here rather than at the top, because the assets
+// are still unsaved and asking again would never end.
+function EditorCore::guardedCommandAfterAssets(%this, %command)
 {
 	if(isObject(GuiEditor))
 	{

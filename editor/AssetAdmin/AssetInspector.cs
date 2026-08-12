@@ -82,6 +82,31 @@ function AssetInspector::onAdd(%this)
 	%this.emitterButtonBar.addButton("MoveEmitterForward", $EditorIcon::rnd_br_down, "Move Emitter Forward", "getMoveEmitterForwardEnabled");
 	%this.emitterButtonBar.addButton("RemoveEmitter", $EditorIcon::round_delete, "Remove Emitter", "getRemoveEmitterEnabled");
 
+	// What the user does to a whole asset rather than to a field of one: save the
+	// changes, throw them away, branch them, or step through them.
+	//
+	// Five 24 pixel buttons at 4 apart is 136 wide, and it sits to the LEFT of the
+	// delete button, which is itself pinned to the right edge. The emitter bar
+	// starts at 340 and runs to about 448, so there is room for both.
+	%this.documentButtonBar = new GuiChainCtrl()
+	{
+		Class = "EditorButtonBar";
+		HorizSizing = "left";
+		Position = "514 5";
+		Extent = "0 24";
+		ChildSpacing = 4;
+		IsVertical = false;
+		Tool = %this;
+		Visible = false;
+	};
+	ThemeManager.setProfile(%this.documentButtonBar, "emptyProfile");
+	%this.add(%this.documentButtonBar);
+	%this.documentButtonBar.addButton("SaveAsset", $EditorIcon::save, "Save Asset", "getSaveAssetEnabled");
+	%this.documentButtonBar.addButton("RevertAsset", $EditorIcon::reload, "Revert Asset", "getRevertAssetEnabled");
+	%this.documentButtonBar.addButton("DuplicateAsset", $EditorIcon::clipboard_copy, "Duplicate Asset", "");
+	%this.documentButtonBar.addButton("UndoAsset", $EditorIcon::undo, "Undo", "getUndoAssetEnabled", "getUndoAssetTooltip");
+	%this.documentButtonBar.addButton("RedoAsset", $EditorIcon::redo, "Redo", "getRedoAssetEnabled", "getRedoAssetTooltip");
+
 	%this.tabBook = new GuiTabBookCtrl()
 	{
 		Class = AssetInspectorTabBook;
@@ -348,9 +373,234 @@ function AssetInspector::hideInspector(%this)
 	%this.tabBook.Visible = false;
 	%this.emitterButtonBar.visible = false;
 	%this.deleteAssetButton.visible = false;
+	%this.documentButtonBar.visible = false;
 
 	// Nothing is selected, so nothing is bound. The pane keeps its rows.
 	%this.chooseInspector("");
+}
+
+//-----------------------------------------------------------------------------
+// The document bar: Save, Revert, Duplicate, Undo, Redo.
+//
+// These act on the asset as a whole. Note the asset they act on is the ASSET,
+// never the emitter that may be showing in the inspector instead -- an emitter
+// has no file of its own, and saving one means saving the particle asset that
+// owns it. documentAsset() is what settles that.
+//-----------------------------------------------------------------------------
+
+// Start keeping undo history for an asset, and show the bar. Every load method
+// calls this with whatever it just put on show.
+function AssetInspector::beginDocument(%this, %asset)
+{
+	if(!isObject(%asset))
+	{
+		return;
+	}
+
+	AssetAdmin.undoRecorder.track(%asset);
+
+	%this.documentButtonBar.visible = true;
+	%this.refreshDocumentBar();
+}
+
+// The asset the document buttons act on.
+//
+// inspectedObject() answers with the emitter when one is selected in the title
+// dropdown, because that is what the field rows are editing. An emitter is not a
+// document, so ask it who owns it.
+function AssetInspector::documentAsset(%this)
+{
+	%asset = %this.inspectedObject();
+
+	if(!isObject(%asset))
+	{
+		return 0;
+	}
+
+	if(%this.titleDropDown.visible && %this.titleDropDown.getSelectedItem() != 0)
+	{
+		return %asset.getOwner();
+	}
+
+	return %asset;
+}
+
+function AssetInspector::refreshDocumentBar(%this)
+{
+	if(%this.documentButtonBar.visible)
+	{
+		%this.documentButtonBar.refreshEnabled();
+	}
+}
+
+function AssetInspector::getSaveAssetEnabled(%this)
+{
+	%asset = %this.documentAsset();
+
+	return isObject(%asset) && %asset.isAssetDirty();
+}
+
+// Revert is offered for exactly as long as there is something to throw away.
+function AssetInspector::getRevertAssetEnabled(%this)
+{
+	return %this.getSaveAssetEnabled();
+}
+
+function AssetInspector::getUndoAssetEnabled(%this)
+{
+	%asset = %this.documentAsset();
+
+	return isObject(%asset) && AssetAdmin.undoRecorder.getUndoCount(%asset.getAssetId()) > 0;
+}
+
+function AssetInspector::getRedoAssetEnabled(%this)
+{
+	%asset = %this.documentAsset();
+
+	return isObject(%asset) && AssetAdmin.undoRecorder.getRedoCount(%asset.getAssetId()) > 0;
+}
+
+function AssetInspector::getUndoAssetTooltip(%this)
+{
+	%asset = %this.documentAsset();
+	if(!isObject(%asset))
+	{
+		return "Undo";
+	}
+
+	%label = AssetAdmin.undoRecorder.getUndoLabel(%asset.getAssetId());
+
+	return (%label $= "") ? "Undo" : ("Undo" SPC %label);
+}
+
+function AssetInspector::getRedoAssetTooltip(%this)
+{
+	%asset = %this.documentAsset();
+	if(!isObject(%asset))
+	{
+		return "Redo";
+	}
+
+	%label = AssetAdmin.undoRecorder.getRedoLabel(%asset.getAssetId());
+
+	return (%label $= "") ? "Redo" : ("Redo" SPC %label);
+}
+
+function AssetInspector::SaveAsset(%this)
+{
+	%asset = %this.documentAsset();
+	if(!isObject(%asset) || !%asset.isAssetDirty())
+	{
+		return;
+	}
+
+	%assetId = %asset.getAssetId();
+
+	if(!%asset.saveAsset())
+	{
+		return;
+	}
+
+	AssetAdmin.undoRecorder.onAssetSaved(%assetId);
+	%this.refreshDocumentBar();
+}
+
+function AssetInspector::RevertAsset(%this)
+{
+	%asset = %this.documentAsset();
+	if(!isObject(%asset) || !%asset.isAssetDirty())
+	{
+		return;
+	}
+
+	if(!%asset.revertAsset())
+	{
+		return;
+	}
+
+	// The undo history described the document that was just thrown away.
+	AssetAdmin.undoRecorder.onAssetReverted(%asset);
+
+	// A revert can change anything, including which tabs and rows apply, so this
+	// reloads rather than refreshing in place.
+	%this.reloadDocument(%asset);
+}
+
+function AssetInspector::UndoAsset(%this)
+{
+	%asset = %this.documentAsset();
+	if(!isObject(%asset))
+	{
+		return;
+	}
+
+	if(AssetAdmin.undoRecorder.undo(%asset))
+	{
+		%this.reloadDocument(%asset);
+	}
+}
+
+function AssetInspector::RedoAsset(%this)
+{
+	%asset = %this.documentAsset();
+	if(!isObject(%asset))
+	{
+		return;
+	}
+
+	if(AssetAdmin.undoRecorder.redo(%asset))
+	{
+		%this.reloadDocument(%asset);
+	}
+}
+
+function AssetInspector::DuplicateAsset(%this)
+{
+	%asset = %this.documentAsset();
+	if(!isObject(%asset))
+	{
+		return;
+	}
+
+	// One field is 50, the feedback line is 96 with room to grow into, and the
+	// buttons want 34 and a margin. Plus the 34 the title bar and border take out
+	// of the window before the content sees any of it.
+	%width = 420;
+	%height = 250;
+
+	%dialog = new GuiControl()
+	{
+		class = "DuplicateAssetDialog";
+		superclass = "EditorDialog";
+		dialogSize = (%width + 8) SPC (%height + 8);
+		dialogCanClose = true;
+		dialogResizable = false;
+		dialogText = "Duplicate Asset";
+		sourceAssetId = %asset.getAssetId();
+	};
+	%dialog.init(%width, %height);
+
+	Canvas.pushDialog(%dialog);
+}
+
+// Put the asset back on show from scratch.
+//
+// An undo or a revert can move anything, including the things that decide which
+// tabs exist -- explicit mode, the emitter list, named cells mode -- so the tile
+// is re-clicked rather than the rows being refreshed in place. Clearing
+// chosenButton is what makes onClick treat it as a fresh selection instead of one
+// of the re-clicks it usually gets.
+function AssetInspector::reloadDocument(%this, %asset)
+{
+	%button = AssetAdmin.chosenButton;
+
+	if(isObject(%button))
+	{
+		AssetAdmin.chosenButton = "";
+		%button.onClick();
+	}
+
+	%this.refreshDocumentBar();
 }
 
 function AssetInspector::resetInspector(%this)
@@ -380,6 +630,8 @@ function AssetInspector::loadImageAsset(%this, %imageAsset, %assetID)
 	%this.tabBook.selectPage(0);
 	%this.titlebar.setText("Image Asset:" SPC %imageAsset.AssetName);
 
+	%this.beginDocument(%imageAsset);
+
 	%this.chooseInspector("Image");
 	%this.imagePane.bind(%imageAsset, %assetID);
 
@@ -391,12 +643,17 @@ function AssetInspector::loadAnimationAsset(%this, %animationAsset, %assetID)
 {
 	%this.resetInspector();
 	%this.titlebar.setText("Animation Asset:" SPC %animationAsset.AssetName);
+	%this.beginDocument(%animationAsset);
 
-	// Named cells fall back to the generic inspector, and not out of caution: the
-	// engine's named-frame API does not round-trip -- its getter formats strings
-	// through %d, and the field joins with commas while the setter splits on
-	// whitespace, so a named list does not survive its own TAML file. A pane built
-	// on that would be a pane that quietly loses work.
+	// Named cells still fall back to the generic inspector.
+	//
+	// The reason they used to is now gone: NamedAnimationFrames is a
+	// TypeStringTableEntryVector, whose getter joins with commas, and
+	// setNamedAnimationFrames split on whitespace alone -- so a named list did not
+	// survive its own TAML file, and a pane built on it would have quietly lost
+	// work. The setter accepts commas now (AnimationAsset.cc), so a named-cells
+	// pane is buildable. It is simply not built yet, which is a job of its own
+	// rather than a hazard.
 	if(%animationAsset.getNamedCellsMode())
 	{
 		%this.inspectStock(%animationAsset);
@@ -411,6 +668,7 @@ function AssetInspector::loadParticleAsset(%this, %particleAsset, %assetID)
 {
 	%this.resetInspector();
 	%this.titleDropDown.visible = true;
+	%this.beginDocument(%particleAsset);
 
 	%this.refreshParticleTitleDropDown(%particleAsset, 0);
 	%this.titleDropDown.Command = %this.getId() @ ".onChooseParticleAsset(" @ %particleAsset.getId() @ ");";
@@ -468,6 +726,7 @@ function AssetInspector::loadFontAsset(%this, %fontAsset, %assetID)
 {
 	%this.resetInspector();
 	%this.titlebar.setText("Font Asset:" SPC %fontAsset.AssetName);
+	%this.beginDocument(%fontAsset);
 
 	%this.inspectStock(%fontAsset);
 }
@@ -476,6 +735,7 @@ function AssetInspector::loadAudioAsset(%this, %audioAsset, %assetID)
 {
 	%this.resetInspector();
 	%this.titlebar.setText("Audio Asset:" SPC %audioAsset.AssetName);
+	%this.beginDocument(%audioAsset);
 
 	%this.inspectStock(%audioAsset);
 }
@@ -484,6 +744,7 @@ function AssetInspector::loadSpineAsset(%this, %spineAsset, %assetID)
 {
 	%this.resetInspector();
 	%this.titlebar.setText("Spine Asset:" SPC %spineAsset.AssetName);
+	%this.beginDocument(%spineAsset);
 
 	%this.inspectStock(%spineAsset);
 }

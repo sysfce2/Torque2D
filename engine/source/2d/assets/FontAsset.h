@@ -61,7 +61,6 @@ public:
     static void initPersistFields();
     virtual bool onAdd();
     virtual void onRemove();
-    virtual void copyTo(SimObject* object);
 
     void                    setFontFile( const char* pFontFile );
     inline StringTableEntry getFontFile( void ) const                   { return mFontFile; }

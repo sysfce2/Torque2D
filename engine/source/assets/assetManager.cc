@@ -26,6 +26,12 @@
 #include "assetPtr.h"
 #endif
 
+// For the module database, which is how a file is matched to the module that
+// owns it. See findModuleForPath.
+#ifndef _MODULE_MANAGER_H
+#include "module/moduleManager.h"
+#endif
+
 #ifndef _REFERENCED_ASSETS_H_
 #include "assets/referencedAssets.h"
 #endif
@@ -75,9 +81,41 @@ AssetManager::AssetManager() :
     mMaxLoadedExternalAssetsCount( 0 ),
     mMaxLoadedPrivateAssetsCount( 0 ),
     mAcquiredReferenceCount( 0 ),
+    mAssetBatchDepth( 0 ),
+    mDirtySuppressDepth( 0 ),
     mEchoInfo( false ),
     mIgnoreAutoUnload( false )
 {
+}
+
+//-----------------------------------------------------------------------------
+
+AssetManager::ScopedAssetUpdate::ScopedAssetUpdate( AssetManager* pAssetManager, const bool suppressDirty ) :
+    mpAssetManager( pAssetManager ),
+    mSuppressDirty( suppressDirty )
+{
+    if ( mpAssetManager == NULL )
+        return;
+
+    mpAssetManager->mAssetBatchDepth++;
+
+    if ( mSuppressDirty )
+        mpAssetManager->mDirtySuppressDepth++;
+}
+
+AssetManager::ScopedAssetUpdate::~ScopedAssetUpdate()
+{
+    if ( mpAssetManager == NULL )
+        return;
+
+    if ( mSuppressDirty )
+        mpAssetManager->mDirtySuppressDepth--;
+
+    mpAssetManager->mAssetBatchDepth--;
+
+    // The outermost scope is what actually announces everything that piled up.
+    if ( mpAssetManager->mAssetBatchDepth == 0 )
+        mpAssetManager->drainRefreshNotifications();
 }
 
 //-----------------------------------------------------------------------------
@@ -1121,6 +1159,17 @@ bool AssetManager::deleteAsset( const char* pAssetId, const bool deleteLooseFile
 
 //-----------------------------------------------------------------------------
 
+// An asset changed. Mark it unsaved and tell everything that cares.
+//
+// This used to write the asset's file, here, on every setter -- so trying a
+// particle out was indistinguishable from deciding to keep it, and a running
+// game silently rewrote its own content. The write now lives in saveAsset, and
+// nothing else calls it.
+//
+// The private-asset branch that used to sit here was already exactly this: notify
+// and do not write. So the two paths are one path now, and the only thing a
+// private asset does differently is that it never becomes dirty, having no file
+// to be out of step with.
 bool AssetManager::refreshAsset( const char* pAssetId )
 {
     // Debug Profiling.
@@ -1140,143 +1189,24 @@ bool AssetManager::refreshAsset( const char* pAssetId )
         return false;
     }
 
+    // Finish if the asset is not loaded. There is nothing in memory to have
+    // changed, and nothing to notify.
+    if ( pAssetDefinition->mpAssetBase == NULL )
+        return true;
+
     // Info.
     if ( mEchoInfo )
     {
         Con::printSeparator();
         Con::printf( "Asset Manager: Started refreshing Asset Id '%s'...", pAssetId );
-    }    
-
-    // Fetch asset Id.
-    StringTableEntry assetId = StringTable->insert( pAssetId );
-
-    // Is the asset private?
-    if ( pAssetDefinition->mAssetPrivate )
-    {
-        // Yes, so notify asset of asset refresh only.
-        pAssetDefinition->mpAssetBase->onAssetRefresh();
-
-        // Asset refresh notifications.
-        for( typeAssetPtrRefreshHash::iterator refreshNotifyItr = mAssetPtrRefreshNotifications.begin(); refreshNotifyItr != mAssetPtrRefreshNotifications.end(); ++refreshNotifyItr )
-        {
-            // Fetch pointed asset.
-            StringTableEntry pointedAsset = refreshNotifyItr->key->getAssetId();
-
-            // Ignore if the pointed asset is not the asset or a dependency.
-            if ( pointedAsset == StringTable->EmptyString || ( pointedAsset != assetId && !doesAssetDependOn( pointedAsset, assetId ) ) )
-                continue;
-
-            // Perform refresh notification callback.
-            refreshNotifyItr->value->onAssetRefreshed( refreshNotifyItr->key );
-        }
     }
-    // Is the asset definition allowed to refresh?
-    else if ( pAssetDefinition->mAssetRefreshEnable )
-    {
-        // Yes, so fetch the asset.
-        AssetBase* pAssetBase = pAssetDefinition->mpAssetBase;
 
-        // Is the asset loaded?
-        if ( pAssetBase != NULL )
-        {
-            // Yes, so notify asset of asset refresh.
-            pAssetBase->onAssetRefresh();
+    // Mark the asset as having unsaved changes.
+    markAssetDirty( pAssetDefinition );
 
-            // Save asset.
-            mTaml.write( pAssetBase, pAssetDefinition->mAssetBaseFilePath );
-        
-            // Remove asset dependencies.
-            removeAssetDependencies( pAssetId );
-
-            // Find any new dependencies.
-            TamlAssetDeclaredVisitor assetDeclaredVisitor;
-
-            // Parse the filename.
-            if ( !mTaml.parse( pAssetDefinition->mAssetBaseFilePath, assetDeclaredVisitor ) )
-            {
-                // Warn.
-                Con::warnf( "Asset Manager: Failed to parse file containing asset declaration: '%s'.\nDependencies are now incorrect!", pAssetDefinition->mAssetBaseFilePath );
-                return false;
-            }
-
-            // Fetch asset dependencies.
-            TamlAssetDeclaredVisitor::typeAssetIdVector& assetDependencies = assetDeclaredVisitor.getAssetDependencies();
-
-            // Are there any asset dependences?
-            if ( assetDependencies.size() > 0 )
-            {
-                // Yes, so iterate dependencies.
-                for( TamlAssetDeclaredVisitor::typeAssetIdVector::iterator assetDependencyItr = assetDependencies.begin(); assetDependencyItr != assetDependencies.end(); ++assetDependencyItr )
-                {
-                    // Fetch dependency asset Id.
-                    StringTableEntry dependencyAssetId = *assetDependencyItr;
-
-                    // Insert depends-on.
-                    mAssetDependsOn.insertEqual( assetId, dependencyAssetId );
-
-                    // Insert is-depended-on.
-                    mAssetIsDependedOn.insertEqual( dependencyAssetId, assetId );
-                }
-            }
-
-            // Fetch asset loose files.
-            TamlAssetDeclaredVisitor::typeLooseFileVector& assetLooseFiles = assetDeclaredVisitor.getAssetLooseFiles();
-
-            // Clear any existing loose files.
-            pAssetDefinition->mAssetLooseFiles.clear();
-
-            // Are there any loose files?
-            if ( assetLooseFiles.size() > 0 )
-            {
-                // Yes, so iterate loose files.
-                for( TamlAssetDeclaredVisitor::typeLooseFileVector::iterator assetLooseFileItr = assetLooseFiles.begin(); assetLooseFileItr != assetLooseFiles.end(); ++assetLooseFileItr )
-                {
-                    // Store loose file.
-                    pAssetDefinition->mAssetLooseFiles.push_back( *assetLooseFileItr );
-                }
-            }
-
-            // Asset refresh notifications.
-            for( typeAssetPtrRefreshHash::iterator refreshNotifyItr = mAssetPtrRefreshNotifications.begin(); refreshNotifyItr != mAssetPtrRefreshNotifications.end(); ++refreshNotifyItr )
-            {
-                // Fetch pointed asset.
-                StringTableEntry pointedAsset = refreshNotifyItr->key->getAssetId();
-
-                // Ignore if the pointed asset is not the asset or a dependency.
-                if ( pointedAsset == StringTable->EmptyString || ( pointedAsset != assetId && !doesAssetDependOn( pointedAsset, assetId ) ) )
-                    continue;
-
-                // Perform refresh notification callback.
-                refreshNotifyItr->value->onAssetRefreshed( refreshNotifyItr->key );
-            }
-
-            // Find is-depends-on entry.
-            typeAssetIsDependedOnHash::iterator isDependedOnItr = mAssetIsDependedOn.find( assetId );
-
-            // Is asset depended on?
-            if ( isDependedOnItr != mAssetIsDependedOn.end() )
-            {
-                // Yes, so compiled them.
-                Vector<typeAssetId> dependedOn;
-
-                // Iterate all dependencies.
-                while( isDependedOnItr != mAssetIsDependedOn.end() && isDependedOnItr->key == assetId )
-                {
-                    dependedOn.push_back( isDependedOnItr->value );
-
-                    // Next dependency.
-                    isDependedOnItr++;
-                }
-
-                // Refresh depended-on assets.
-                for ( Vector<typeAssetId>::iterator isDependedOnItr = dependedOn.begin(); isDependedOnItr != dependedOn.end(); ++isDependedOnItr )
-                {
-                    // Refresh dependency asset.
-                    refreshAsset( *isDependedOnItr );
-                }
-            }
-        }
-    }
+    // Tell the asset, the asset pointers watching it, script, and anything that
+    // depends on it. This one is a direct change; the cascade is not.
+    notifyAssetRefresh( pAssetDefinition, true );
 
     // Info.
     if ( mEchoInfo )
@@ -1290,6 +1220,207 @@ bool AssetManager::refreshAsset( const char* pAssetId )
 
 //-----------------------------------------------------------------------------
 
+void AssetManager::markAssetDirty( AssetDefinition* pAssetDefinition )
+{
+    // Sanity!
+    AssertFatal( pAssetDefinition != NULL, "Cannot mark a NULL asset definition dirty." );
+
+    // A private asset has no file, so it can never be out of step with one. An
+    // asset whose refresh is disabled is not ours to track either.
+    if ( pAssetDefinition->mAssetPrivate || !pAssetDefinition->mAssetRefreshEnable )
+        return;
+
+    // The dependency and loose-file graphs used to be rebuilt by re-parsing the
+    // file this call had just written. There is no write now, so they are
+    // recalculated from the asset in memory instead -- otherwise they would sit
+    // stale for as long as the asset stayed unsaved, and a dependent would stop
+    // being told when the asset it reads from changed.
+    //
+    // This happens even when dirty marking is suppressed, because it is
+    // bookkeeping rather than a judgement about unsaved work: a revert can
+    // repoint an animation at a different image, and the graph has to follow it
+    // whether or not the asset ends up dirty.
+    updateAssetDependencies( pAssetDefinition );
+
+    // Finish if dirty marking is suppressed. A snapshot restore replays every
+    // setter, and replaying an edit is not making one.
+    if ( mDirtySuppressDepth > 0 )
+        return;
+
+    // Finish if already dirty. Only the clean-to-dirty edge is worth announcing.
+    if ( pAssetDefinition->mAssetDirty )
+        return;
+
+    // Mark dirty.
+    pAssetDefinition->mAssetDirty = true;
+
+    // Tell script, so an editor can mark the asset without polling for it.
+    Con::executef( 2, "onAssetDirtyChanged", pAssetDefinition->mAssetId );
+}
+
+//-----------------------------------------------------------------------------
+
+// Queue an announcement, and make it now unless a batch is open.
+//
+// Everything queues, always. The queue doubles as the visited set, and that is
+// the only thing standing between this and an unbounded recursion: two assets
+// that depend on each other used to call each other here forever, and
+// ParticleAssetEmitter::onAssetRefreshed answers a notification by raising
+// another one on its owner.
+void AssetManager::notifyAssetRefresh( AssetDefinition* pAssetDefinition, const bool direct )
+{
+    // Sanity!
+    AssertFatal( pAssetDefinition != NULL, "Cannot notify a NULL asset definition." );
+
+    // Fetch asset Id.
+    StringTableEntry assetId = pAssetDefinition->mAssetId;
+
+    // Already spoken for? Note this scans what has already been dispatched in the
+    // current drain as well as what is still waiting, which is what makes a cycle
+    // terminate rather than merely take turns.
+    for( Vector<PendingRefresh>::iterator pendingItr = mPendingRefreshNotifications.begin(); pendingItr != mPendingRefreshNotifications.end(); ++pendingItr )
+    {
+        if ( pendingItr->mAssetId != assetId )
+            continue;
+
+        // An asset reached both ways in one batch was changed, whatever else also
+        // happened to it.
+        if ( direct )
+            pendingItr->mDirect = true;
+
+        return;
+    }
+
+    PendingRefresh pendingRefresh;
+    pendingRefresh.mAssetId = assetId;
+    pendingRefresh.mDirect = direct;
+    mPendingRefreshNotifications.push_back( pendingRefresh );
+
+    // Inside a batch the drain happens when the outermost scope closes.
+    if ( mAssetBatchDepth == 0 )
+        drainRefreshNotifications();
+}
+
+//-----------------------------------------------------------------------------
+
+void AssetManager::drainRefreshNotifications( void )
+{
+    // Hold the depth for the whole drain, so a notification raised by one of the
+    // callbacks below joins this queue instead of starting a second drain
+    // underneath this one.
+    mAssetBatchDepth++;
+
+    // Deliberately indexed and deliberately not popped: entries stay in the
+    // vector after they are dispatched so that the duplicate check in
+    // notifyAssetRefresh can still see them.
+    for( U32 index = 0; index < (U32)mPendingRefreshNotifications.size(); ++index )
+    {
+        // Deliberately by value: dispatching can append to the vector and move it
+        // out from under a reference.
+        const PendingRefresh pendingRefresh = mPendingRefreshNotifications[index];
+
+        AssetDefinition* pAssetDefinition = findAsset( pendingRefresh.mAssetId );
+
+        if ( pAssetDefinition != NULL )
+            dispatchAssetRefresh( pAssetDefinition, pendingRefresh.mDirect );
+    }
+
+    mPendingRefreshNotifications.clear();
+
+    mAssetBatchDepth--;
+}
+
+//-----------------------------------------------------------------------------
+
+void AssetManager::dispatchAssetRefresh( AssetDefinition* pAssetDefinition, const bool direct )
+{
+    // Sanity!
+    AssertFatal( pAssetDefinition != NULL, "Cannot dispatch a NULL asset definition." );
+
+    // Fetch asset Id.
+    StringTableEntry assetId = pAssetDefinition->mAssetId;
+
+    // Fetch the asset.
+    AssetBase* pAssetBase = pAssetDefinition->mpAssetBase;
+
+    // Finish if the asset is not loaded.
+    if ( pAssetBase == NULL )
+        return;
+
+    // Notify the asset itself, so it can re-derive whatever it caches.
+    pAssetBase->onAssetRefresh();
+
+    // Asset refresh notifications.
+    for( typeAssetPtrRefreshHash::iterator refreshNotifyItr = mAssetPtrRefreshNotifications.begin(); refreshNotifyItr != mAssetPtrRefreshNotifications.end(); ++refreshNotifyItr )
+    {
+        // Fetch pointed asset.
+        StringTableEntry pointedAsset = refreshNotifyItr->key->getAssetId();
+
+        // Ignore if the pointed asset is not the asset or a dependency.
+        if ( pointedAsset == StringTable->EmptyString || ( pointedAsset != assetId && !doesAssetDependOn( pointedAsset, assetId ) ) )
+            continue;
+
+        // Perform refresh notification callback.
+        refreshNotifyItr->value->onAssetRefreshed( refreshNotifyItr->key );
+    }
+
+    // Inform those who want to know.
+    //
+    // This used to fire from AssetBase::refreshAsset, which meant it reached the
+    // asset a setter was called on and nothing else -- so an asset never heard
+    // that something it depends on had changed, which is precisely what the
+    // cascade below exists to tell it.
+    if ( pAssetBase->isMethod( "onRefresh" ) )
+    {
+        Con::executef( pAssetBase, 2, "onRefresh", direct ? "1" : "0" );
+    }
+
+    // Find is-depends-on entry.
+    typeAssetIsDependedOnHash::iterator isDependedOnItr = mAssetIsDependedOn.find( assetId );
+
+    // Is asset depended on?
+    if ( isDependedOnItr != mAssetIsDependedOn.end() )
+    {
+        // Yes, so compiled them.
+        Vector<typeAssetId> dependedOn;
+
+        // Iterate all dependencies.
+        while( isDependedOnItr != mAssetIsDependedOn.end() && isDependedOnItr->key == assetId )
+        {
+            dependedOn.push_back( isDependedOnItr->value );
+
+            // Next dependency.
+            isDependedOnItr++;
+        }
+
+        // Notify depended-on assets.
+        //
+        // Notify, and deliberately not refresh: nothing a dependent PERSISTS
+        // changes when the asset it reads from is re-cut. An AnimationAsset
+        // rebuilds mValidatedFrames, which is not a persist field. Marking it
+        // dirty would tell the user they have unsaved work in a file they never
+        // touched.
+        for ( Vector<typeAssetId>::iterator dependedOnItr = dependedOn.begin(); dependedOnItr != dependedOn.end(); ++dependedOnItr )
+        {
+            // Find the dependent asset.
+            AssetDefinition* pDependentDefinition = findAsset( *dependedOnItr );
+
+            if ( pDependentDefinition != NULL )
+                notifyAssetRefresh( pDependentDefinition, false );
+        }
+    }
+}
+
+//-----------------------------------------------------------------------------
+
+// Re-derive every loaded asset's runtime state and tell everything that watches
+// them.
+//
+// This used to rewrite every declared asset file in the project, and with
+// includeUnloaded it loaded each one purely so it could write it back out again.
+// Since refreshAsset no longer writes, this no longer does either -- and it
+// suppresses dirty marking, because re-deriving is not editing. The verb for
+// "write everything" is saveAllDirtyAssets.
 void AssetManager::refreshAllAssets( const bool includeUnloaded )
 {
     // Debug Profiling.
@@ -1301,6 +1432,10 @@ void AssetManager::refreshAllAssets( const bool includeUnloaded )
         Con::printSeparator();
         Con::printf( "Asset Manager: Started refreshing ALL assets." );
     }
+
+    // One announcement per asset for the whole sweep, and nothing here counts as
+    // a user edit.
+    ScopedAssetUpdate scopedUpdate( this, true );
 
     Vector<typeAssetId> assetsToRelease;
 
@@ -1353,6 +1488,565 @@ void AssetManager::refreshAllAssets( const bool includeUnloaded )
         Con::printSeparator();
         Con::printf( "Asset Manager: Finished refreshing ALL assets." );
     }
+}
+
+// The loaded module a file belongs to, by path.
+//
+// The longest matching module path wins, so a module nested inside another one
+// is preferred over its container.
+ModuleDefinition* AssetManager::findModuleForPath( const char* pFilePath )
+{
+    // Sanity!
+    AssertFatal( pFilePath != NULL, "Cannot find a module for a NULL path." );
+
+    ModuleManager::typeConstModuleDefinitionVector modules;
+    ModuleDatabase.findModules( false, modules );
+
+    ModuleDefinition* pBestModule = NULL;
+    U32 bestLength = 0;
+
+    for( ModuleManager::typeConstModuleDefinitionVector::iterator moduleItr = modules.begin(); moduleItr != modules.end(); ++moduleItr )
+    {
+        ModuleDefinition* pModuleDefinition = const_cast<ModuleDefinition*>( *moduleItr );
+
+        StringTableEntry modulePath = pModuleDefinition->getModulePath();
+
+        if ( modulePath == StringTable->EmptyString || !Con::isBasePath( pFilePath, modulePath ) )
+            continue;
+
+        const U32 pathLength = dStrlen( modulePath );
+
+        if ( pBestModule != NULL && pathLength <= bestLength )
+            continue;
+
+        pBestModule = pModuleDefinition;
+        bestLength = pathLength;
+    }
+
+    return pBestModule;
+}
+
+//-----------------------------------------------------------------------------
+
+// Collect the asset ids and loose files an object's fields refer to.
+//
+// Both kinds are recognised by the console type's prefix rather than by naming
+// the types, so this covers TypeAssetId, TypeImageAssetPtr, TypeAnimationAssetPtr
+// and anything declared like them in future without being told about it. The
+// prefix is the same thing TAML writes into the file and the same thing
+// TamlAssetDeclaredVisitor keys on when reading it back, so the two agree by
+// construction.
+static void collectAssetFieldReferences( SimObject* pSimObject, Vector<StringTableEntry>& dependencies, Vector<StringTableEntry>& looseFiles )
+{
+    static StringTableEntry assetIdPrefix = StringTable->insert( ASSET_ID_FIELD_PREFIX );
+    static StringTableEntry assetLooseFilePrefix = StringTable->insert( ASSET_LOOSE_FILE_FIELD_PREFIX );
+
+    const AbstractClassRep::FieldList& fields = pSimObject->getFieldList();
+
+    for( U32 index = 0; index < (U32)fields.size(); ++index )
+    {
+        const AbstractClassRep::Field& field = fields[index];
+
+        // Skip the group markers.
+        if ( field.type == AbstractClassRep::StartGroupFieldType ||
+             field.type == AbstractClassRep::EndGroupFieldType ||
+             field.type == AbstractClassRep::DepricatedFieldType )
+            continue;
+
+        // Fetch the console type.
+        ConsoleBaseType* pConsoleType = ConsoleBaseType::getType( field.type );
+
+        if ( pConsoleType == NULL )
+            continue;
+
+        // Fetch the prefix that marks this field as naming an asset.
+        StringTableEntry typePrefix = pConsoleType->getTypePrefix();
+
+        if ( typePrefix != assetIdPrefix && typePrefix != assetLooseFilePrefix )
+            continue;
+
+        // Fetch the value.
+        StringTableEntry value = StringTable->insert( pSimObject->getDataField( StringTable->insert( field.pFieldname ), NULL ) );
+
+        if ( value == StringTable->EmptyString )
+            continue;
+
+        if ( typePrefix == assetIdPrefix )
+            dependencies.push_back( value );
+        else
+            looseFiles.push_back( value );
+    }
+}
+
+//-----------------------------------------------------------------------------
+
+// Recalculate what an asset depends on, from the asset in memory.
+//
+// This exists because refreshAsset no longer writes. The dependency and
+// loose-file graphs used to be rebuilt by re-parsing the file that had just been
+// written, so they were always current; with a save that may be a long way off,
+// they would otherwise stay as they were when the asset was last saved.
+//
+// That is not cosmetic. The cascade in notifyAssetRefresh is the only way an
+// AnimationAsset hears that its image changed -- it registers no refresh notify
+// of its own -- so a stale graph means repointing an animation at another image
+// quietly stops it being re-cut when that image is edited.
+void AssetManager::updateAssetDependencies( AssetDefinition* pAssetDefinition )
+{
+    // Sanity!
+    AssertFatal( pAssetDefinition != NULL, "Cannot update dependencies for a NULL asset definition." );
+
+    // Fetch the asset.
+    AssetBase* pAssetBase = pAssetDefinition->mpAssetBase;
+
+    if ( pAssetBase == NULL )
+        return;
+
+    // Fetch asset Id.
+    StringTableEntry assetId = pAssetDefinition->mAssetId;
+
+    Vector<StringTableEntry> dependencies;
+    Vector<StringTableEntry> looseFiles;
+
+    // The asset itself.
+    collectAssetFieldReferences( pAssetBase, dependencies, looseFiles );
+
+    // And its Taml children, which is how a ParticleAsset carries its emitters --
+    // and the emitters are where a particle asset's image and animation
+    // dependencies actually live.
+    TamlChildren* pChildren = dynamic_cast<TamlChildren*>( pAssetBase );
+
+    if ( pChildren != NULL )
+    {
+        const U32 childCount = pChildren->getTamlChildCount();
+
+        for( U32 index = 0; index < childCount; ++index )
+        {
+            SimObject* pChild = pChildren->getTamlChild( index );
+
+            if ( pChild != NULL )
+                collectAssetFieldReferences( pChild, dependencies, looseFiles );
+        }
+    }
+
+    // Out with the old.
+    removeAssetDependencies( assetId );
+
+    // In with the new.
+    for( Vector<StringTableEntry>::iterator dependencyItr = dependencies.begin(); dependencyItr != dependencies.end(); ++dependencyItr )
+    {
+        // Insert depends-on.
+        mAssetDependsOn.insertEqual( assetId, *dependencyItr );
+
+        // Insert is-depended-on.
+        mAssetIsDependedOn.insertEqual( *dependencyItr, assetId );
+    }
+
+    // Loose files are stored expanded, which is what both the field getters and
+    // TamlAssetDeclaredVisitor produce.
+    pAssetDefinition->mAssetLooseFiles.clear();
+
+    for( Vector<StringTableEntry>::iterator looseFileItr = looseFiles.begin(); looseFileItr != looseFiles.end(); ++looseFileItr )
+    {
+        pAssetDefinition->mAssetLooseFiles.push_back( *looseFileItr );
+    }
+}
+
+//-----------------------------------------------------------------------------
+
+bool AssetManager::isAssetDirty( const char* pAssetId )
+{
+    // Sanity!
+    AssertFatal( pAssetId != NULL, "Cannot check a NULL asset Id for changes." );
+
+    // Find asset.
+    AssetDefinition* pAssetDefinition = findAsset( pAssetId );
+
+    return pAssetDefinition != NULL && pAssetDefinition->mAssetDirty;
+}
+
+//-----------------------------------------------------------------------------
+
+// Say outright whether an asset counts as unsaved.
+//
+// This exists for undo. Restoring a snapshot deliberately does not decide the
+// dirty state, because only the caller knows what the state it restored means:
+// stepping back to what was last saved is clean, and stepping back to anywhere
+// else is not. Everything else should reach this through refreshAsset, saveAsset
+// or revertAsset rather than setting the flag by hand.
+bool AssetManager::setAssetDirty( const char* pAssetId, const bool assetDirty )
+{
+    // Sanity!
+    AssertFatal( pAssetId != NULL, "Cannot set the unsaved state of a NULL asset Id." );
+
+    // Find asset.
+    AssetDefinition* pAssetDefinition = findAsset( pAssetId );
+
+    // Did we find the asset?
+    if ( pAssetDefinition == NULL )
+    {
+        // No, so warn.
+        Con::warnf( "Asset Manager: Failed to set the unsaved state of asset Id '%s' as it does not exist.", pAssetId );
+        return false;
+    }
+
+    // A private asset has no file to be out of step with.
+    if ( pAssetDefinition->mAssetPrivate )
+        return false;
+
+    // Finish if no change. Only the edge is worth announcing.
+    if ( pAssetDefinition->mAssetDirty == assetDirty )
+        return true;
+
+    pAssetDefinition->mAssetDirty = assetDirty;
+
+    Con::executef( 2, "onAssetDirtyChanged", pAssetDefinition->mAssetId );
+
+    return true;
+}
+
+//-----------------------------------------------------------------------------
+
+U32 AssetManager::getDirtyAssetCount( void ) const
+{
+    U32 dirtyCount = 0;
+
+    for( typeDeclaredAssetsHash::const_iterator assetItr = mDeclaredAssets.begin(); assetItr != mDeclaredAssets.end(); ++assetItr )
+    {
+        if ( assetItr->value->mAssetDirty )
+            dirtyCount++;
+    }
+
+    return dirtyCount;
+}
+
+//-----------------------------------------------------------------------------
+
+// Write the asset's file. The only place in the engine that does.
+bool AssetManager::writeAssetDefinitionFile( AssetDefinition* pAssetDefinition )
+{
+    // Sanity!
+    AssertFatal( pAssetDefinition != NULL, "Cannot write a NULL asset definition." );
+
+    // Fetch the asset.
+    AssetBase* pAssetBase = pAssetDefinition->mpAssetBase;
+
+    // Finish if the asset is not loaded. There is nothing in memory to write.
+    if ( pAssetBase == NULL )
+        return false;
+
+    // Save asset.
+    if ( !mTaml.write( pAssetBase, pAssetDefinition->mAssetBaseFilePath ) )
+    {
+        // Warn.
+        Con::warnf( "Asset Manager: Failed to write asset Id '%s' to '%s'.", pAssetDefinition->mAssetId, pAssetDefinition->mAssetBaseFilePath );
+        return false;
+    }
+
+    // Remove asset dependencies.
+    removeAssetDependencies( pAssetDefinition->mAssetId );
+
+    // Find any new dependencies.
+    TamlAssetDeclaredVisitor assetDeclaredVisitor;
+
+    // Parse the filename.
+    //
+    // The file that was just written is the authority on what this asset depends
+    // on and which loose files it uses. updateAssetDependencies keeps those two
+    // lists roughly right while the asset is unsaved; this is where they are made
+    // exactly right.
+    if ( !mTaml.parse( pAssetDefinition->mAssetBaseFilePath, assetDeclaredVisitor ) )
+    {
+        // Warn.
+        Con::warnf( "Asset Manager: Failed to parse file containing asset declaration: '%s'.\nDependencies are now incorrect!", pAssetDefinition->mAssetBaseFilePath );
+        return false;
+    }
+
+    // Fetch asset Id.
+    StringTableEntry assetId = pAssetDefinition->mAssetId;
+
+    // Fetch asset dependencies.
+    TamlAssetDeclaredVisitor::typeAssetIdVector& assetDependencies = assetDeclaredVisitor.getAssetDependencies();
+
+    // Iterate dependencies.
+    for( TamlAssetDeclaredVisitor::typeAssetIdVector::iterator assetDependencyItr = assetDependencies.begin(); assetDependencyItr != assetDependencies.end(); ++assetDependencyItr )
+    {
+        // Fetch dependency asset Id.
+        StringTableEntry dependencyAssetId = *assetDependencyItr;
+
+        // Insert depends-on.
+        mAssetDependsOn.insertEqual( assetId, dependencyAssetId );
+
+        // Insert is-depended-on.
+        mAssetIsDependedOn.insertEqual( dependencyAssetId, assetId );
+    }
+
+    // Fetch asset loose files.
+    TamlAssetDeclaredVisitor::typeLooseFileVector& assetLooseFiles = assetDeclaredVisitor.getAssetLooseFiles();
+
+    // Clear any existing loose files.
+    pAssetDefinition->mAssetLooseFiles.clear();
+
+    // Iterate loose files.
+    for( TamlAssetDeclaredVisitor::typeLooseFileVector::iterator assetLooseFileItr = assetLooseFiles.begin(); assetLooseFileItr != assetLooseFiles.end(); ++assetLooseFileItr )
+    {
+        // Store loose file.
+        pAssetDefinition->mAssetLooseFiles.push_back( *assetLooseFileItr );
+    }
+
+    return true;
+}
+
+//-----------------------------------------------------------------------------
+
+bool AssetManager::saveAsset( const char* pAssetId )
+{
+    // Debug Profiling.
+    PROFILE_SCOPE(AssetManager_SaveAsset);
+
+    // Sanity!
+    AssertFatal( pAssetId != NULL, "Cannot save a NULL asset Id." );
+
+    // Find asset.
+    AssetDefinition* pAssetDefinition = findAsset( pAssetId );
+
+    // Did we find the asset?
+    if ( pAssetDefinition == NULL )
+    {
+        // No, so warn.
+        Con::warnf( "Asset Manager: Failed to save asset Id '%s' as it does not exist.", pAssetId );
+        return false;
+    }
+
+    // A private asset has no file of its own to be written to.
+    if ( pAssetDefinition->mAssetPrivate )
+    {
+        // Warn.
+        Con::warnf( "Asset Manager: Cannot save asset Id '%s' as it is a private asset.", pAssetId );
+        return false;
+    }
+
+    // Write it.
+    if ( !writeAssetDefinitionFile( pAssetDefinition ) )
+        return false;
+
+    // Saved, so no longer out of step with the file.
+    if ( pAssetDefinition->mAssetDirty )
+    {
+        pAssetDefinition->mAssetDirty = false;
+
+        Con::executef( 2, "onAssetDirtyChanged", pAssetDefinition->mAssetId );
+    }
+
+    return true;
+}
+
+//-----------------------------------------------------------------------------
+
+U32 AssetManager::saveAllDirtyAssets( void )
+{
+    // Debug Profiling.
+    PROFILE_SCOPE(AssetManager_SaveAllDirtyAssets);
+
+    // Compile the list first: saving an asset can change the dependency hashes,
+    // and iterating the declared assets while that happens is asking for trouble.
+    Vector<typeAssetId> dirtyAssets;
+
+    for( typeDeclaredAssetsHash::iterator assetItr = mDeclaredAssets.begin(); assetItr != mDeclaredAssets.end(); ++assetItr )
+    {
+        if ( assetItr->value->mAssetDirty )
+            dirtyAssets.push_back( assetItr->value->mAssetId );
+    }
+
+    U32 savedCount = 0;
+
+    for( Vector<typeAssetId>::iterator assetItr = dirtyAssets.begin(); assetItr != dirtyAssets.end(); ++assetItr )
+    {
+        if ( saveAsset( *assetItr ) )
+            savedCount++;
+    }
+
+    return savedCount;
+}
+
+//-----------------------------------------------------------------------------
+
+// Throw away the in-memory changes and go back to what is on disk.
+//
+// The asset object itself is deliberately NOT replaced. Every AssetPtr holds a
+// raw pointer to it (assetPtr.h), so swapping the object would leave every
+// Sprite, ImageFrameProvider and ParticlePlayer in the scene pointing at a
+// deleted asset. Instead the file is read into a scratch object and copied onto
+// the live one, which keeps the identity everything else is holding.
+bool AssetManager::revertAsset( const char* pAssetId )
+{
+    // Debug Profiling.
+    PROFILE_SCOPE(AssetManager_RevertAsset);
+
+    // Sanity!
+    AssertFatal( pAssetId != NULL, "Cannot revert a NULL asset Id." );
+
+    // Find asset.
+    AssetDefinition* pAssetDefinition = findAsset( pAssetId );
+
+    // Did we find the asset?
+    if ( pAssetDefinition == NULL )
+    {
+        // No, so warn.
+        Con::warnf( "Asset Manager: Failed to revert asset Id '%s' as it does not exist.", pAssetId );
+        return false;
+    }
+
+    // Fetch the asset.
+    AssetBase* pAssetBase = pAssetDefinition->mpAssetBase;
+
+    // Finish if the asset is not loaded. Nothing is in memory to put back.
+    if ( pAssetBase == NULL )
+        return false;
+
+    // A private asset has no file to revert to.
+    if ( pAssetDefinition->mAssetPrivate )
+    {
+        // Warn.
+        Con::warnf( "Asset Manager: Cannot revert asset Id '%s' as it is a private asset.", pAssetId );
+        return false;
+    }
+
+    // Read the saved asset into a scratch object.
+    AssetBase* pSavedAsset = mTaml.read<AssetBase>( pAssetDefinition->mAssetBaseFilePath );
+
+    if ( pSavedAsset == NULL )
+    {
+        // Warn.
+        Con::warnf( "Asset Manager: Failed to revert asset Id '%s' as its file '%s' could not be read.", pAssetId, pAssetDefinition->mAssetBaseFilePath );
+        return false;
+    }
+
+    // The scratch object has to be the same kind of asset, or copying it across
+    // would be nonsense.
+    if ( pSavedAsset->getClassRep() != pAssetBase->getClassRep() )
+    {
+        // Warn.
+        Con::warnf( "Asset Manager: Failed to revert asset Id '%s' as its file describes a '%s' and the loaded asset is a '%s'.",
+            pAssetId, pSavedAsset->getClassName(), pAssetBase->getClassName() );
+        pSavedAsset->deleteObject();
+        return false;
+    }
+
+    {
+        // Putting an asset back is not editing it, and the whole restore is one
+        // change as far as anything watching is concerned.
+        ScopedAssetUpdate scopedUpdate( this, true );
+
+        pSavedAsset->copyTo( pAssetBase );
+    }
+
+    // Done with the scratch object.
+    pSavedAsset->deleteObject();
+
+    // Back in step with the file.
+    if ( pAssetDefinition->mAssetDirty )
+    {
+        pAssetDefinition->mAssetDirty = false;
+
+        Con::executef( 2, "onAssetDirtyChanged", pAssetDefinition->mAssetId );
+    }
+
+    return true;
+}
+
+//-----------------------------------------------------------------------------
+
+// Write a copy of an asset to a new file and declare it.
+//
+// The copy is made through an unowned scratch object rather than by copying the
+// file, so that what is duplicated is the asset as it stands in memory, unsaved
+// edits included. Unowned is also what makes setAssetName work: it is a no-op on
+// an asset the manager already owns.
+bool AssetManager::duplicateAsset( const char* pAssetId, const char* pTargetFilePath, const char* pTargetAssetName )
+{
+    // Debug Profiling.
+    PROFILE_SCOPE(AssetManager_DuplicateAsset);
+
+    // Sanity!
+    AssertFatal( pAssetId != NULL, "Cannot duplicate a NULL asset Id." );
+    AssertFatal( pTargetFilePath != NULL, "Cannot duplicate an asset to a NULL file path." );
+    AssertFatal( pTargetAssetName != NULL, "Cannot duplicate an asset to a NULL asset name." );
+
+    // Find asset.
+    AssetDefinition* pAssetDefinition = findAsset( pAssetId );
+
+    // Did we find the asset?
+    if ( pAssetDefinition == NULL )
+    {
+        // No, so warn.
+        Con::warnf( "Asset Manager: Failed to duplicate asset Id '%s' as it does not exist.", pAssetId );
+        return false;
+    }
+
+    // Fetch the asset.
+    AssetBase* pAssetBase = pAssetDefinition->mpAssetBase;
+
+    // Finish if the asset is not loaded.
+    if ( pAssetBase == NULL )
+    {
+        // Warn.
+        Con::warnf( "Asset Manager: Failed to duplicate asset Id '%s' as it is not loaded.", pAssetId );
+        return false;
+    }
+
+    // Take a copy.
+    AssetBase* pCopiedAsset = pAssetBase->createStateSnapshot();
+
+    if ( pCopiedAsset == NULL )
+    {
+        // Warn.
+        Con::warnf( "Asset Manager: Failed to duplicate asset Id '%s' as it could not be copied.", pAssetId );
+        return false;
+    }
+
+    // Name it.
+    pCopiedAsset->setAssetName( pTargetAssetName );
+
+    // Write it.
+    const bool written = mTaml.write( pCopiedAsset, pTargetFilePath );
+
+    // Done with the copy either way.
+    pCopiedAsset->deleteObject();
+
+    if ( !written )
+    {
+        // Warn.
+        Con::warnf( "Asset Manager: Failed to duplicate asset Id '%s' as '%s' could not be written.", pAssetId, pTargetFilePath );
+        return false;
+    }
+
+    // Which module the copy belongs to.
+    //
+    // Deliberately NOT pAssetDefinition->mpModuleDefinition. Re-scanning a path
+    // that already holds a registered module destroys the old ModuleDefinition
+    // and builds a new one, and nothing tells the assets that point at the old
+    // one -- so that pointer can be dangling, and dereferencing it produces
+    // whatever happens to be in the freed memory. Looking the module up by path,
+    // now, cannot be stale.
+    ModuleDefinition* pTargetModule = findModuleForPath( pTargetFilePath );
+
+    if ( pTargetModule == NULL )
+    {
+        // Warn.
+        Con::warnf( "Asset Manager: Duplicated asset Id '%s' to '%s' but no loaded module owns that location, so it could not be declared.", pAssetId, pTargetFilePath );
+        return false;
+    }
+
+    // Declare it, so it becomes an asset rather than a stray file.
+    if ( !addDeclaredAsset( pTargetModule, pTargetFilePath ) )
+    {
+        // Warn.
+        Con::warnf( "Asset Manager: Duplicated asset Id '%s' to '%s' but could not declare it.", pAssetId, pTargetFilePath );
+        return false;
+    }
+
+    return true;
 }
 
 //-----------------------------------------------------------------------------
@@ -1885,6 +2579,68 @@ S32 AssetManager::findAssetPrivate( AssetQuery* pAssetQuery, const bool assetPri
 
             // Skip if this is not the asset we want.
             if ( assetPrivate != pAssetDefinition->mAssetPrivate )
+                continue;
+
+            // Store as result.
+            pAssetQuery->push_back( pAssetDefinition->mAssetId );
+
+            // Increase result count.
+            resultCount++;
+        }
+    }
+
+    return resultCount;
+}
+
+//-----------------------------------------------------------------------------
+
+S32 AssetManager::findAssetDirty( AssetQuery* pAssetQuery, const bool assetDirty, const bool assetQueryAsSource )
+{
+    // Debug Profiling.
+    PROFILE_SCOPE(AssetManager_FindAssetDirty);
+
+    // Sanity!
+    AssertFatal( pAssetQuery != NULL, "Cannot use NULL asset query." );
+
+    // Reset result count.
+    S32 resultCount = 0;
+
+    // Use asset-query as the source?
+    if ( assetQueryAsSource )
+    {
+        AssetQuery filteredAssets;
+
+        // Yes, so iterate asset query.
+        for( Vector<StringTableEntry>::iterator assetItr = pAssetQuery->begin(); assetItr != pAssetQuery->end(); ++assetItr )
+        {
+            // Fetch asset definition.
+            AssetDefinition* pAssetDefinition = findAsset( *assetItr );
+
+            // Skip if this is not the asset we want.
+            if (    pAssetDefinition == NULL ||
+                    pAssetDefinition->mAssetDirty != assetDirty )
+                        continue;
+
+            // Store as result.
+            filteredAssets.push_back( pAssetDefinition->mAssetId );
+
+            // Increase result count.
+            resultCount++;
+        }
+
+        // Set asset query.
+        pAssetQuery->set( filteredAssets );
+    }
+    else
+    {
+        // No, so iterate declared assets.
+        for( typeDeclaredAssetsHash::iterator assetItr = mDeclaredAssets.begin(); assetItr != mDeclaredAssets.end(); ++assetItr )
+        {
+            // Fetch asset definition.
+            AssetDefinition* pAssetDefinition = assetItr->value;
+
+            // Skip if this is not the asset we want.
+            if ( assetDirty != pAssetDefinition->mAssetDirty )
                 continue;
 
             // Store as result.
@@ -2930,6 +3686,15 @@ void AssetManager::unloadAsset( AssetDefinition* pAssetDefinition )
 {
     // Debug Profiling.
     PROFILE_SCOPE(AssetManager_UnloadAsset);
+
+    // An asset with unsaved changes stays resident.
+    //
+    // Unloading destroys the asset object, and with it every change the user has
+    // made and not yet saved. Releasing the last reference -- which is as
+    // ordinary as closing the inspector on it -- would otherwise throw that work
+    // away with no warning and no way back.
+    if ( pAssetDefinition->mAssetDirty )
+        return;
 
     // Destroy the asset.
     pAssetDefinition->mpAssetBase->deleteObject();
