@@ -105,10 +105,10 @@ function AssetAnimationStage::select(%this, %imageAsset, %animationAsset, %asset
 
 	%this.build();
 
-	// The editor closing resizes the canvas, and AssetWindow::onExtentChange
-	// answers a resize by re-clicking the selected tile -- so a selection can
-	// arrive while the panes are being torn down around it. Nothing to do then
-	// but stand down quietly.
+	// A selection that arrives with no panes to put anything in. absorbResize now
+	// closes the route this was written for -- a resize mid-teardown re-clicking
+	// the selected tile -- but build() can also decline, so nothing below may
+	// assume a pane is there.
 	if(!isObject(%this.palettePane) || !isObject(%this.timelinePane))
 	{
 		return;
@@ -136,6 +136,13 @@ function AssetAnimationStage::select(%this, %imageAsset, %animationAsset, %asset
 	// Before the bar is refreshed, because adopting the sprite is what settles
 	// whether the animation is playing.
 	%this.onPreviewRebuilt(%this.admin.previewSprite);
+
+	// The sprite was measured against the whole preview area, because it was made
+	// before the split existed -- the tile displays first and selects second. The
+	// split has since taken a palette and a timeline out of that area, and the only
+	// thing that answers a resize while it is being built is the guard that stops
+	// the preview being rebuilt. So the sprite is put right here, once, at the end.
+	%this.resizePreview();
 
 	%this.admin.transportBar.refresh();
 }
@@ -505,6 +512,32 @@ function AssetAnimationStage::resyncPreview(%this)
 	{
 		%this.scrubTo(%this.resumeSlot);
 	}
+}
+
+// A divider moved, or the editor was resized, and the window is asking whether it
+// should answer that by rebuilding the preview from the selected tile. Two
+// separate reasons it must not, and only one of them is about size.
+//
+// The first is the split being built or collapsed. Both move dividers, so both
+// come back through here -- and the tile the window would re-click is the
+// PREVIOUSLY selected one, because AssetDictionaryButton::onClick does not record
+// its own tile until every branch below it has run. Selecting an animation while
+// anything else was selected therefore repainted the preview with the asset the
+// user had just navigated away from, on top of the animation sprite that had been
+// made a moment earlier -- and cleared that sprite out from under the stage. There
+// is nothing for the window to do in either case: the selection that started the
+// rebuild paints the preview itself, before or after, and this is only a divider
+// moving in the middle of it.
+//
+// The second is an animation already on show, which is the case below.
+function AssetAnimationStage::absorbResize(%this)
+{
+	if(%this.busy)
+	{
+		return true;
+	}
+
+	return %this.resizePreview();
 }
 
 // A divider moved, or the editor was resized. The sprite is already there and

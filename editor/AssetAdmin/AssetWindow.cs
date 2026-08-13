@@ -268,10 +268,12 @@ function AssetWindow::onExtentChange(%this, %d)
 	%this.setCameraArea(%area);
 	%this.setViewLimitOn(%area);
 
-	// The animation stage resizes the sprite it already has rather than letting
-	// the whole preview be rebuilt, which would restart the animation every time
-	// a divider moved.
-	if(AssetAdmin.animationStage.resizePreview())
+	// The animation stage gets first refusal. It resizes the sprite it already has
+	// rather than letting the whole preview be rebuilt, which would restart the
+	// animation every time a divider moved -- and while it is putting its split up
+	// or taking it down it answers for the resizes that causes, which are its own
+	// and not a reason to rebuild anything.
+	if(AssetAdmin.animationStage.absorbResize())
 	{
 		return;
 	}
