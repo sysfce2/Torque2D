@@ -8,9 +8,9 @@
 // into flat alphabetical groups, which for an ImageAsset means the eight cell
 // values arrive split into "X Values" and "Y Values" -- so a cell's width never
 // sits beside its height -- with nothing pinned open and nothing said about the
-// image itself. Only image assets have a pane so far; the rest still use the
-// inspector, which is why the pane's knowledge of a particular asset lives in
-// the subclass rather than here.
+// image itself. Image, animation, font and audio assets have panes; particle and
+// spine assets still use the inspector, which is why the pane's knowledge of a
+// particular asset lives in the subclass rather than here.
 //
 // Layout is the arrangement GuiEditorInspectorPane and GuiProfileEditorProfileForm
 // both use, and for the same reason: a vertical chain of blocks, each laying its
@@ -29,8 +29,9 @@
 //   build()           call once after adding the pane to its scroller; it calls
 //   buildPane()       which the subclass defines -- its whole layout
 //   labelFor()        \  the subclass's field tables. The defaults are the field
-//   kindFor()          } name and a text box, which is what an unlisted field
-//   enumItemsFor()    /  degrades to rather than vanishing.
+//   kindFor()          } name, a text box and no tooltip, which is what an
+//   enumItemsFor()     } unlisted field degrades to rather than vanishing.
+//   tipFor()          /
 //   refreshExtras()   anything the row loop does not reach
 //   afterCommit()     anything the rest of the editor has to be told
 //
@@ -226,6 +227,11 @@ function AssetInspectorPane::makeFieldRow(%this, %container, %field, %label, %ki
 	// The row's reset button means "back to the theme's stamped value", which has
 	// no analogue for an asset: there is no layer under it to fall back to.
 	%row.resetButton.setVisible(false);
+
+	// After build(), because the widgets the tooltip goes on do not exist until
+	// then. Empty for most fields, which is the same as not having one.
+	%row.setTooltip(%this.tipFor(%field));
+
 	return %row;
 }
 
@@ -278,6 +284,18 @@ function AssetInspectorPane::kindFor(%this, %field)
 }
 
 function AssetInspectorPane::enumItemsFor(%this, %field)
+{
+	return "";
+}
+
+// What a field means, for the ones whose name does not say it.
+//
+// The engine would be the obvious place to get this from and is not one: a
+// field's registered doc string is empty on all six of AudioAsset's and on most
+// of everything else, so the stock inspector has nothing to show either. Left
+// empty here, which is the same as having no tooltip; a pane answers for the
+// handful of its own fields that need explaining.
+function AssetInspectorPane::tipFor(%this, %field)
 {
 	return "";
 }

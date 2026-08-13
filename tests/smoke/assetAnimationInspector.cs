@@ -84,8 +84,8 @@ function ainStep2()
 	ainCheck("it starts hidden", !$ainInspector.paneScroller["Animation"].isVisible());
 	ainCheck("the generic inspector is the one on show", $ainInspector.insScroller.isVisible());
 
-	// The registry knows both panes and nothing else.
-	ainCheck("both panes are registered", $ainInspector.paneKeys $= "Image Animation");
+	// The registry knows every pane, in the order they were registered.
+	ainCheck("all three panes are registered", $ainInspector.paneKeys $= "Image Animation Font");
 
 	$ainTile = AssetAdmin.Dictionary["AnimationAsset"].getButton($ainAssetId);
 	ainCheck("the animation tile is in the library", isObject($ainTile));
@@ -130,7 +130,11 @@ function ainStep3()
 
 	// Renaming an asset changes its id and every file naming it, so the row is
 	// readable and inert.
-	ainCheck("the name row is not editable", !$ainPane.row["AssetName"].isEnabled());
+	//
+	// Asked of the box rather than of the row: there is no isEnabled binding on
+	// anything, so the row form of this check answered "Unknown command" and
+	// passed for years without testing a thing.
+	ainCheck("the name row is not editable", !$ainPane.row["AssetName"].editor.isActive());
 
 	schedule(300, 0, "ainStep4");
 }

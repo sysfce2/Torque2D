@@ -473,10 +473,16 @@ function aiStep9Narrow()
 
 function aiStep10()
 {
-	$aiInspector.loadFontAsset($aiAsset, $aiAssetId);
+	// A real font asset, chosen the way a user would. This used to hand the IMAGE
+	// asset to loadFontAsset and check that the generic inspector took over --
+	// which stopped meaning anything when font assets got a pane of their own.
+	// The question is the same either way: does the image pane hand the page back.
+	%fontTile = AssetAdmin.Dictionary["FontAsset"].getButton("ToyAssets:ArialFont");
+	aiCheck("the fixture gave the library a font asset too", isObject(%fontTile));
+	%fontTile.onClick();
 
-	aiCheck("another asset kind gets the generic inspector",
-		$aiInspector.insScroller.isVisible() && !$aiInspector.imageScroller.isVisible());
+	aiCheck("another asset kind takes the page from the image pane",
+		$aiInspector.paneScroller["Font"].isVisible() && !$aiInspector.imageScroller.isVisible());
 	aiCheck("the image pane let go of its asset", !isObject($aiPane.target));
 
 	// And back, so nothing about the swap is one-way.

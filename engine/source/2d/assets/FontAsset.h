@@ -65,7 +65,56 @@ public:
     void                    setFontFile( const char* pFontFile );
     inline StringTableEntry getFontFile( void ) const                   { return mFontFile; }
 
+    /// The font file as it is stored on disk -- relative to the folder the asset
+    /// itself lives in. getFontFile answers the expanded absolute path, which is
+    /// what the engine needs and is neither readable nor portable anywhere else.
+    inline StringTableEntry getRelativeFontFile( void ) const           { return collapseAssetFilePath(mFontFile); }
+
     inline TextureHandle&   getImageTexture(U16 pageID)                         { return mBitmapFont.mTexture[pageID]; }
+
+    /// What the .fnt turned out to hold.
+    ///
+    /// None of this is a value the asset stores -- it is the result of the last
+    /// parse, so it can only be asked, never told. An editor needs it to say
+    /// whether a font loaded and what came out of it; before this there was no way
+    /// to find out from script at all.
+    inline U32 getGlyphCount( void ) const          { return mBitmapFont.getCharacterCount(); }
+    inline U32 getPageCount( void ) const           { return (U32)mBitmapFont.mPageName.size(); }
+    inline U32 getFontSize( void ) const            { return (U32)mBitmapFont.mSize; }
+    inline U32 getLineHeight( void ) const          { return (U32)mBitmapFont.mLineHeight; }
+    inline U32 getBaseline( void ) const            { return (U32)mBitmapFont.mBaseline; }
+
+    /// How many of the declared pages actually have a texture. A page is named
+    /// inside the .fnt rather than in the asset file, so a missing page image is
+    /// invisible from the asset and this is the only way to notice it.
+    inline U32 getLoadedPageCount( void ) const
+    {
+        U32 loaded = 0;
+        for ( U32 index = 0; index < (U32)mBitmapFont.mTexture.size(); ++index )
+        {
+            if ( mBitmapFont.mTexture[index].NotNull() )
+                loaded++;
+        }
+        return loaded;
+    }
+
+    inline StringTableEntry getPageFile( const U32 pageIndex ) const
+    {
+        return ( pageIndex < (U32)mBitmapFont.mPageName.size() )
+            ? mBitmapFont.mPageName[pageIndex] : StringTable->EmptyString;
+    }
+
+    inline U32 getPageWidth( const U32 pageIndex ) const
+    {
+        return ( pageIndex < (U32)mBitmapFont.mTexture.size() && mBitmapFont.mTexture[pageIndex].NotNull() )
+            ? mBitmapFont.mTexture[pageIndex].getWidth() : 0;
+    }
+
+    inline U32 getPageHeight( const U32 pageIndex ) const
+    {
+        return ( pageIndex < (U32)mBitmapFont.mTexture.size() && mBitmapFont.mTexture[pageIndex].NotNull() )
+            ? mBitmapFont.mTexture[pageIndex].getHeight() : 0;
+    }
 
     /// Declare Console Object.
     DECLARE_CONOBJECT(FontAsset);

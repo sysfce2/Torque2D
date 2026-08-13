@@ -136,12 +136,14 @@ function AssetInspector::onAdd(%this)
 	// on show. None of them is ever rebuilt or freed.
 	%this.registerPane("Image", %this.createImagePane());
 	%this.registerPane("Animation", %this.createAnimationPane());
+	%this.registerPane("Font", %this.createFontPane());
 
-	// Named handles for the two the tests and the load methods reach for
+	// Named handles for the ones the tests and the load methods reach for
 	// directly. The registry is the truth; these are just shorter.
 	%this.imageScroller = %this.paneScroller["Image"];
 	%this.imagePane = %this.pane["Image"];
 	%this.animationPane = %this.pane["Animation"];
+	%this.fontPane = %this.pane["Font"];
 
 	//Particle Graph Tool
 	%this.scaleGraphPage = %this.createTabPage("Scale Graph", "AssetParticleGraphTool", "");
@@ -283,6 +285,23 @@ function AssetInspector::createAnimationPane(%this)
 	return new GuiChainCtrl()
 	{
 		class = "AssetAnimationInspectorPane";
+		superclass = "AssetInspectorPane";
+		HorizSizing = "width";
+		Position = "0 0";
+		Extent = %width SPC 320;
+		IsVertical = true;
+		ChildSpacing = 6;
+		paneWidth = %width;
+	};
+}
+
+function AssetInspector::createFontPane(%this)
+{
+	%width = 686;
+
+	return new GuiChainCtrl()
+	{
+		class = "AssetFontInspectorPane";
 		superclass = "AssetInspectorPane";
 		HorizSizing = "width";
 		Position = "0 0";
@@ -739,7 +758,8 @@ function AssetInspector::loadFontAsset(%this, %fontAsset, %assetID)
 	%this.titlebar.setText("Font Asset:" SPC %fontAsset.AssetName);
 	%this.beginDocument(%fontAsset);
 
-	%this.inspectStock(%fontAsset);
+	%this.chooseInspector("Font");
+	%this.fontPane.bind(%fontAsset, %assetID);
 }
 
 function AssetInspector::loadAudioAsset(%this, %audioAsset, %assetID)

@@ -28,7 +28,8 @@
 // should not fill its cell) and editorHeight (how deep a "multiline" box is).
 // Call build() once after adding the row to its container -- the container
 // decides the cell width, so build() has to run after the add. It records the
-// laid-out height in .rowHeight.
+// laid-out height in .rowHeight. setTooltip() after that gives the row a standing
+// explanation of its field, which survives being greyed and re-enabled.
 //
 // Two things a row takes from its OWNER rather than from itself, because they
 // are decisions the whole pane makes once:
@@ -41,6 +42,9 @@
 //                The default is the game root, which is what a bitmap path
 //                means; an asset's loose file is relative to the asset's own
 //                folder instead.
+//   fileFilters  what that Find button's dialog offers, and
+//   fileTitle    what it calls itself. Both default to bitmaps, which is what a
+//                "file" row was everywhere until fonts and sounds got panes.
 //
 // Kinds: text, number, decimal, point, pointf, bool, color, enum, dropdown,
 // file, asset, multiline.
@@ -460,6 +464,38 @@ function EditorFieldRow::selectItem(%this, %value)
 // Filtering, enabling and the override marker.
 //-----------------------------------------------------------------------------
 
+// What the row says about itself when it is working normally, as opposed to the
+// reason setEnabled gives for it not being.
+//
+// The two share one tooltip, so they have to be told about each other: a row that
+// is greyed and then re-enabled used to come back with no tooltip at all, because
+// setEnabled blanked it. The explanation is kept here so enabling can put it back.
+//
+// A field's own doc string would be the obvious source and is not one -- the
+// engine's is empty on every AudioAsset field and on most others, so this is set
+// by the pane that knows what the field means (AssetInspectorPane::tipFor).
+function EditorFieldRow::setTooltip(%this, %tip)
+{
+	%this.baseTip = %tip;
+	%this.applyTooltip(%tip);
+}
+
+// One tooltip on every widget the row owns. The editor alone is not enough on a
+// "file" or "asset" row, where the Find button is half the row's hit area, nor on
+// a point row, where the second box is half of it.
+function EditorFieldRow::applyTooltip(%this, %tip)
+{
+	%this.editor.Tooltip = %tip;
+	if(isObject(%this.editorY))
+	{
+		%this.editorY.Tooltip = %tip;
+	}
+	if(isObject(%this.findButton))
+	{
+		%this.findButton.Tooltip = %tip;
+	}
+}
+
 // A field the current control never reads stays visible but inert, so its value
 // is never lost -- the pane's Show All puts it back in reach.
 function EditorFieldRow::setEnabled(%this, %enabled, %reason)
@@ -473,7 +509,9 @@ function EditorFieldRow::setEnabled(%this, %enabled, %reason)
 	{
 		%this.findButton.setActive(%enabled);
 	}
-	%this.editor.Tooltip = %enabled ? "" : %reason;
+
+	// Enabling restores what the row normally says rather than blanking it.
+	%this.applyTooltip(%enabled ? %this.baseTip : %reason);
 }
 
 // One field wears a different name depending on the category (cursorColor is a
@@ -531,6 +569,31 @@ function EditorFieldRow::pathBase(%this)
 	return getMainDotCsDir();
 }
 
+// What the Find dialog offers, and what it calls itself.
+//
+// Bitmaps by default: a "file" row was a picture everywhere until the Asset
+// Manager grew panes for fonts and sounds, whose loose file is a .fnt or a .wav
+// and for which an image filter offers nothing that can be chosen. Taken from
+// the owner rather than the row for the same reason findBase is -- it is one
+// decision a pane makes about the one loose file it edits.
+function EditorFieldRow::fileFilters(%this)
+{
+	if(isObject(%this.owner) && %this.owner.fileFilters !$= "")
+	{
+		return %this.owner.fileFilters;
+	}
+	return "Image Files (*.png;*.jpg;*.jpeg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp|All Files (*.*)|*.*";
+}
+
+function EditorFieldRow::fileTitle(%this)
+{
+	if(isObject(%this.owner) && %this.owner.fileTitle !$= "")
+	{
+		return %this.owner.fileTitle;
+	}
+	return "Choose an Image";
+}
+
 // The Find button on a "file" row. Picks a file and writes its path back into
 // the box relative to whatever pathBase() says it should be measured from.
 function EditorFieldRow::onFindClicked(%this)
@@ -545,12 +608,12 @@ function EditorFieldRow::onFindClicked(%this)
 
 	%dialog = new OpenFileDialog()
 	{
-		Filters = "Image Files (*.png;*.jpg;*.jpeg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp|All Files (*.*)|*.*";
+		Filters = %this.fileFilters();
 		ChangePath = false;
 		MultipleFiles = false;
 		DefaultFile = "";
 		defaultPath = %start;
-		title = "Choose an Image";
+		title = %this.fileTitle();
 	};
 	%result = %dialog.execute();
 	%fileName = %dialog.fileName;

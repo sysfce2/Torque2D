@@ -61,9 +61,25 @@ namespace font
       std::vector<TextureHandle> mTexture;
 
       BitmapFont();
+
+      /// Forget everything read from a .fnt file.
+      ///
+      /// parseFont ADDS to what is already here -- it has no clear of its own, and
+      /// mChar and mKerning are maps, so parsing a second font over a first leaves
+      /// the union of the two and a glyph count that only ever grows. Anything that
+      /// re-reads a font has to come through here first.
+      void clear();
+
       bool parseFont(Stream& io_rStream);
       TextureHandle LoadTexture(StringTableEntry fileName);
       const BitmapFontCharacter& getCharacter(const U16 charID) { return mChar[charID]; }
+
+      /// How many glyphs the font actually holds.
+      ///
+      /// Const where getCharacter above cannot be: mChar[charID] on a std::map
+      /// inserts a default-constructed character for a glyph the font does not
+      /// have, and size() does not.
+      inline U32 getCharacterCount(void) const { return (U32)mChar.size(); }
       inline const F32 getSizeRatio(const F32 size) { return size / mLineHeight; }
       inline const S16 getKerning(U16 first, U16 second) { return (S16)mKerning[make_pair(first, second)]; }
 
