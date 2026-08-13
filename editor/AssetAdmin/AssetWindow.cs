@@ -46,7 +46,7 @@ function AssetWindow::displayImageAsset(%this, %imageAsset, %assetID)
 			Scene = AssetAdmin.AssetScene;
 			Image = %assetID;
 			size = %size;
-			BlandColor = "1 1 1 1";
+			BlendColor = "1 1 1 1";
 			SceneLayer = 1;
 			Position = "0 0";
 			BodyType = static;
@@ -126,7 +126,7 @@ function AssetWindow::displayAnimationAsset(%this, %imageAsset, %animationAsset,
 		Scene = AssetAdmin.AssetScene;
 		Animation = %assetID;
 		size = %size;
-		BlandColor = "1 1 1 1";
+		BlendColor = "1 1 1 1";
 		SceneLayer = 1;
 		Position = "0 0";
 		BodyType = static;
@@ -142,16 +142,28 @@ function AssetWindow::displayParticleAsset(%this, %particleAsset, %assetID)
 {
 	AssetAdmin.AssetScene.clear(true);
 
-	new ParticlePlayer()
+	// Fitted to the camera like the image and font previews are, rather than left
+	// at a hardcoded ten metres. A particle player's own size does not bound what
+	// it draws -- the emitters do that -- but it is what the emitter offsets and
+	// the size scale are measured against, so an effect authored around one scale
+	// arrived at another.
+	%size = %this.getWorldSize("10 10");
+
+	%player = new ParticlePlayer()
 	{
 		Scene = AssetAdmin.AssetScene;
 		Particle = %assetID;
-		size = "10 10";
-		BlandColor = "1 1 1 1";
+		size = %size;
+		BlendColor = "1 1 1 1";
 		SceneLayer = 1;
 		Position = "0 0";
 		BodyType = static;
 	};
+
+	// A different object every time -- the scene is cleared above -- so the
+	// transport, which drives this and nothing else, has to be handed the new one.
+	AssetAdmin.previewPlayer = %player;
+	AssetAdmin.showParticleTransport(%player, %assetID);
 }
 
 function AssetWindow::displayFontAsset(%this, %fontAsset, %assetID)
@@ -165,7 +177,7 @@ function AssetWindow::displayFontAsset(%this, %fontAsset, %assetID)
 		Font = %assetID;
 		fontSize = 4;
 		size = %size;
-		BlandColor = "1 1 1 1";
+		BlendColor = "1 1 1 1";
 		SceneLayer = 1;
 		Position = "0 0";
 		BodyType = static;

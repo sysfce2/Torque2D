@@ -367,6 +367,11 @@ function AssetDictionaryButton::onClick(%this)
 	// five asset kinds that have never heard of it.
 	AssetAdmin.animationStage.retainFor(%this.AnimationAssetID);
 
+	// Same idea for the particle transport: the particle branch below puts it back
+	// up with the player it just built, so the only thing that has to happen here
+	// is that it is not left over the preview of something that has no transport.
+	AssetAdmin.hideParticleTransport();
+
 	// The animation branch has to stay first: an animation tile caches its image
 	// asset too, so the image branch would swallow it.
 	if(isObject(%this.AnimationAsset) && %this.AnimationAssetID !$= "")

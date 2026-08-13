@@ -346,7 +346,7 @@ function aniStepTransport()
 	%toggleDrawn = getWord(%bar.loopButton.getExtent(), 0) - getWord(%inset, 0);
 
 	aniCheck("a toggle draws the same size as a push button (" @ %toggleDrawn @ ")",
-		%toggleDrawn == $AssetAnimationTransportBar::buttonSize);
+		%toggleDrawn == $EditorTransportBar::buttonSize);
 
 	// Every button draws the same size of picture, whatever size the button is.
 	//

@@ -64,6 +64,10 @@ function EditorCore::create( %this )
 	exec("./EditorToggleIcon.cs");
 	exec("./EditorChoiceRow.cs");
 
+	// The chrome a preview's transport bar is made of. Both the Asset Manager's
+	// bars build on it, and it uses EditorToggleIcon and EditorIconButton above.
+	exec("./EditorTransportBar.cs");
+
 	// The field cell, here for the same reason: the Gui Editor grew it, and the
 	// Asset Manager's inspector panes are built at create time from a module that
 	// loads before the Gui Editor does.

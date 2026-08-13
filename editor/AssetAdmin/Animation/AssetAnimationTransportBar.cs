@@ -24,13 +24,9 @@
 // Play, rewind, loop, and the two switches that decide what an edit does: the
 // bar over the animation preview.
 //
-// It sits as an overlay on the preview background rather than in a strip of its
-// own, which is where the audio play button already sits and proof that an
-// overlay there receives clicks over the SceneWindow. It costs no layout and
-// takes no room from the art.
-//
-// Not built from EditorButtonBar: that makes EditorIconButtons, which are
-// momentary, and two of these have to SHOW a state.
+// The chrome -- the sized buttons, the toggles, the gaps -- is EditorTransportBar
+// in EditorCore, shared with the particle preview's bar. What is left here is
+// what these particular buttons do.
 //
 // Play and Stop are two buttons with one hidden rather than one toggle, and the
 // difference is not cosmetic. A toggle says "this setting is on"; these two say
@@ -43,29 +39,22 @@
 // three that are settings rather than actions.
 //-----------------------------------------------------------------------------
 
-$AssetAnimationTransportBar::buttonSize = 24;
-$AssetAnimationTransportBar::playSize = 36;
-$AssetAnimationTransportBar::spacing = 4;
-$AssetAnimationTransportBar::gap = 16;
-
 function AssetAnimationTransportBar::onAdd(%this)
 {
-	ThemeManager.setProfile(%this, "emptyProfile");
+	%this.init();
 
 	%this.addButton("rewind", $EditorIcon::playback_rew, "Back to the first frame",
-		$AssetAnimationTransportBar::buttonSize);
+		$EditorTransportBar::buttonSize);
 
 	// The one you reach for, so it is half again the size of the rest. They sit
 	// in the same place, and exactly one of them is ever visible.
 	%this.playButton = %this.addButton("play", $EditorIcon::playback_play, "Play the preview",
-		$AssetAnimationTransportBar::playSize);
+		$EditorTransportBar::playSize);
 	%this.stopButton = %this.addButton("stop", $EditorIcon::playback_stop, "Stop the preview",
-		$AssetAnimationTransportBar::playSize);
+		$EditorTransportBar::playSize);
 	%this.stopButton.setVisible(false);
 
-	// A chain lays out what it can see, so an empty control is how a gap is
-	// spelled -- there is no spacing-before on a child.
-	%this.addSpacer($AssetAnimationTransportBar::gap);
+	%this.addSpacer($EditorTransportBar::gap);
 
 	%this.loopButton = %this.addToggle("Loop", $EditorIcon::playback_reload, $EditorIcon::playback_reload,
 		"Looping. Click to play once and stop on the last frame.",
@@ -76,96 +65,7 @@ function AssetAnimationTransportBar::onAdd(%this)
 		"Keeping the animation's time: adding a frame makes every frame play faster.");
 
 	%this.addButton("openRangeDialog", $EditorIcon::list_num, "Fill the timeline from a range of frames",
-		$AssetAnimationTransportBar::buttonSize);
-}
-
-// How much bigger a toggle has to be than a push button to LOOK the same size.
-//
-// They draw differently. A GuiButtonCtrl paints its chrome across the whole
-// control less its margins; a GuiCheckBoxCtrl paints a box that
-// GuiCheckBoxCtrl::onRender clamps into the CONTENT rect -- inside the borders
-// and padding as well. iconButtonProfile has a 2 pixel border on all four sides,
-// so a 24 pixel toggle drew a 20 pixel box beside a 24 pixel button, and no
-// amount of boxExtent fixed it: the clamp will not let the box out.
-//
-// So the toggle is built that much larger and its box comes out the right size.
-// Read from the profile rather than written as 4, because a theme is free to
-// give the button a different border.
-function AssetAnimationTransportBar::chromeInset(%this)
-{
-	%profile = ThemeManager.activeTheme.iconButtonProfile;
-
-	return (%profile.borderLeft.border + %profile.borderRight.border) SPC
-		(%profile.borderTop.border + %profile.borderBottom.border);
-}
-
-function AssetAnimationTransportBar::addToggle(%this, %name, %frameOn, %frameOff, %tipOn, %tipOff)
-{
-	%size = $AssetAnimationTransportBar::buttonSize;
-	%inset = %this.chromeInset();
-
-	%button = new GuiCheckBoxCtrl()
-	{
-		class = "EditorToggleIcon";
-		Position = "0 0";
-		VertSizing = "center";
-		Extent = (%size + getWord(%inset, 0)) SPC (%size + getWord(%inset, 1));
-		frameOn = %frameOn;
-		frameOff = %frameOff;
-		tipOn = %tipOn;
-		tipOff = %tipOff;
-		toggleName = %name;
-		owner = %this;
-	};
-	ThemeManager.setProfile(%button, "iconButtonProfile");
-	ThemeManager.setProfile(%button, "tipProfile", "TooltipProfile");
-	%this.add(%button);
-
-	return %button;
-}
-
-function AssetAnimationTransportBar::addButton(%this, %method, %frame, %tooltip, %size)
-{
-	%size = (%size $= "") ? $AssetAnimationTransportBar::buttonSize : %size;
-
-	// Said in the block, not set afterwards. EditorIconButton forces its own
-	// extent in onAdd and its hover handlers animate the icon to sizes of their
-	// own, so a resize applied after the add survived exactly until the pointer
-	// first crossed it -- and the chain had already sized itself around the
-	// smaller button by then, which is what clipped the big one.
-	%button = new GuiButtonCtrl()
-	{
-		class = "EditorIconButton";
-		Position = "0 0";
-		VertSizing = "center";
-		// buttonSize only. The icon is deliberately left at its default, so the
-		// big play button is a bigger BUTTON with the same picture on it as the
-		// rest -- which is what makes it easy to find without making it look like
-		// a different kind of control.
-		buttonSize = %size;
-		Frame = %frame;
-		Command = %this.getId() @ "." @ %method @ "();";
-		Tooltip = %tooltip;
-	};
-	ThemeManager.setProfile(%button, "iconButtonProfile");
-	ThemeManager.setProfile(%button, "tipProfile", "TooltipProfile");
-	%this.add(%button);
-
-	return %button;
-}
-
-function AssetAnimationTransportBar::addSpacer(%this, %width)
-{
-	%spacer = new GuiControl()
-	{
-		Position = "0 0";
-		Extent = %width SPC $AssetAnimationTransportBar::buttonSize;
-		UseInput = false;
-	};
-	ThemeManager.setProfile(%spacer, "emptyProfile");
-	%this.add(%spacer);
-
-	return %spacer;
+		$EditorTransportBar::buttonSize);
 }
 
 //-----------------------------------------------------------------------------
@@ -222,12 +122,7 @@ function AssetAnimationTransportBar::refresh(%this)
 	%playing = %this.stage.playing;
 	%this.playButton.setVisible(!%playing);
 	%this.stopButton.setVisible(%playing);
-
-	// A chain lays out only the children it can see, and nothing re-lays it out
-	// when one is hidden -- so swapping the two is a resize away from leaving a
-	// hole where the other one was.
-	%this.resize(getWord(%this.getPosition(), 0), getWord(%this.getPosition(), 1),
-		getWord(%this.getExtent(), 0), getWord(%this.getExtent(), 1));
+	%this.relayout();
 
 	if(!isObject(%this.stage.animationAsset))
 	{

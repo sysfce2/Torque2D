@@ -139,6 +139,13 @@ function AssetInspector::onAdd(%this)
 	%this.registerPane("Font", %this.createFontPane());
 	%this.registerPane("Sound", %this.createSoundPane());
 
+	// A particle asset takes two, because the dropdown beside the title chooses
+	// between the effect and one of its emitters and those are different objects
+	// with different fields. They are two panes rather than one that rebuilds for
+	// the same reason as all the others: a pane is built once and only ever bound.
+	%this.registerPane("Particle", %this.createParticlePane());
+	%this.registerPane("Emitter", %this.createEmitterPane());
+
 	// Named handles for the ones the tests and the load methods reach for
 	// directly. The registry is the truth; these are just shorter.
 	%this.imageScroller = %this.paneScroller["Image"];
@@ -146,6 +153,8 @@ function AssetInspector::onAdd(%this)
 	%this.animationPane = %this.pane["Animation"];
 	%this.fontPane = %this.pane["Font"];
 	%this.soundPane = %this.pane["Sound"];
+	%this.particlePane = %this.pane["Particle"];
+	%this.emitterPane = %this.pane["Emitter"];
 
 	//Particle Graph Tool
 	%this.scaleGraphPage = %this.createTabPage("Scale Graph", "AssetParticleGraphTool", "");
@@ -321,6 +330,40 @@ function AssetInspector::createSoundPane(%this)
 	return new GuiChainCtrl()
 	{
 		class = "AssetSoundInspectorPane";
+		superclass = "AssetInspectorPane";
+		HorizSizing = "width";
+		Position = "0 0";
+		Extent = %width SPC 320;
+		IsVertical = true;
+		ChildSpacing = 6;
+		paneWidth = %width;
+	};
+}
+
+function AssetInspector::createParticlePane(%this)
+{
+	%width = 686;
+
+	return new GuiChainCtrl()
+	{
+		class = "AssetParticleInspectorPane";
+		superclass = "AssetInspectorPane";
+		HorizSizing = "width";
+		Position = "0 0";
+		Extent = %width SPC 320;
+		IsVertical = true;
+		ChildSpacing = 6;
+		paneWidth = %width;
+	};
+}
+
+function AssetInspector::createEmitterPane(%this)
+{
+	%width = 686;
+
+	return new GuiChainCtrl()
+	{
+		class = "AssetEmitterInspectorPane";
 		superclass = "AssetInspectorPane";
 		HorizSizing = "width";
 		Position = "0 0";
@@ -738,28 +781,28 @@ function AssetInspector::refreshParticleTitleDropDown(%this, %particleAsset, %in
 	%this.titleDropDown.setCurSel(%index);
 }
 
+// Index 0 is the effect; anything above it is one of its emitters. Each gets a
+// pane of its own and the graph tab that belongs with it.
 function AssetInspector::onChooseParticleAsset(%this, %particleAsset)
 {
 	%index = %this.titleDropDown.getSelectedItem();
-	%this.inspector.clearHiddenFields();
 	%curSel = %this.tabBook.getSelectedPage();
-	if(%index == 0)
+
+	if(%index <= 0)
 	{
-		%this.inspector.addHiddenField("hidden");
-		%this.inspector.addHiddenField("locked");
-		%this.inspector.addHiddenField("AssetInternal");
-		%this.inspector.addHiddenField("AssetPrivate");
-		%this.inspector.inspect(%particleAsset);
+		%this.chooseInspector("Particle");
+		%this.particlePane.bind(%particleAsset, %particleAsset.getAssetId());
 
 		%this.tabBook.removeIfMember(%this.emitterGraphPage);
 		%this.tabBook.add(%this.scaleGraphPage);
 		%this.scaleGraphPage.inspect(%particleAsset);
 	}
-	else if(%index > 0)
+	else
 	{
-		%this.inspector.addHiddenField("hidden");
-		%this.inspector.addHiddenField("locked");
-		%this.inspector.inspect(%particleAsset.getEmitter(%index - 1));
+		%emitter = %particleAsset.getEmitter(%index - 1);
+
+		%this.chooseInspector("Emitter");
+		%this.emitterPane.bind(%emitter, %particleAsset.getAssetId());
 
 		%this.tabBook.removeIfMember(%this.scaleGraphPage);
 		%this.tabBook.add(%this.emitterGraphPage);
@@ -769,6 +812,44 @@ function AssetInspector::onChooseParticleAsset(%this, %particleAsset)
 
 	%this.emitterButtonBar.visible = true;
 	%this.emitterButtonBar.refreshEnabled();
+
+	// Solo and mute act on whichever emitter is selected, so moving the selection
+	// moves what they isolate -- and on the effect itself there is nothing to
+	// isolate and both stand down.
+	if(isObject(AssetAdmin.particleTransportBar))
+	{
+		AssetAdmin.particleTransportBar.refresh();
+	}
+}
+
+// Re-label the dropdown without disturbing what is selected or rebuilding the
+// pane under it. Renaming an emitter is the only thing that needs this: the name
+// is a field on the pane and the caption is a copy of it in the title bar.
+function AssetInspector::refreshEmitterLabels(%this)
+{
+	%asset = %this.documentAsset();
+	if(!isObject(%asset) || !%this.titleDropDown.isVisible())
+	{
+		return;
+	}
+
+	%this.refreshParticleTitleDropDown(%asset, %this.titleDropDown.getSelectedItem());
+}
+
+// Which emitter the dropdown is on, or "" when it is on the effect itself. The
+// one place that knows how the list maps to the asset, so nothing below has to
+// repeat the minus one.
+function AssetInspector::selectedEmitter(%this)
+{
+	%asset = %this.documentAsset();
+	%index = %this.titleDropDown.getSelectedItem();
+
+	if(!isObject(%asset) || %index <= 0 || %index > %asset.getEmitterCount())
+	{
+		return "";
+	}
+
+	return %asset.getEmitter(%index - 1);
 }
 
 function AssetInspector::loadFontAsset(%this, %fontAsset, %assetID)
@@ -826,12 +907,24 @@ function AssetInspector::deleteAsset(%this)
 	Canvas.pushDialog(%dialog);
 }
 
+//-----------------------------------------------------------------------------
+// The emitter bar beside the dropdown.
+//
+// Every one of these used to start from %this.inspector.getInspectObject() --
+// the generic inspector -- and work out from the dropdown index whether what it
+// answered was the asset or one of its emitters. That only held while index 0
+// went through the generic inspector, which it no longer does: the effect has a
+// pane of its own now and the generic inspector is never handed a particle at
+// all. They go through documentAsset() and selectedEmitter() instead, which are
+// true whichever inspector is on show.
+//-----------------------------------------------------------------------------
+
 function AssetInspector::addEmitter(%this)
 {
-	%asset = %this.inspector.getInspectObject();
-	if(%this.titleDropDown.getSelectedItem() != 0)
+	%asset = %this.documentAsset();
+	if(!isObject(%asset))
 	{
-		%asset = %asset.getOwner();
+		return;
 	}
 
 	%width = 700;
@@ -852,88 +945,108 @@ function AssetInspector::addEmitter(%this)
 
 function AssetInspector::MoveEmitterForward(%this)
 {
-	%emitter = %this.inspector.getInspectObject();
-	%asset = %emitter.getOwner();
+	%asset = %this.documentAsset();
 	%index = %this.titleDropDown.getSelectedItem();
-	%asset.moveEmitter(%index-1, %index);
 
-	%this.refreshParticleTitleDropDown(%asset, %index+1);
+	if(!isObject(%asset) || %index <= 0 || %index >= %asset.getEmitterCount())
+	{
+		return;
+	}
+
+	%asset.moveEmitter(%index - 1, %index);
+	%this.refreshParticleTitleDropDown(%asset, %index + 1);
 
 	%asset.refreshAsset();
+	%this.onChooseParticleAsset(%asset);
 }
 
 function AssetInspector::MoveEmitterBackward(%this)
 {
-	%emitter = %this.inspector.getInspectObject();
-	%asset = %emitter.getOwner();
+	%asset = %this.documentAsset();
 	%index = %this.titleDropDown.getSelectedItem();
-	%asset.moveEmitter(%index-1, %index-2);
 
-	%this.refreshParticleTitleDropDown(%asset, %index-1);
+	// Index 1 is the FIRST emitter, so it has nowhere to go: moveEmitter(0, -1)
+	// is what the missing half of this test used to ask for.
+	if(!isObject(%asset) || %index <= 1)
+	{
+		return;
+	}
+
+	%asset.moveEmitter(%index - 1, %index - 2);
+	%this.refreshParticleTitleDropDown(%asset, %index - 1);
 
 	%asset.refreshAsset();
+	%this.onChooseParticleAsset(%asset);
 }
 
 function AssetInspector::RemoveEmitter(%this)
 {
-	%emitter = %this.inspector.getInspectObject();
-	%asset = %emitter.getOwner();
-	%asset.RemoveEmitter(%emitter, true);
+	%asset = %this.documentAsset();
+	%emitter = %this.selectedEmitter();
+
+	if(!isObject(%asset) || !isObject(%emitter))
+	{
+		return;
+	}
 
 	%index = %this.titleDropDown.getSelectedItem();
-	%this.titleDropDown.deleteItem(%index);
+	%asset.RemoveEmitter(%emitter, true);
 
-	if(%this.titleDropDown.getItemCount() <= %index)
+	// Rebuilt rather than deleteItem'd, so the captions cannot drift out of step
+	// with the emitters they name.
+	//
+	// Selection falls back to the emitter that took this one's place, or to the
+	// last one if this was the last -- and to the EFFECT at index 0 when the one
+	// removed was the only emitter. That last case is why this is clamped at all:
+	// it used to clamp to an item index of 0 and then ask for getEmitter(-1).
+	%count = %asset.getEmitterCount();
+	if(%index > %count)
 	{
-		%index = %this.titleDropDown.getItemCount() - 1;
+		%index = %count;
 	}
-	%this.titleDropDown.setCurSel(%index);
-	%this.inspector.inspect(%asset.getEmitter(%index - 1));
-	%this.emitterGraphPage.inspect(%asset, %index - 1);
-	%this.emitterButtonBar.refreshEnabled();
+
+	%this.refreshParticleTitleDropDown(%asset, %index);
 
 	%asset.refreshAsset();
+	%this.onChooseParticleAsset(%asset);
 }
+
+//-----------------------------------------------------------------------------
+// What the bar greys itself against. All three read the dropdown, which is the
+// thing the buttons act through -- they used to read emitterGraphPage.emitterID,
+// a tab page that is only on the book while an emitter is selected.
+//-----------------------------------------------------------------------------
 
 function AssetInspector::getMoveEmitterForwardEnabled(%this)
 {
-	if(isObject(%this.titleDropDown) && %this.titleDropDown.getSelectedItem() <= 0)
+	%asset = %this.documentAsset();
+	%index = %this.titleDropDown.getSelectedItem();
+
+	if(!isObject(%asset) || %index <= 0)
 	{
 		return false;
 	}
-	if(isObject(%this.inspector))
-	{
-		%asset = %this.inspector.getInspectObject();
-		%emitterID = %this.emitterGraphPage.emitterID;
 
-		return %emitterID != (%asset.getOwner().getEmitterCount() - 1);
-	}
-	return false;
+	// The last emitter is at item index getEmitterCount().
+	return %index < %asset.getEmitterCount();
 }
 
 function AssetInspector::getMoveEmitterBackwardEnabled(%this)
 {
-	if(isObject(%this.titleDropDown) && %this.titleDropDown.getSelectedItem() <= 0)
-	{
-		return false;
-	}
-	if(isObject(%this.inspector))
-	{
-		return %this.emitterGraphPage.emitterID != 0;
-	}
-	return false;
+	return isObject(%this.documentAsset()) && %this.titleDropDown.getSelectedItem() > 1;
 }
 
 function AssetInspector::getRemoveEmitterEnabled(%this)
 {
-	if(isObject(%this.titleDropDown) && %this.titleDropDown.getSelectedItem() <= 0)
+	%asset = %this.documentAsset();
+
+	if(!isObject(%asset) || %this.titleDropDown.getSelectedItem() <= 0)
 	{
 		return false;
 	}
-	if(isObject(%this.inspector))
-	{
-		%asset = %this.inspector.getInspectObject();
-		return %asset.getOwner().getEmitterCount() > 1;
-	}
-	return false;
+
+	// An effect with no emitters at all draws nothing, so the last one is not
+	// removable. RemoveEmitter above still handles the empty case, because a
+	// predicate is a greyed button rather than a guarantee.
+	return %asset.getEmitterCount() > 1;
 }

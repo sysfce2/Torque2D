@@ -68,7 +68,14 @@ public:
         class PixelArea
         {
         public:
-            PixelArea() {}
+            // mRegionName is read by dStrcmp in four places (containsNamedRegion,
+            // getExplicitCellIndex, getCellByName, removeExplicitCell), and only a
+            // NAMED cell ever went through the overload that sets it -- so every
+            // frame of an ordinary cell-mode image carried an indeterminate
+            // pointer, and asking such an image whether it contains a named frame
+            // dereferenced it. An empty name is the honest answer for a frame that
+            // has none.
+            PixelArea() : mPixelWidth( 0 ), mPixelHeight( 0 ), mRegionName( StringTable->EmptyString ) {}
             PixelArea( const S32 pixelFrameOffsetX, const S32 pixelFrameOffsetY, const U32 pixelFrameWidth, const U32 pixelFrameHeight )
             {
                 setArea( pixelFrameOffsetX, pixelFrameOffsetY, pixelFrameWidth, pixelFrameHeight );
@@ -82,13 +89,14 @@ public:
                 mPixelOffset.set( pixelFrameOffsetX, pixelFrameOffsetY );
                 mPixelWidth = pixelFrameWidth;
                 mPixelHeight = pixelFrameHeight;
+                mRegionName = StringTable->EmptyString;
             };
             inline void setArea( const S32 pixelFrameOffsetX, const S32 pixelFrameOffsetY, const U32 pixelFrameWidth, const U32 pixelFrameHeight, const char* regionName )
             {
                 mPixelOffset.set( pixelFrameOffsetX, pixelFrameOffsetY );
                 mPixelWidth = pixelFrameWidth;
                 mPixelHeight = pixelFrameHeight;
-                mRegionName = StringTable->insert(regionName);
+                mRegionName = ( regionName == NULL ) ? StringTable->EmptyString : StringTable->insert(regionName);
             };
 			inline RectI toRectI(void) const { return RectI(mPixelOffset, Point2I(mPixelWidth, mPixelHeight)); }
 

@@ -46,6 +46,13 @@
 //   fileTitle    what it calls itself. Both default to bitmaps, which is what a
 //                "file" row was everywhere until fonts and sounds got panes.
 //
+// One thing a row takes from ITSELF, because a pane can hold rows that want
+// different answers -- the emitter pane has an image row and an animation row
+// side by side:
+//
+//   assetType    what an "asset" row's Find button offers to pick. Defaults to
+//                ImageAsset, which is what every asset row was until then.
+//
 // Kinds: text, number, decimal, point, pointf, bool, color, enum, dropdown,
 // file, asset, multiline.
 //-----------------------------------------------------------------------------
@@ -632,9 +639,16 @@ function EditorFieldRow::onFindClicked(%this)
 // native inspector's browse button uses it too; it hands back the chosen id
 // through onAssetPicked. Whatever the box holds now is passed along so the
 // picker opens on the current choice.
+//
+// assetType is per ROW rather than per pane -- unlike findBase and fileFilters
+// above -- because the emitter pane carries an Image row and an Animation row in
+// the same block and they want different lists. It defaults to ImageAsset, which
+// was hardcoded here until the second kind of asset row existed.
 function EditorFieldRow::onFindAssetClicked(%this)
 {
-	EditorCore.openAssetPicker(%this, "onAssetPicked", %this.editor.getText(), "ImageAsset");
+	%type = (%this.assetType $= "") ? "ImageAsset" : %this.assetType;
+
+	EditorCore.openAssetPicker(%this, "onAssetPicked", %this.editor.getText(), %type);
 }
 
 // An asset id is already portable -- it names a module and an asset, not a

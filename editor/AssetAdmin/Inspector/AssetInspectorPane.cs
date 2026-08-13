@@ -219,6 +219,7 @@ function AssetInspectorPane::makeFieldRow(%this, %container, %field, %label, %ki
 		kind = %kind;
 		enumItems = %enumItems;
 		editorHeight = %this.editorHeightFor(%field);
+		assetType = %this.assetTypeFor(%field);
 		owner = %this;
 	};
 	%container.add(%row);
@@ -306,6 +307,14 @@ function AssetInspectorPane::tipFor(%this, %field)
 function AssetInspectorPane::editorHeightFor(%this, %field)
 {
 	return 0;
+}
+
+// What kind of asset an "asset" row offers to pick. Empty leaves the row on its
+// own default of ImageAsset, which is what every asset row on every pane wanted
+// until an emitter turned out to reference an animation as readily as an image.
+function AssetInspectorPane::assetTypeFor(%this, %field)
+{
+	return "";
 }
 
 //-----------------------------------------------------------------------------

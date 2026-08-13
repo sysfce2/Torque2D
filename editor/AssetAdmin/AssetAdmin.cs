@@ -75,6 +75,10 @@ function AssetAdmin::create(%this)
 
 	%this.buildTransportBar();
 
+	// After the inspector, whose title dropdown the solo and mute switches ask
+	// which emitter is selected.
+	%this.buildParticleTransportBar();
+
 	// After the inspector, which its refresh asks what to grey out. Built into
 	// the shared bar and taken straight back off again; open() puts it on.
 	%this.menus = new ScriptObject()
@@ -383,11 +387,12 @@ function AssetAdmin::buildTransportBar(%this)
 	// against the extent the background has now, which is why it is a gap rather
 	// than a coordinate.
 	%barGap = 16;
-	%barTop = (getWord(%this.background.extent, 1) - $AssetAnimationTransportBar::playSize) - %barGap;
+	%barTop = (getWord(%this.background.extent, 1) - $EditorTransportBar::playSize) - %barGap;
 
 	%this.transportBar = new GuiChainCtrl()
 	{
 		class = "AssetAnimationTransportBar";
+		superclass = "EditorTransportBar";
 		stage = %this.animationStage;
 		HorizSizing = "center";
 		VertSizing = "top";
@@ -410,14 +415,77 @@ function AssetAdmin::buildTransportBar(%this)
 		// The tallest button. Nothing computes this: a chain never grows to fit a
 		// taller child. (IsExtentDynamic would not help either -- it is a
 		// GuiGridCtrl field and a chain never reads it.)
-		Extent = "160" SPC $AssetAnimationTransportBar::playSize;
+		Extent = "160" SPC $EditorTransportBar::playSize;
 
-		ChildSpacing = $AssetAnimationTransportBar::spacing;
+		ChildSpacing = $EditorTransportBar::spacing;
 	};
 	ThemeManager.setProfile(%this.transportBar, "emptyProfile");
 	%this.transportBarContainer.add(%this.transportBar);
 
 	%this.background.add(%this.transportBarContainer);
+}
+
+// The particle transport, built the same way and in the same place as the
+// animation one above. Two bars rather than one with swappable buttons: they
+// share no state and drive different objects, and the chrome they do share is
+// EditorTransportBar.
+function AssetAdmin::buildParticleTransportBar(%this)
+{
+	%this.particleTransportBarContainer = new GuiControl()
+	{
+		position = "0 0";
+		extent = %this.background.extent;
+		HorizSizing = "width";
+		VertSizing = "height";
+		Visible = "0";
+	};
+	ThemeManager.setProfile(%this.particleTransportBarContainer, "emptyProfile");
+
+	%barGap = 16;
+	%barTop = (getWord(%this.background.extent, 1) - $EditorTransportBar::playSize) - %barGap;
+
+	%this.particleTransportBar = new GuiChainCtrl()
+	{
+		class = "AssetParticleTransportBar";
+		superclass = "EditorTransportBar";
+		HorizSizing = "center";
+		VertSizing = "top";
+		Position = "0" SPC %barTop;
+
+		// IsVertical BEFORE Extent, as on the animation bar -- a chain refuses a
+		// resize along whatever axis is currently its length, and it is born
+		// vertical, so an Extent written first is read as "you may not change my
+		// height" and the big play button is laid out clipped into 30 pixels.
+		IsVertical = false;
+		Extent = "260" SPC $EditorTransportBar::playSize;
+		ChildSpacing = $EditorTransportBar::spacing;
+	};
+	ThemeManager.setProfile(%this.particleTransportBar, "emptyProfile");
+	%this.particleTransportBarContainer.add(%this.particleTransportBar);
+
+	%this.background.add(%this.particleTransportBarContainer);
+}
+
+// A particle preview was just built. The bar drives that player and nothing else,
+// so it is handed the new one and everything it was holding about the old one is
+// dropped.
+function AssetAdmin::showParticleTransport(%this, %player, %assetId)
+{
+	if(!isObject(%this.particleTransportBar))
+	{
+		return;
+	}
+
+	%this.particleTransportBarContainer.setVisible(true);
+	%this.particleTransportBar.onPreviewRebuilt(%assetId);
+}
+
+function AssetAdmin::hideParticleTransport(%this)
+{
+	if(isObject(%this.particleTransportBarContainer))
+	{
+		%this.particleTransportBarContainer.setVisible(false);
+	}
 }
 
 // Something about the selected asset changed and the preview has to catch up.

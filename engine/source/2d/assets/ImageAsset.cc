@@ -672,6 +672,13 @@ S32 ImageAsset::getExplicitCellIndex(const char* regionName)
 
 bool ImageAsset::containsNamedRegion(const char* regionName)
 {
+    // No name is not a name. Without this, an empty string would match the first
+    // frame of any ordinary cell-mode image -- every one of which now carries an
+    // empty region name -- and callers read a true here as "this image addresses
+    // its frames by name", which such an image does not.
+    if ( regionName == NULL || *regionName == 0 )
+        return false;
+
     for( typeFrameAreaVector::iterator frameItr = mFrames.begin(); frameItr != mFrames.end(); ++frameItr )
     {
         // Grab the current pixelArea

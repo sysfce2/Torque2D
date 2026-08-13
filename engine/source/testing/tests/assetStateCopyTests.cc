@@ -230,6 +230,80 @@ TEST( AssetStateCopyTests, ParticleAssetEmitterCarriesStaticMode )
     target->deleteObject();
 }
 
+//-----------------------------------------------------------------------------
+// The particle emitter's console API, which the Asset Manager's emitter pane is
+// the first thing to lean on. Each of these is a defect the pane found.
+//-----------------------------------------------------------------------------
+
+// EmitterAngle is stored in DEGREES: the persist field writes what it is given
+// and ParticlePlayer::configureParticle does mDegToRad(getEmitterAngle()) when it
+// places the particle. The console setter used to store mDegToRad(angle) and the
+// getter to hand back mRadToDeg(stored), so the two of them agreed with each
+// other and with nothing else -- an angle set from script reached the renderer 57
+// times too small, and reading the field by name gave a different number from
+// reading it by method.
+TEST( AssetStateCopyTests, EmitterAngleIsDegreesEverywhere )
+{
+    ParticleAssetEmitter* emitter = newScratchAsset<ParticleAssetEmitter>();
+
+    Con::evaluatef( "%d.setEmitterAngle( 90 );", emitter->getId() );
+
+    ASSERT_FLOAT_EQ( emitter->getEmitterAngle(), 90.0f )
+        << "The console setter stored something other than the degrees it was given.";
+    ASSERT_STREQ( readAssetField( emitter, "EmitterAngle" ), "90" )
+        << "The field and the console setter disagree about the unit.";
+
+    emitter->deleteObject();
+}
+
+// SimObject::getFieldValue(fieldName) is how everything in the editor reads a
+// persistent field by name. ParticleAssetEmitter and ParticleAsset each declared
+// a getFieldValue(time) of their own -- the graph sampler -- which SHADOWED it,
+// so the ordinary call returned a sample of whichever curve was selected at
+// dAtof(fieldName) == 0 seconds. It did not fail; it returned a plausible 1.
+TEST( AssetStateCopyTests, EmitterFieldsAreReadableByName )
+{
+    ParticleAssetEmitter* emitter = newScratchAsset<ParticleAssetEmitter>();
+    emitter->setEmitterName( "smoke" );
+
+    const char* name = Con::evaluatef( "return %d.getFieldValue( EmitterName );", emitter->getId() );
+
+    ASSERT_STREQ( name, "smoke" )
+        << "getFieldValue answered with a graph sample rather than the field.";
+
+    emitter->deleteObject();
+}
+
+// An emitter in animated mode holding no animation asset is indistinguishable
+// from a static one holding no image if you only look at the assets, so the mode
+// has to be askable directly. The pane's source picker depends on it.
+TEST( AssetStateCopyTests, EmitterReportsItsFrameProviderMode )
+{
+    ParticleAssetEmitter* emitter = newScratchAsset<ParticleAssetEmitter>();
+
+    emitter->setAnimation( "" );
+    ASSERT_STREQ( Con::evaluatef( "return %d.isStaticMode();", emitter->getId() ), "0" )
+        << "An emitter with no animation asset still reported static mode.";
+
+    emitter->setImage( "" );
+    ASSERT_STREQ( Con::evaluatef( "return %d.isStaticMode();", emitter->getId() ), "1" );
+
+    emitter->deleteObject();
+}
+
+// setNamedImageFrame is handed an empty name by every copy and clone, because
+// copyFieldsFrom walks the whole field table and a numeric-frame emitter's
+// NamedFrame is empty. Taking it would flip the emitter into named-frame mode.
+TEST( AssetStateCopyTests, EmptyNamedFrameIsRefused )
+{
+    ParticleAssetEmitter* emitter = newScratchAsset<ParticleAssetEmitter>();
+
+    ASSERT_FALSE( emitter->setNamedImageFrame( "" ) );
+    ASSERT_FALSE( emitter->isUsingNamedImageFrame() );
+
+    emitter->deleteObject();
+}
+
 TEST( AssetStateCopyTests, ParticleAssetCarriesEmitters )
 {
     ParticleAsset* source = newScratchAsset<ParticleAsset>();

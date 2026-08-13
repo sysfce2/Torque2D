@@ -560,6 +560,14 @@ bool ParticleAssetEmitter::setImageFrame( const U32 frame )
 
 bool ParticleAssetEmitter::setNamedImageFrame( const char* frameName )
 {
+    // No name is not a name, and asking for one is not an error worth warning
+    // about: copyFieldsFrom walks the whole field table, so the NamedFrame of
+    // every numeric-frame emitter arrives here empty on every copy and clone.
+    // Taking it would flip the emitter into named-frame mode, which is how a
+    // static emitter could copy as one addressing a frame called "".
+    if ( frameName == NULL || *frameName == 0 )
+        return false;
+
     // Check Existing Image.
     if ( mImageAsset.isNull() )
     {
