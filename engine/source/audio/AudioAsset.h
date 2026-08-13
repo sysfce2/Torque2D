@@ -67,6 +67,11 @@ public:
    void setAudioFile( const char* pAudioFile );
    inline StringTableEntry getAudioFile( void ) const { return mAudioFile; }
 
+   /// The audio file as it is stored on disk -- relative to the folder the asset
+   /// itself lives in. getAudioFile answers the expanded absolute path, which is
+   /// what the mixer needs and is neither readable nor portable anywhere else.
+   inline StringTableEntry getRelativeAudioFile( void ) const { return collapseAssetFilePath(mAudioFile); }
+
    void setVolume( const F32 volume );
    inline F32 getVolume( void ) const { return mDescription.mVolume; }
 

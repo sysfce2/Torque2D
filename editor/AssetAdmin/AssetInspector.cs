@@ -137,6 +137,7 @@ function AssetInspector::onAdd(%this)
 	%this.registerPane("Image", %this.createImagePane());
 	%this.registerPane("Animation", %this.createAnimationPane());
 	%this.registerPane("Font", %this.createFontPane());
+	%this.registerPane("Sound", %this.createSoundPane());
 
 	// Named handles for the ones the tests and the load methods reach for
 	// directly. The registry is the truth; these are just shorter.
@@ -144,6 +145,7 @@ function AssetInspector::onAdd(%this)
 	%this.imagePane = %this.pane["Image"];
 	%this.animationPane = %this.pane["Animation"];
 	%this.fontPane = %this.pane["Font"];
+	%this.soundPane = %this.pane["Sound"];
 
 	//Particle Graph Tool
 	%this.scaleGraphPage = %this.createTabPage("Scale Graph", "AssetParticleGraphTool", "");
@@ -302,6 +304,23 @@ function AssetInspector::createFontPane(%this)
 	return new GuiChainCtrl()
 	{
 		class = "AssetFontInspectorPane";
+		superclass = "AssetInspectorPane";
+		HorizSizing = "width";
+		Position = "0 0";
+		Extent = %width SPC 320;
+		IsVertical = true;
+		ChildSpacing = 6;
+		paneWidth = %width;
+	};
+}
+
+function AssetInspector::createSoundPane(%this)
+{
+	%width = 686;
+
+	return new GuiChainCtrl()
+	{
+		class = "AssetSoundInspectorPane";
 		superclass = "AssetInspectorPane";
 		HorizSizing = "width";
 		Position = "0 0";
@@ -768,7 +787,8 @@ function AssetInspector::loadAudioAsset(%this, %audioAsset, %assetID)
 	%this.titlebar.setText("Audio Asset:" SPC %audioAsset.AssetName);
 	%this.beginDocument(%audioAsset);
 
-	%this.inspectStock(%audioAsset);
+	%this.chooseInspector("Sound");
+	%this.soundPane.bind(%audioAsset, %assetID);
 }
 
 function AssetInspector::loadSpineAsset(%this, %spineAsset, %assetID)

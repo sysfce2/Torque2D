@@ -85,7 +85,7 @@ function ainStep2()
 	ainCheck("the generic inspector is the one on show", $ainInspector.insScroller.isVisible());
 
 	// The registry knows every pane, in the order they were registered.
-	ainCheck("all three panes are registered", $ainInspector.paneKeys $= "Image Animation Font");
+	ainCheck("all four panes are registered", $ainInspector.paneKeys $= "Image Animation Font Sound");
 
 	$ainTile = AssetAdmin.Dictionary["AnimationAsset"].getButton($ainAssetId);
 	ainCheck("the animation tile is in the library", isObject($ainTile));

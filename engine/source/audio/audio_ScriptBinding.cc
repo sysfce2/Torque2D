@@ -192,6 +192,20 @@ ConsoleFunctionWithDocs(OpenALInitDriver, ConsoleBool, 1, 1, ())
 }
 
 //-----------------------------------------------
+/*! Use the OpenALIsInitialized function to find out whether the OpenAL driver is
+    already running.
+    Worth asking before OpenALInitDriver: that call shuts the driver down before
+    it starts it, so calling it a second time drops every playing sound and resets
+    the channel volumes.
+    @return Returns true if there is a live OpenAL context.
+    @sa OpenALInitDriver
+*/
+ConsoleFunctionWithDocs(OpenALIsInitialized, ConsoleBool, 1, 1, ())
+{
+   return Audio::OpenALIsInitialized();
+}
+
+//-----------------------------------------------
 /*! Use the OpenALShutdownDriver function to stop/shut down the OpenAL driver.
     After this is called, you must restart the driver with OpenALInitDriver to execute any new sound operations.
     @return No return value.
@@ -255,16 +269,25 @@ ConsoleFunctionWithDocs(alxGetAudioLength, ConsoleInt, 2, 2, ( audio-assetId ))
 
     Resource<AudioBuffer> buffer = AudioBuffer::find( pAudioAsset->getAudioFile() );
 
+    // Every path out of here used to return without releasing what was acquired
+    // above, so each call raised the reference count by one and the asset could
+    // never be unloaded. One answer, one release.
+    S32 length = 0;
+
     if ( !buffer.isNull() )
     {
-        ALuint alBuffer = buffer->getALBuffer();
-        return alxGetWaveLen( alBuffer );
+        length = (S32)alxGetWaveLen( buffer->getALBuffer() );
+    }
+    else
+    {
+        // Warn.
+        Con::warnf( "alxGetAudioLength() - Could not find audio file '%s' for asset '%s'.", pAudioAsset->getAudioFile(), pAssetId );
     }
 
-    // Warn.
-    Con::warnf( "alxGetAudioLength() - Could not find audio file '%s' for asset '%s'.", pAudioAsset->getAudioFile(), pAssetId );
+    // Release asset.
+    AssetDatabase.releaseAsset( pAssetId );
 
-    return 0;
+    return length;
 }
 
 //--------------------------------------------------------------------------
@@ -474,6 +497,43 @@ ConsoleFunctionWithDocs(alxPlay, ConsoleInt, 2, 2, (audio-assetId))
 
     // Fetch audio handle.
     AUDIOHANDLE handle = alxPlay( pAudioAsset );
+
+    // Release asset.
+    AssetDatabase.releaseAsset( pAssetId );
+
+    return handle;
+}
+
+//-----------------------------------------------
+/*! Use the alxPlayPreview function to audition an audio asset as it was authored,
+    ignoring the running game's mixer settings.
+    Same file, looping and streaming behaviour as alxPlay, but played at full volume
+    on a reserved channel and past the master volume. This exists because the engine
+    will not create a source at all on a channel the game has muted, so a game with
+    its music turned down makes every music asset unplayable in an editor. Stop it
+    with alxStop, exactly like alxPlay. For editors -- a game wants alxPlay.
+    @param audio-assetId The asset Id to audition.
+    @return The handle of the playing source or 0 on error.
+    @sa alxPlay, alxStop
+*/
+ConsoleFunctionWithDocs(alxPlayPreview, ConsoleInt, 2, 2, (audio-assetId))
+{
+    // Fetch asset Id.
+    const char* pAssetId = argv[1];
+
+    // Acquire audio asset.
+    AudioAsset* pAudioAsset = AssetDatabase.acquireAsset<AudioAsset>( pAssetId );
+
+    // Did we get the audio asset?
+    if ( pAudioAsset == NULL )
+    {
+        // No, so warn.
+        Con::warnf( "alxPlayPreview() - Could not find audio asset '%s'.", pAssetId );
+        return NULL_AUDIOHANDLE;
+    }
+
+    // Fetch audio handle.
+    AUDIOHANDLE handle = alxPlayPreview( pAudioAsset );
 
     // Release asset.
     AssetDatabase.releaseAsset( pAssetId );

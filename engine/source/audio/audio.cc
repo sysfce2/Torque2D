@@ -1001,6 +1001,55 @@ AUDIOHANDLE alxPlay(const AudioAsset *profile, const MatrixF *transform, const P
    return(handle);
 }
 
+//--------------------------------------------------------------------------
+// Audition an asset as authored, ignoring the running game's mix.
+//
+// An editor previewing an asset wants to hear the ASSET. Played through alxPlay
+// it hears the asset as this particular game happens to be mixing it right now,
+// and the failure is not a quiet sound but no sound at all: alxCreateSource
+// refuses to build a source on a muted channel (see the mAudioChannelVolumes
+// test there), so a game that has turned its music down to nothing makes every
+// music asset in the library unplayable in the editor, with nothing to say why.
+//
+// Three things are overridden and nothing else is. The file, the looping flag
+// and the streaming flag are the asset's own, because those change what the
+// sound IS rather than how loudly it is mixed.
+AUDIOHANDLE alxPlayPreview(const AudioAsset *profile)
+{
+   if(profile == NULL)
+      return NULL_AUDIOHANDLE;
+
+   Audio::Description desc = profile->getAudioDescription();
+   desc.mVolume = 1.f;
+   desc.mVolumeChannel = Audio::AudioPreviewChannel;
+
+   // The channel is reserved for this, but nothing enforces that, and a muted one
+   // would refuse to create the source at all.
+   mAudioChannelVolumes[Audio::AudioPreviewChannel] = 1.f;
+
+   AUDIOHANDLE handle = alxCreateSource(desc, profile->getAudioFile(), NULL, NULL);
+   if(handle == NULL_AUDIOHANDLE)
+      return NULL_AUDIOHANDLE;
+
+   handle = alxPlay(handle);
+   if(handle == NULL_AUDIOHANDLE)
+      return NULL_AUDIOHANDLE;
+
+   // Past the master volume too, which alxSourcePlay has just folded into the
+   // gain. Safe to write over the top: a 2D source is AL_SOURCE_RELATIVE, and
+   // that is exactly what alxUpdateMaxDistance skips, so nothing recomputes this
+   // every frame. Only alxUpdateTypeGain would, and that runs when somebody moves
+   // the mixer -- which, while a preview is playing, is a thing they meant to do.
+   const U32 index = alxFindIndex(handle);
+   if(index < mNumSources)
+   {
+      mSourceVolume[index] = 1.f;
+      alSourcef(mSource[index], AL_GAIN, Audio::linearToDB(1.f));
+   }
+
+   return handle;
+}
+
 bool alxPause( AUDIOHANDLE handle )
 {
     if(handle == NULL_AUDIOHANDLE)
@@ -2473,6 +2522,12 @@ void shutdownContext()
    dMemset(mSource, 0, sizeof(mSource));
 }
 
+
+//--------------------------------------------------------------------------
+bool OpenALIsInitialized()
+{
+   return mContext != NULL;
+}
 
 //--------------------------------------------------------------------------
 bool OpenALInit()

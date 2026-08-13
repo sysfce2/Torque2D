@@ -294,6 +294,47 @@ function AssetAdmin::buildAssetWindow(%this)
     %this.background.add(%this.assetWindow);
 }
 
+// Start the audio driver only if nothing else already has.
+//
+// The game owns audio. A project's Audio module calls OpenALInitDriver in its
+// create function and then sets the master and channel volumes, and that is the
+// arrangement -- nothing here should replace it, and nothing in a shipped game
+// may depend on the editor being present at all.
+//
+// But the Asset Manager can be opened before any project is picked, or against a
+// project with no audio module, and there the driver is simply not running: with
+// no context alxPlay answers with a null handle, and .wav is not even a
+// registered resource extension until OpenALInitDriver registers it. So this is a
+// fallback for that case and nothing more.
+//
+// Asking first is essential rather than tidy. OpenALInit BEGINS by calling
+// OpenALShutdown, so calling it when the driver is already up tears down the one
+// the game just built: every playing sound stops and every channel volume goes
+// back to 1, silently undoing the project's own audio settings.
+//
+// On demand rather than at editor startup, because an editor that takes the sound
+// card the moment it opens is a nuisance, and most of a session never plays
+// anything. Never shut down again either, for the same reason -- it is not ours
+// to stop.
+//
+// The attempt is remembered rather than the result, so a machine with no audio
+// device says so once instead of on every sound in the library.
+function AssetAdmin::ensureAudioDriver(%this)
+{
+	if(OpenALIsInitialized())
+	{
+		return true;
+	}
+
+	if(!%this.audioDriverTried)
+	{
+		%this.audioDriverTried = true;
+		%this.audioDriverReady = OpenALInitDriver();
+	}
+
+	return %this.audioDriverReady;
+}
+
 function AssetAdmin::buildAudioPlayButton(%this)
 {
 	%this.audioPlayButtonContainer = new GuiControl()

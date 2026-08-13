@@ -181,6 +181,13 @@ function AssetWindow::displayAudioAsset(%this, %audioAsset, %assetID)
 {
 	AssetAdmin.AssetScene.clear(true);
 
+	// Before anything tries to make a sound. Nothing in the editor starts the
+	// audio driver -- only a game module ever did -- so until now alxPlay had no
+	// context to play through and answered with a null handle, and .wav was not
+	// even a registered resource extension. The Play button worked in the sense
+	// that it changed its own label.
+	AssetAdmin.ensureAudioDriver();
+
 	AssetAdmin.audioPlayButtonContainer.setVisible(true);
 	AssetAdmin.AssetWindow.setVisible(false);
 
