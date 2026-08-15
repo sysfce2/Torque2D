@@ -116,11 +116,10 @@ function EditorToggleIcon::getValue(%this)
 }
 
 // The single place the icon's look is decided: which frame, which tooltip, and
-// which of the profile's font colors tints it.
+// what tints it.
 function EditorToggleIcon::refresh(%this)
 {
 	%on = %this.getStateOn();
-	%profile = ThemeManager.activeTheme.iconButtonProfile;
 
 	// frameOn is optional. Where there is only one icon for the idea, the tint
 	// alone carries the state.
@@ -135,16 +134,25 @@ function EditorToggleIcon::refresh(%this)
 		%this.icon.setImageFrame(%frame);
 	}
 
-	if(!%this.isActive())
-	{
-		%this.icon.setImageColor(%profile.fontColorNA);
-	}
-	else
-	{
-		%this.icon.setImageColor(%on ? %profile.fontColorHL : %profile.fontColor);
-	}
+	%this.icon.setImageColor(%this.getIconTint(%on));
 
 	%this.Tooltip = %this.buildTip(%on);
+}
+
+// What the icon is tinted with, split out so a toggle whose color is part of its
+// meaning can answer differently. The two profile inks below say "on" and "off"
+// in the editor's own palette, which is right for a switch but not for a button
+// that stands for a color -- see AssetParticleChannelToggle.
+function EditorToggleIcon::getIconTint(%this, %on)
+{
+	%profile = ThemeManager.activeTheme.iconButtonProfile;
+
+	if(!%this.isActive())
+	{
+		return %profile.fontColorNA;
+	}
+
+	return %on ? %profile.fontColorHL : %profile.fontColor;
 }
 
 // Two lines, now that a control's text can hold a line break: what this is and

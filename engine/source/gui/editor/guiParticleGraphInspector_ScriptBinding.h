@@ -57,6 +57,23 @@ ConsoleMethodWithDocs(GuiParticleGraphInspector, setDisplayField, ConsoleVoid, 3
 	}
 }
 
+/*! Gets the name of the particle field the graph is showing.
+	@return The field name.
+*/
+ConsoleMethodWithDocs(GuiParticleGraphInspector, getDisplayField, ConsoleString, 2, 2, "()")
+{
+	return object->getDisplayField();
+}
+
+/*! Gets the index of the emitter the graph is reading its field from.
+	Meaningless for an asset level field, which no emitter owns.
+	@return The emitter index.
+*/
+ConsoleMethodWithDocs(GuiParticleGraphInspector, getEmitterIndex, ConsoleInt, 2, 2, "()")
+{
+	return (S32)object->getEmitterIndex();
+}
+
 /*! Sets the graph inspector to use to show variance.
 	@param Inspector The GuiParticleGraphInspector that is tracking the variation.
 	@return No return value.
