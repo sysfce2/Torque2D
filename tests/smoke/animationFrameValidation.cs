@@ -129,11 +129,188 @@ function afvStep3()
 	AssetDatabase.releaseAsset($afvAnimId);
 	AssetDatabase.releaseAsset($afvImageId);
 
+	schedule(300, 0, "afvStep4");
+}
+
+//-----------------------------------------------------------------------------
+// Named cells. A different fixture: the 1234 sheet is cut explicitly into four
+// cells called block1..block4, and 1234Animation lists those names.
+//
+// The single most valuable assertion in this file is the first one below.
+// getNamedAnimationFrames formatted a StringTableEntry -- a const char* -- through
+// %d, so it returned a row of pointer values, and nothing that asked an animation
+// for its named frames could recover them. That one character is why the Asset
+// Manager could not edit a named animation at all.
+//-----------------------------------------------------------------------------
+
+$afvNamedAnimId = "ToyAssets:1234Animation";
+$afvNamedImageId = "ToyAssets:1234";
+
+function afvStep4()
+{
+	$afvNamedAnim = AssetDatabase.acquireAsset($afvNamedAnimId);
+	$afvNamedImage = AssetDatabase.acquireAsset($afvNamedImageId);
+
+	afvCheck("named animation acquired", isObject($afvNamedAnim));
+	afvCheck("explicit image acquired", isObject($afvNamedImage));
+
+	afvCheck("the image is in explicit mode", $afvNamedImage.getExplicitMode());
+	afvCheck("it has four explicit cells", $afvNamedImage.getExplicitCellCount() == 4);
+
+	// Derived, not stored. There is no NamedCellsMode field any more -- the answer
+	// is read from the image every time it is asked for.
+	afvCheck("the animation reports named cells mode from its image",
+		$afvNamedAnim.getNamedCellsMode());
+
+	%named = trim($afvNamedAnim.getNamedAnimationFrames());
+
+	afvCheck("named frames read back as names, not as pointers (" @ %named @ ")",
+		%named $= "block1 block2 block3 block4");
+	afvCheck("there are four of them", $afvNamedAnim.getNamedAnimationFrameCount() == 4);
+	afvCheck("getFrameCount answers without caring which space it is in",
+		$afvNamedAnim.getFrameCount() == 4);
+	afvCheck("nothing is missing to begin with", trim($afvNamedAnim.getMissingFrames()) $= "");
+
+	schedule(300, 0, "afvStep5");
+}
+
+//-----------------------------------------------------------------------------
+// Take a cell away. The name is KEPT rather than dropped -- dropping it is a
+// deletion the user never asked for and could not have seen happen.
+//-----------------------------------------------------------------------------
+
+function afvStep5()
+{
+	$afvNamedImage.removeExplicitCell(2);
+
+	afvCheck("the image is down to three cells", $afvNamedImage.getExplicitCellCount() == 3);
+	afvCheck("the animation still specifies all four frames",
+		trim($afvNamedAnim.getNamedAnimationFrames()) $= "block1 block2 block3 block4");
+	afvCheck("and names the one that no longer resolves (" @ trim($afvNamedAnim.getMissingFrames()) @ ")",
+		trim($afvNamedAnim.getMissingFrames()) $= "block3");
+
+	schedule(300, 0, "afvStep6");
+}
+
+//-----------------------------------------------------------------------------
+// Put it back. Like the numeric case above, this is a live derivation.
+//-----------------------------------------------------------------------------
+
+function afvStep6()
+{
+	$afvNamedImage.insertExplicitCell(2, 0, 32, 32, 32, "block3");
+
+	afvCheck("the cell is back", $afvNamedImage.getExplicitCellCount() == 4);
+	afvCheck("and it went back in the right place",
+		$afvNamedImage.getExplicitCellName(2) $= "block3");
+	afvCheck("nothing is missing any more", trim($afvNamedAnim.getMissingFrames()) $= "");
+
+	schedule(300, 0, "afvStep7");
+}
+
+//-----------------------------------------------------------------------------
+// A cell added with no name is named for us, so that "explicit mode means every
+// frame can be addressed by name" holds without the user having to maintain it.
+//-----------------------------------------------------------------------------
+
+function afvStep7()
+{
+	$afvNamedImage.addExplicitCell(0, 0, 32, 32, "");
+
+	afvCheck("the unnamed cell was named for its own index (" @ $afvNamedImage.getExplicitCellName(4) @ ")",
+		$afvNamedImage.getExplicitCellName(4) $= "Frame4");
+
+	// Now take the name the NEXT blank cell would want -- cell 5 is called Frame6,
+	// which is what cell 6 would otherwise be named -- and add that blank. The
+	// search has to walk past it. Not hypothetical: deleting a cell from the
+	// middle renumbers every one after it, so a sheet arrives in this state on its
+	// own.
+	$afvNamedImage.addExplicitCell(0, 0, 32, 32, "Frame6");
+	$afvNamedImage.addExplicitCell(0, 0, 32, 32, "");
+
+	afvCheck("a taken name is walked past (" @ $afvNamedImage.getExplicitCellName(6) @ ")",
+		$afvNamedImage.getExplicitCellName(6) $= "Frame7");
+	afvCheck("and the cell that took it keeps it",
+		$afvNamedImage.getExplicitCellName(5) $= "Frame6");
+
+	schedule(300, 0, "afvStep8");
+}
+
+//-----------------------------------------------------------------------------
+// Turn explicit mode off and on. The animation moves between name space and
+// index space and keeps its frames both ways, which is what makes re-cutting a
+// sheet a decision rather than a commitment.
+//-----------------------------------------------------------------------------
+
+function afvStep8()
+{
+	$afvNamedImage.setExplicitMode(false);
+
+	afvCheck("the animation is no longer in named cells mode",
+		!$afvNamedAnim.getNamedCellsMode());
+	afvCheck("its frames converted to indices (" @ trim($afvNamedAnim.getAnimationFrames()) @ ")",
+		trim($afvNamedAnim.getAnimationFrames()) $= "0 1 2 3");
+	afvCheck("and getMissingFrames says nothing about a numbered animation",
+		trim($afvNamedAnim.getMissingFrames()) $= "");
+
+	// The cells have to SURVIVE the mode being off, in memory and in the file.
+	//
+	// The file used to gate its Cells node on explicit mode, so saving an image
+	// with the mode off deleted every cell -- and with them the only thing that
+	// could ever resolve the animation's names again. Which makes the state of
+	// this file the whole reason the mode is reversible at all.
+	afvCheck("the cells are still there with the mode off",
+		$afvNamedImage.getExplicitCellCount() == 7);
+
+	AssetDatabase.saveAsset($afvNamedImageId);
+
+	%text = afvReadFile(AssetDatabase.getAssetFilePath($afvNamedImageId));
+
+	afvCheck("the saved file kept its cells", strstr(%text, "block1") != -1);
+	afvCheck("and says out loud that explicit mode is off",
+		strstr(%text, "ExplicitMode=\"0\"") != -1 || strstr(%text, "ExplicitMode=\"false\"") != -1);
+
+	schedule(300, 0, "afvStep9");
+}
+
+function afvStep9()
+{
+	$afvNamedImage.setExplicitMode(true);
+
+	afvCheck("the animation is named again", $afvNamedAnim.getNamedCellsMode());
+
+	// The names come back unchanged rather than being rebuilt from the indices,
+	// because the named list was never cleared -- which is the whole reason both
+	// lists are kept.
+	afvCheck("and its names are the ones it started with (" @ trim($afvNamedAnim.getNamedAnimationFrames()) @ ")",
+		trim($afvNamedAnim.getNamedAnimationFrames()) $= "block1 block2 block3 block4");
+
+	AssetDatabase.releaseAsset($afvNamedAnimId);
+	AssetDatabase.releaseAsset($afvNamedImageId);
+
 	echo("AFV DONE");
 	schedule(200, 0, "quit");
 }
 
 //-----------------------------------------------------------------------------
+
+function afvReadFile(%path)
+{
+	%file = new FileObject();
+	%text = "";
+
+	if(%file.openForRead(%path))
+	{
+		while(!%file.isEOF())
+		{
+			%text = %text @ %file.readLine() @ " ";
+		}
+		%file.close();
+	}
+	%file.delete();
+
+	return %text;
+}
 
 function afvAllWords(%list, %value)
 {

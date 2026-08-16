@@ -44,6 +44,39 @@ ConsoleMethodWithDocs(GuiEditFrameTimelineCtrl, setFrames, ConsoleVoid, 3, 3, (f
     object->setFrames(argv[2]);
 }
 
+/*! Gets the frames the timeline holds, by cell name, in order.
+
+    For an image in explicit mode, whose cells have names.  A frame whose cell has
+    since been deleted still reports its name -- the timeline keeps it, and draws
+    it as an empty outlined slot, rather than dropping a frame the user never
+    asked to lose.
+    @return The cell names, space separated, or an empty string.
+*/
+ConsoleMethodWithDocs(GuiEditFrameTimelineCtrl, getNamedFrames, ConsoleString, 2, 2, ())
+{
+    return object->getNamedFrames();
+}
+
+/*! Replaces the whole list, by cell name.
+    Separators are space, tab, newline and comma, matching what
+    AnimationAsset::setNamedAnimationFrames accepts.
+    @param names The cell names, space separated.
+    @return No return value.
+*/
+ConsoleMethodWithDocs(GuiEditFrameTimelineCtrl, setNamedFrames, ConsoleVoid, 3, 3, (names))
+{
+    object->setNamedFrames(argv[2]);
+}
+
+/*! Gets the cell name in a slot.
+    @param slot The slot index.
+    @return The cell name, or an empty string when the image does not name its cells.
+*/
+ConsoleMethodWithDocs(GuiEditFrameTimelineCtrl, getNameAt, ConsoleString, 3, 3, (slot))
+{
+    return object->getNameAt(dAtoi(argv[2]));
+}
+
 /*! Puts a frame into the list at a slot.
     @param slot Where it goes, from 0 to the count inclusive.
     @param frame The image frame index.

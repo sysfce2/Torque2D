@@ -89,10 +89,22 @@ function AssetAnimationTimelinePane::onAdd(%this)
 	%this.scroller.add(%this.strip);
 }
 
+// The image FIRST in both of these, and that order is load bearing.
+//
+// The strip fills its index list and its name list together, and it can only do
+// that by asking the image what cell N is called or which cell is called N. Given
+// the frames before the image, every name resolves to nothing.
 function AssetAnimationTimelinePane::load(%this, %imageAssetId, %frames)
 {
 	%this.strip.setImageAsset(%imageAssetId);
 	%this.strip.setFrames(%frames);
+	%this.refreshCaption();
+}
+
+function AssetAnimationTimelinePane::loadNamed(%this, %imageAssetId, %names)
+{
+	%this.strip.setImageAsset(%imageAssetId);
+	%this.strip.setNamedFrames(%names);
 	%this.refreshCaption();
 }
 
@@ -119,10 +131,14 @@ function AssetAnimationTimelinePane::refreshCaption(%this)
 // pane's job, and writing it is the stage's.
 //-----------------------------------------------------------------------------
 
+// The list is no longer handed over here. The stage reads it off the strip in
+// whichever space the asset keeps its frames, and only the stage knows which that
+// is -- passing indices from here meant a named animation was committed as a row
+// of numbers to a setter that refuses them.
 function AssetAnimationTimelinePane::commitFrames(%this)
 {
 	%this.refreshCaption();
-	%this.stage.commitFrames(%this.strip.getFrames());
+	%this.stage.commitFrames();
 }
 
 function AssetAnimationTimelinePane::appendFrame(%this, %frame)
@@ -137,10 +153,20 @@ function AssetAnimationTimelinePane::setFrames(%this, %frames)
 	%this.commitFrames();
 }
 
+// Inserted one at a time rather than concatenated onto getFrames() and set back.
+//
+// The round trip through the index list was lossy once frames could be missing: a
+// frame whose cell has been deleted is index -1, and rebuilding the list from
+// indices would have turned every such frame into the same nameless hole. Adding
+// to the end touches nothing that is already there.
 function AssetAnimationTimelinePane::appendFrames(%this, %frames)
 {
-	%existing = %this.strip.getFrames();
-	%this.strip.setFrames(%existing $= "" ? %frames : (%existing SPC %frames));
+	%count = getWordCount(%frames);
+	for(%i = 0; %i < %count; %i++)
+	{
+		%this.strip.insertFrame(%this.strip.getCellCount(), getWord(%frames, %i));
+	}
+
 	%this.commitFrames();
 }
 

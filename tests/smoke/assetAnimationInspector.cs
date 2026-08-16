@@ -113,7 +113,14 @@ function ainStep3()
 	// timeline; a box of numbers beside it would be a second source of truth.
 	ainCheck("AnimationFrames is NOT offered as a row", !isObject($ainPane.row["AnimationFrames"]));
 	ainCheck("neither is NamedAnimationFrames", !isObject($ainPane.row["NamedAnimationFrames"]));
+
+	// NamedCellsMode is not a field at all now -- it is read from the image, where
+	// explicit mode means named cells -- so a row offering to set it would be a
+	// second answer that could disagree with the image's.
 	ainCheck("nor NamedCellsMode", !isObject($ainPane.row["NamedCellsMode"]));
+	ainCheck("and the asset has no such field to offer",
+		$ainPane.target.getFieldType("NamedCellsMode") $= "");
+
 	ainCheck("nor AssetInternal", !isObject($ainPane.row["AssetInternal"]));
 
 	// The three blocks and what is in them.
@@ -239,6 +246,84 @@ function ainStep7()
 	ainCheck("the image pane took over", $ainInspector.imageScroller.isVisible());
 	ainCheck("exactly one pane is on show at a time", !$ainInspector.insScroller.isVisible());
 	ainCheck("the animation pane was unbound", !isObject($ainPane.target));
+
+	schedule(300, 0, "ainStep8");
+}
+
+//-----------------------------------------------------------------------------
+// A named animation gets this pane too.
+//
+// It used to get the stock inspector instead, because the engine's named frame
+// API did not survive its own file. Both reasons are fixed, so the fallback is
+// gone -- and this asserts that it is, because a silent return to it would look
+// exactly like the pane simply not having been built.
+//-----------------------------------------------------------------------------
+
+$ainNamedAnimId = "ToyAssets:1234Animation";
+
+function ainStep8()
+{
+	%tile = AssetAdmin.Dictionary["AnimationAsset"].getButton($ainNamedAnimId);
+	ainCheck("the named animation tile is in the library", isObject(%tile));
+
+	%tile.onClick();
+
+	schedule(500, 0, "ainStep9");
+}
+
+function ainStep9()
+{
+	ainCheck("a named animation gets the animation pane, not the stock inspector",
+		$ainInspector.paneScroller["Animation"].isVisible());
+	ainCheck("the generic inspector stayed down", !$ainInspector.insScroller.isVisible());
+
+	%asset = $ainPane.target;
+	ainCheck("the pane is bound to the named animation", isObject(%asset));
+	ainCheck("which is in named cells mode", %asset.getNamedCellsMode());
+
+	// The info line counts frames through getFrameCount, which answers in either
+	// space. Through getAnimationFrameCount it would have said "-1 frames," --
+	// that one refuses to answer for a named animation.
+	%line = $ainPane.infoLabel.getText();
+	ainCheck("the info line counts the four frames (" @ %line @ ")",
+		strstr(%line, "4 frames") != -1);
+
+	ainCheck("no warning for a healthy named animation", !$ainPane.warningLabel.isVisible());
+
+	schedule(300, 0, "ainStep10");
+}
+
+//-----------------------------------------------------------------------------
+// And the warning that only a named animation can raise.
+//-----------------------------------------------------------------------------
+
+function ainStep10()
+{
+	%image = AssetDatabase.acquireAsset("ToyAssets:1234");
+	%image.removeExplicitCell(1);
+
+	schedule(400, 0, "ainStep11");
+}
+
+function ainStep11()
+{
+	ainCheck("a frame naming a cell that has gone is called out",
+		$ainPane.warningLabel.isVisible());
+	ainCheck("and the warning names it (" @ $ainPane.warningLabel.getText() @ ")",
+		strstr($ainPane.warningLabel.getText(), "block2") != -1);
+
+	%image = AssetDatabase.acquireAsset("ToyAssets:1234");
+	%image.insertExplicitCell(1, 32, 0, 32, 32, "block2");
+
+	schedule(400, 0, "ainStep12");
+}
+
+function ainStep12()
+{
+	ainCheck("putting the cell back clears it", !$ainPane.warningLabel.isVisible());
+
+	AssetDatabase.releaseAsset("ToyAssets:1234");
+	AssetDatabase.releaseAsset("ToyAssets:1234");
 
 	echo("AAIN DONE");
 	schedule(200, 0, "quit");

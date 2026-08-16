@@ -305,6 +305,53 @@ function aiStep7()
 		strstr($aiPane.cellGrid.box["CellCountX"].Tooltip, "How many cells") == 0);
 	aiCheck("and the warning goes", !$aiPane.warningLabel.isVisible());
 
+	schedule(200, 0, "aiStep7b");
+}
+
+//-----------------------------------------------------------------------------
+// The Explicit Frames tab names the cells it adds -- or rather, it no longer
+// does, and reads back the name the engine chose.
+//
+// It used to build "Frame" @ %index itself with no uniqueness check at all, so
+// adding a cell after deleting one from the middle produced a duplicate name that
+// the rename box right beside it would have refused. An animation addresses these
+// cells BY name, so two cells answering to one name is not cosmetic.
+//-----------------------------------------------------------------------------
+
+function aiStep7b()
+{
+	%tool = AssetAdmin.inspector.imageFrameEditPage;
+	aiCheck("the explicit frames tool exists", isObject(%tool));
+
+	// Through the checkbox, which is what a person clicks: it is toggleExplicitMode
+	// that adds the first cell for an image that has none.
+	%tool.explicitModeCheckbox.setStateOn(true);
+	%tool.toggleExplicitMode();
+
+	aiCheck("turning explicit mode on cuts a first cell", $aiAsset.getExplicitCellCount() == 1);
+	aiCheck("and the engine named it (" @ $aiAsset.getExplicitCellName(0) @ ")",
+		$aiAsset.getExplicitCellName(0) $= "Frame0");
+
+	%tool.addNewCell();
+
+	aiCheck("a second cell is named for its own index",
+		$aiAsset.getExplicitCellName(1) $= "Frame1");
+
+	// The row shows what the engine chose, rather than what the tool guessed.
+	%row = %tool.rowChain.getObject(%tool.rowChain.getCount() - 1);
+	aiCheck("the new row carries that name (" @ %row.CellName @ ")", %row.CellName $= "Frame1");
+	aiCheck("and its name box shows it", %row.nameBox.getText() $= "Frame1");
+
+	// Every cell is addressable, which is the invariant the naming exists for.
+	aiCheck("the name resolves back to its index", $aiAsset.getExplicitCellIndex("Frame1") == 1);
+
+	%tool.explicitModeCheckbox.setStateOn(false);
+	%tool.toggleExplicitMode();
+
+	// The cells outlive the mode -- turning it off must not throw them away, or
+	// every animation naming them would be unresolvable for good.
+	aiCheck("the cells survive leaving explicit mode", $aiAsset.getExplicitCellCount() == 2);
+
 	schedule(200, 0, "aiStep8");
 }
 

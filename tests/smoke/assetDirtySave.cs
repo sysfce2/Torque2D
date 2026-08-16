@@ -644,7 +644,12 @@ function adsStep19()
 		AssetAdmin.undoRecorder.getUndoCount($adsAnimationId) == 1);
 
 	// Writing the same list back is not a change, so it must not become a step.
-	%stage.commitFrames($adsAnimation.getAnimationFrames());
+	//
+	// No argument: the stage reads the list off the timeline itself now, because
+	// only it knows whether the asset keeps its frames by index or by name. The
+	// timeline has not been touched since the append, so this commits what is
+	// already there, which is exactly the no-change case being tested.
+	%stage.commitFrames();
 
 	adsCheck("committing an unchanged frame list adds no step (" @ AssetAdmin.undoRecorder.getUndoCount($adsAnimationId) @ ")",
 		AssetAdmin.undoRecorder.getUndoCount($adsAnimationId) == 1);

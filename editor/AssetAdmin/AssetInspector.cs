@@ -737,21 +737,14 @@ function AssetInspector::loadAnimationAsset(%this, %animationAsset, %assetID)
 	%this.titlebar.setText("Animation Asset:" SPC %animationAsset.AssetName);
 	%this.beginDocument(%animationAsset);
 
-	// Named cells still fall back to the generic inspector.
+	// Named cells come here too now.
 	//
-	// The reason they used to is now gone: NamedAnimationFrames is a
-	// TypeStringTableEntryVector, whose getter joins with commas, and
-	// setNamedAnimationFrames split on whitespace alone -- so a named list did not
-	// survive its own TAML file, and a pane built on it would have quietly lost
-	// work. The setter accepts commas now (AnimationAsset.cc), so a named-cells
-	// pane is buildable. It is simply not built yet, which is a job of its own
-	// rather than a hazard.
-	if(%animationAsset.getNamedCellsMode())
-	{
-		%this.inspectStock(%animationAsset);
-		return;
-	}
-
+	// They used to fall through to the generic inspector, and there were two good
+	// reasons at the time: setNamedAnimationFrames split on whitespace while the
+	// field joined with commas, so a named list did not survive its own TAML file;
+	// and getNamedAnimationFrames formatted a StringTableEntry through %d, so what
+	// came back was a row of pointers. Both are fixed, and the pane reads a named
+	// animation the same way it reads a numbered one.
 	%this.chooseInspector("Animation");
 	%this.animationPane.bind(%animationAsset, %assetID);
 }

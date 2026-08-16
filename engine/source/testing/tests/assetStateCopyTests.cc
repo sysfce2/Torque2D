@@ -167,20 +167,54 @@ TEST( AssetStateCopyTests, ImageAssetCarriesImageLayers )
 // cells survive a copy even with ExplicitMode off, because the cells outlive
 // being switched out of explicit mode and the old copy dropped them.
 
+// No mode is set here, and none can be: named cells mode is not a field any more,
+// it is read from the image asset, and a unit test cannot give an animation a real
+// image -- that needs a bitmap and a GL context. So this asserts the thing the
+// copy is actually responsible for, which is that the named list travels.
+//
+// The old version of this test set the mode on the source first, which is what
+// caught the original defect: the copy asked the TARGET which mode it was in, and
+// the target was still numbered, so the named frames were silently not copied.
+// That question no longer has a wrong answer to give, because both lists are
+// copied unconditionally. The mode's own coverage went with the field; see the
+// note beside assertEveryFieldCopies<AnimationAsset> below.
 TEST( AssetStateCopyTests, AnimationAssetCarriesNamedFrames )
 {
     AnimationAsset* source = newScratchAsset<AnimationAsset>();
-    source->setNamedCellsMode( true );
     source->setNamedAnimationFrames( "head body tail" );
 
     AnimationAsset* target = newScratchAsset<AnimationAsset>();
     source->copyTo( target );
 
-    ASSERT_TRUE( target->getNamedCellsMode() );
-    ASSERT_EQ( target->getSpecifiedNamedAnimationFrames().size(), 3 )
-        << "The copy asked the TARGET whether it was in named-cells mode, and the "
-           "target was still in the default numbered mode, so the named frames "
-           "were never copied.";
+    ASSERT_EQ( target->getSpecifiedNamedAnimationFrames().size(), 3 );
+
+    // Compared by interned identity, not by spelling. StringTable->insert folds
+    // case by default, so it hands back whichever capitalisation reached it first
+    // -- "head" came back as "HEAD" here, from something else entirely that had
+    // already interned that word. Frame names are matched the same way everywhere
+    // else, so this is the comparison that means what the caller thinks it means.
+    ASSERT_EQ( target->getSpecifiedNamedAnimationFrames()[0], StringTable->insert( "head" ) );
+    ASSERT_EQ( target->getSpecifiedNamedAnimationFrames()[2], StringTable->insert( "tail" ) );
+
+    source->deleteObject();
+    target->deleteObject();
+}
+
+// Both lists survive a copy, not merely the one in use. An image can be switched
+// between explicit and cell mode, which switches every animation on it between
+// name and index space, and the list that is not in use is what makes that
+// reversible -- a copy that dropped it would lose the frames on the way back.
+TEST( AssetStateCopyTests, AnimationAssetCarriesBothFrameLists )
+{
+    AnimationAsset* source = newScratchAsset<AnimationAsset>();
+    source->setAnimationFrames( "0 1 2" );
+    source->setNamedAnimationFrames( "head body tail" );
+
+    AnimationAsset* target = newScratchAsset<AnimationAsset>();
+    source->copyTo( target );
+
+    ASSERT_EQ( target->getSpecifiedAnimationFrames().size(), 3 );
+    ASSERT_EQ( target->getSpecifiedNamedAnimationFrames().size(), 3 );
 
     source->deleteObject();
     target->deleteObject();
@@ -448,6 +482,11 @@ TEST( AssetStateCopyTests, EveryImageAssetFieldCopies )
     assertEveryFieldCopies<ImageAsset>( "ImageAsset" );
 }
 
+// This no longer covers named cells mode, and nothing else does either. That is
+// on purpose: the mode stopped being a field, so there is nothing for a copy to
+// carry -- it is read from whichever image the copy points at, which makes it
+// right by construction. What a copy still has to carry is both frame lists, and
+// AnimationAssetCarriesBothFrameLists above is what asserts that.
 TEST( AssetStateCopyTests, EveryAnimationAssetFieldCopies )
 {
     assertEveryFieldCopies<AnimationAsset>( "AnimationAsset" );

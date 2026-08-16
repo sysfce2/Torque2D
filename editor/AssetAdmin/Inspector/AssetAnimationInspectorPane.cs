@@ -30,11 +30,14 @@
 // the one that is only a box cannot say which frame 67 is.
 //
 // Also absent, each for a checkable reason:
-//   NamedAnimationFrames, NamedCellsMode  v1 is numeric, and the engine's named
-//                                         frame API does not round-trip through
-//                                         its own file -- so this pane is never
-//                                         shown for such an asset rather than
-//                                         offering a switch into it
+//   NamedAnimationFrames                  the same field as AnimationFrames, in
+//                                         name space, and the timeline owns that
+//                                         one too
+//   NamedCellsMode                        not a field at all any more. Whether an
+//                                         animation names its frames is read from
+//                                         the image -- explicit mode means named
+//                                         cells -- so a switch here would be a
+//                                         second, disagreeing answer
 //   AssetInternal, AssetPrivate           they exist to keep an asset out of the
 //                                         editor
 //   asset id, asset file                  the module and the name are on show,
@@ -206,7 +209,10 @@ function AssetAnimationInspectorPane::refreshExtras(%this)
 // answer separately: how long, how many, and therefore how fast.
 function AssetAnimationInspectorPane::describeAnimation(%this, %asset)
 {
-	%count = %asset.getAnimationFrameCount();
+	// getFrameCount, not getAnimationFrameCount: that one refuses to answer for an
+	// animation using named cells and returns -1, which read as "-1 frames" on
+	// this very line.
+	%count = %asset.getFrameCount();
 	%time = %asset.getAnimationTime();
 
 	%line = %count SPC ((%count == 1) ? "frame," : "frames,") SPC %time SPC "s";
@@ -253,18 +259,35 @@ function AssetAnimationInspectorPane::warningFor(%this, %asset)
 		return "The image asset" SPC %imageId SPC "did not load, so there is nothing to play.";
 	}
 
+	// The two spaces fail differently, so they are reported differently.
+	//
+	// A named frame that no cell answers to is simply not drawn, and the timeline
+	// keeps it as an outlined gap -- so the useful thing to say is WHICH names,
+	// because the fix is either to put the cell back or to take the frame out.
+	if(%asset.getNamedCellsMode())
+	{
+		%missing = trim(%asset.getMissingFrames());
+		if(%missing !$= "")
+		{
+			%plural = (getWordCount(%missing) == 1);
+			return (%plural ? "The frame" : "The frames") SPC "\"" @ %missing @ "\"" SPC
+				(%plural ? "names a cell" : "name cells") SPC "the image no longer has, so" SPC
+				(%plural ? "it draws" : "they draw") SPC "nothing. Put the cell back on the " @
+				"Explicit Frames tab, or take the frame out of the timeline.";
+		}
+	}
+	// A numbered frame out of range is CLAMPED to the last one rather than
+	// dropped, so the animation keeps playing and quietly shows the wrong art.
 	// Specified against validated is the only comparison script can make, and it
-	// is exactly the right one: validateNumericalFrames CLAMPS an out-of-range
-	// frame to the last one rather than dropping it, so the animation keeps
-	// playing and quietly shows the wrong art.
-	if(trim(%asset.getAnimationFrames()) !$= trim(%asset.getAnimationFrames(true)))
+	// is exactly the right one.
+	else if(trim(%asset.getAnimationFrames()) !$= trim(%asset.getAnimationFrames(true)))
 	{
 		return "Some frames are outside the image's" SPC %image.getFrameCount() SPC
 			"and are being clamped to the nearest one. The timeline shows what was asked for; " @
 			"the preview shows what is being drawn.";
 	}
 
-	if(%asset.getAnimationFrameCount() == 0)
+	if(%asset.getFrameCount() == 0)
 	{
 		return "This animation has no frames yet. Drag one in from the palette, or use Frame Range.";
 	}

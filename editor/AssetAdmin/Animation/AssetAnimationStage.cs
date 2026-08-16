@@ -67,7 +67,7 @@ function AssetAnimationStage::onRemove(%this)
 
 function AssetAnimationStage::retainFor(%this, %animationAssetId)
 {
-	if(%animationAssetId $= "" || !%this.canEdit(%animationAssetId))
+	if(%animationAssetId $= "" || !AssetDatabase.isDeclaredAsset(%animationAssetId))
 	{
 		%this.teardown();
 		return false;
@@ -76,24 +76,42 @@ function AssetAnimationStage::retainFor(%this, %animationAssetId)
 	return true;
 }
 
-// Named cells are out of scope for now, and the reason is not squeamishness: the
-// engine's named-frame API does not round-trip. Its getter formats a string
-// through %d, and the field joins with commas while the setter splits on
-// whitespace, so a named list does not survive its own TAML file. Rather than
-// build a timeline on top of that, such an asset keeps the plain inspector and
-// the old single-sprite preview, which have always worked for it.
-function AssetAnimationStage::canEdit(%this, %animationAssetId)
+// Whether the animation on show addresses its frames by name.
+//
+// Asked of the asset, which asks the image: an image in explicit mode cuts itself
+// into named cells, so an animation on it lists names. Nothing here sets it, and
+// there is no flag to set -- changing the image, or that image's explicit mode,
+// is what changes the answer.
+//
+// The whole editor stays in INDEX space either way. The palette shows cell N, the
+// timeline holds cell N, a drag carries cell N; only loading and committing know
+// about names at all. What that buys is that every gesture, the range dialog, the
+// caret arithmetic and the hold detection are written once.
+function AssetAnimationStage::namedMode(%this)
 {
-	%asset = AssetDatabase.acquireAsset(%animationAssetId);
-	if(!isObject(%asset))
+	return isObject(%this.animationAsset) && %this.animationAsset.getNamedCellsMode();
+}
+
+// Point the timeline at the asset's frames, in whichever space they are kept.
+//
+// One method because there were three call sites that each did it slightly
+// differently -- selection, a refresh, and an inspector commit -- and a fourth
+// spelling of it was how the named case would have been missed.
+function AssetAnimationStage::loadTimeline(%this)
+{
+	if(!isObject(%this.timelinePane) || !isObject(%this.animationAsset))
 	{
-		return false;
+		return;
 	}
 
-	%named = %asset.getNamedCellsMode();
-	AssetDatabase.releaseAsset(%animationAssetId);
-
-	return !%named;
+	if(%this.namedMode())
+	{
+		%this.timelinePane.loadNamed(%this.imageAssetId, trim(%this.animationAsset.getNamedAnimationFrames()));
+	}
+	else
+	{
+		%this.timelinePane.load(%this.imageAssetId, trim(%this.animationAsset.getAnimationFrames()));
+	}
 }
 
 function AssetAnimationStage::select(%this, %imageAsset, %animationAsset, %assetId)
@@ -124,7 +142,7 @@ function AssetAnimationStage::select(%this, %imageAsset, %animationAsset, %asset
 	%this.imageAssetId = %animationAsset.getImage();
 
 	%this.palettePane.load(%this.imageAssetId);
-	%this.timelinePane.load(%this.imageAssetId, trim(%animationAsset.getAnimationFrames()));
+	%this.loadTimeline();
 
 	%this.admin.transportBarContainer.setVisible(true);
 
@@ -464,14 +482,21 @@ function AssetAnimationStage::absorbRefresh(%this, %asset)
 	// for a list it already holds. The same guard shape AssetInspectorPane uses.
 	if(%isAnimation && !%this.committing)
 	{
-		%this.timelinePane.load(%this.imageAssetId, trim(%this.animationAsset.getAnimationFrames()));
+		%this.loadTimeline();
 	}
 
 	// The image may have been re-cut, so the palette's frame count has moved --
 	// and so has what the animation's frames mean.
+	//
+	// It may also have changed explicit mode, which moves the animation between
+	// name space and index space entirely. The asset has already converted its own
+	// list by the time this runs -- that is what AnimationAsset::onAssetRefresh
+	// does -- so the timeline is reloaded here as well, from whichever list is now
+	// the live one.
 	if(%isImage)
 	{
 		%this.palettePane.reload();
+		%this.loadTimeline();
 	}
 
 	%this.resyncPreview();
@@ -558,17 +583,24 @@ function AssetAnimationStage::resizePreview(%this)
 // place in the editor that writes the animation's frames.
 //-----------------------------------------------------------------------------
 
-function AssetAnimationStage::commitFrames(%this, %frames)
+function AssetAnimationStage::commitFrames(%this)
 {
-	if(!%this.built || !isObject(%this.animationAsset))
+	if(!%this.built || !isObject(%this.animationAsset) || !isObject(%this.timelinePane))
 	{
 		return;
 	}
 
+	%named = %this.namedMode();
+
 	// How many frames there were, asked of the ASSET rather than of the strip:
 	// the strip already holds the edited list by the time it reports, so it can
 	// no longer say what the animation used to be.
-	%before = %this.animationAsset.getAnimationFrameCount();
+	//
+	// getFrameCount rather than getAnimationFrameCount, because that one refuses
+	// to answer in named mode and returns -1 -- which reads as "fewer than one"
+	// to keepFrameRate below, and would have silently switched that feature off
+	// for every named animation.
+	%before = %this.animationAsset.getFrameCount();
 
 	// Where the preview is, captured BEFORE the write, because the engine
 	// restarts playback in the middle of it: AssetManager::refreshAsset notifies
@@ -586,8 +618,20 @@ function AssetAnimationStage::commitFrames(%this, %frames)
 	// Guarded because the change comes straight back: every asset setter ends in
 	// refreshAsset, which announces the change and fires onRefresh synchronously,
 	// inside this call.
+	//
+	// The list is asked of the strip in whichever space the asset keeps it. Both
+	// are always available -- the strip fills its index list and its name list
+	// together, whichever one it was given -- so this is a choice of which to hand
+	// over, not a conversion.
 	%this.committing = true;
-	%this.animationAsset.setAnimationFrames(%frames);
+	if(%named)
+	{
+		%this.animationAsset.setNamedAnimationFrames(%this.timelinePane.strip.getNamedFrames());
+	}
+	else
+	{
+		%this.animationAsset.setAnimationFrames(%this.timelinePane.strip.getFrames());
+	}
 	%this.committing = false;
 
 	// Before the slot is forgotten, because this changes the asset a second time
@@ -657,7 +701,7 @@ function AssetAnimationStage::onInspectorCommit(%this)
 
 	%this.imageAssetId = %imageAssetId;
 	%this.palettePane.load(%imageAssetId);
-	%this.timelinePane.load(%imageAssetId, trim(%this.animationAsset.getAnimationFrames()));
+	%this.loadTimeline();
 
 	%this.admin.transportBar.refresh();
 }

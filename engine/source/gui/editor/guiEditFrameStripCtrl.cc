@@ -334,6 +334,120 @@ bool GuiEditFrameStripCtrl::getCellBackColor(S32 index, bool isHovered, ColorI& 
 	return true;
 }
 
+void GuiEditFrameStripCtrl::getCellLabel(S32 index, char* buffer, U32 bufferSize)
+{
+	const S32 frame = getFrameAt(index);
+
+	// The name, when the sheet has one for this frame.
+	//
+	// This is the whole visible point of naming a cell: an animation built out of
+	// "block1 block2" reads as those cells in the palette and the timeline, not as
+	// two numbers the person then has to look up somewhere else.
+	if (isNamedMode() && frame >= 0)
+	{
+		StringTableEntry name = mImageAsset->getExplicitCellName(frame);
+		if (name != StringTable->EmptyString)
+		{
+			dStrncpy(buffer, name, bufferSize - 1);
+			buffer[bufferSize - 1] = '\0';
+			return;
+		}
+	}
+
+	dSprintf(buffer, bufferSize, "%d", frame);
+}
+
+const ColorI& GuiEditFrameStripCtrl::getCellLabelColor(S32 index, bool isHovered)
+{
+	return mProfile->getFontColor(isHovered ? HighlightState : NormalState);
+}
+
+//-----------------------------------------------------------------------------
+
+S32 GuiEditFrameStripCtrl::clipLabel(GFont* font, const char* text, S32 maxWidth, char* out, U32 outSize)
+{
+	static const char* ellipsis = "...";
+	static const U32 ellipsisLength = 3;
+
+	dStrncpy(out, text, outSize - 1);
+	out[outSize - 1] = '\0';
+
+	S32 width = (S32)font->getStrWidth((const UTF8*)out);
+	if (width <= maxWidth)
+	{
+		return width;
+	}
+
+	const S32 ellipsisWidth = (S32)font->getStrWidth((const UTF8*)ellipsis);
+	if (ellipsisWidth > maxWidth)
+	{
+		out[0] = '\0';
+		return 0;
+	}
+
+	// Walked DOWN from the full length rather than up from nothing. A label that
+	// only just fails to fit is by far the commonest case, and each step costs a
+	// measurement of the whole string.
+	U32 length = dStrlen(out);
+	if (length > outSize - ellipsisLength - 1)
+	{
+		length = outSize - ellipsisLength - 1;
+	}
+
+	while (length > 0)
+	{
+		out[length] = '\0';
+		width = (S32)font->getStrWidth((const UTF8*)out) + ellipsisWidth;
+		if (width <= maxWidth)
+		{
+			break;
+		}
+		--length;
+	}
+
+	dStrcat(out, ellipsis);
+	return width;
+}
+
+//-----------------------------------------------------------------------------
+
+const char* GuiEditFrameStripCtrl::tipForPoint(const Point2I& globalPoint)
+{
+	const S32 cell = cellAtGlobal(globalPoint);
+	if (cell < 0 || cell >= getCellCount())
+	{
+		return NULL;
+	}
+
+	// The unclipped name. A cell is 48 pixels and a region name is whatever
+	// somebody typed, so the label in the cell is frequently the front of a word
+	// and this is the only place the rest of it can be read.
+	static char tipBuffer[256];
+	getCellLabel(cell, tipBuffer, sizeof(tipBuffer));
+
+	return (tipBuffer[0] != '\0') ? tipBuffer : NULL;
+}
+
+bool GuiEditFrameStripCtrl::renderTooltip(Point2I& cursorPos, const char* tipText)
+{
+	// Per cell rather than per control, the way GuiEditorExplorerTree's gutter
+	// does it: the canvas re-calls this every frame once the pointer has settled
+	// and decides whether to by comparing whole controls, so the text can follow
+	// the cursor from cell to cell with nothing having to invalidate it.
+	if (tipText == NULL)
+	{
+		const char* cellTip = tipForPoint(cursorPos);
+		if (cellTip != NULL)
+		{
+			tipText = cellTip;
+		}
+	}
+
+	return Parent::renderTooltip(cursorPos, tipText);
+}
+
+//-----------------------------------------------------------------------------
+
 void GuiEditFrameStripCtrl::renderCell(S32 index, const RectI& cellRect, bool isHovered)
 {
 	const S32 frame = getFrameAt(index);
@@ -363,15 +477,26 @@ void GuiEditFrameStripCtrl::renderCell(S32 index, const RectI& cellRect, bool is
 		return;
 	}
 
-	char buffer[16];
-	dSprintf(buffer, sizeof(buffer), "%d", frame);
+	// Sized for a name, not for a number. A region name comes out of a TAML
+	// attribute and has no length limit, so the 16 that comfortably held "%d"
+	// would have truncated most of them.
+	char buffer[128];
+	getCellLabel(index, buffer, sizeof(buffer));
 
-	const S32 textWidth = font->getStrWidth((const UTF8*)buffer);
 	const S32 textHeight = (S32)font->getHeight();
 
-	// Only when the label fits inside the cell it belongs to. A number spilling
-	// over its neighbours is worse than no number.
-	if (textWidth > cellRect.extent.x || textHeight > cellRect.extent.y)
+	// Height is still all-or-nothing -- there is no clipping a line of text
+	// vertically that leaves it readable -- but the width is now fitted rather
+	// than refused, because a name long enough to overflow its cell is the normal
+	// case rather than the exception a frame number was.
+	if (textHeight > cellRect.extent.y)
+	{
+		return;
+	}
+
+	char clipped[132];
+	const S32 textWidth = clipLabel(font, buffer, cellRect.extent.x, clipped, sizeof(clipped));
+	if (textWidth == 0)
 	{
 		return;
 	}
@@ -379,8 +504,8 @@ void GuiEditFrameStripCtrl::renderCell(S32 index, const RectI& cellRect, bool is
 	const Point2I textPoint(cellRect.point.x + ((cellRect.extent.x - textWidth) / 2),
 	                        (cellRect.point.y + cellRect.extent.y) - textHeight);
 
-	dglSetBitmapModulation(mProfile->getFontColor(isHovered ? HighlightState : NormalState));
-	dglDrawText(font, textPoint, (const UTF8*)buffer);
+	dglSetBitmapModulation(getCellLabelColor(index, isHovered));
+	dglDrawText(font, textPoint, (const UTF8*)clipped);
 	dglClearBitmapModulation();
 }
 

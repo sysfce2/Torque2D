@@ -81,14 +81,13 @@ IMPLEMENT_CONOBJECT(AnimationAsset);
 
 AnimationAsset::AnimationAsset() :  mAnimationTime(1.0f),
                                     mAnimationCycle(true),
-                                    mRandomStart(false),
-                                    mAnimationIntegration(0.0f),
-                                    mNamedCellsMode(false)
+                                    mRandomStart(false)
 {
     // Set Vector Associations.
     VECTOR_SET_ASSOCIATION( mAnimationFrames );
     VECTOR_SET_ASSOCIATION( mNamedAnimationFrames );
-    VECTOR_SET_ASSOCIATION( mValidatedFrames );    
+    VECTOR_SET_ASSOCIATION( mValidatedFrames );
+    VECTOR_SET_ASSOCIATION( mValidatedNameFrames );
 }
 
 //------------------------------------------------------------------------------
@@ -110,7 +109,9 @@ void AnimationAsset::initPersistFields()
     addProtectedField("AnimationTime", TypeF32, Offset(mAnimationTime, AnimationAsset), &setAnimationTime, &defaultProtectedGetFn, &defaultProtectedWriteFn, "");
     addProtectedField("AnimationCycle", TypeBool, Offset(mAnimationCycle, AnimationAsset), &setAnimationCycle, &defaultProtectedGetFn, &writeAnimationCycle, "");
     addProtectedField("RandomStart", TypeBool, Offset(mRandomStart, AnimationAsset), &setRandomStart, &defaultProtectedGetFn, &writeRandomStart, "");
-    addProtectedField("NamedCellsMode", TypeBool, Offset(mNamedCellsMode, AnimationAsset), &setNamedCellsMode, &defaultProtectedGetFn, &writeNamedCellsMode, "");
+
+    // There is no NamedCellsMode field, and deliberately so. Whether an animation
+    // uses names is the image's business -- see getNamedCellsMode.
 }
 
 //------------------------------------------------------------------------------
@@ -141,11 +142,15 @@ void AnimationAsset::onAssetRefresh( void )
     if ( !isProperlyAdded() )
         return;
 
-    // Re-validate the frames.  A refresh reaches us both when we were changed
-    // ourselves and when the image asset we depend on was, and the image may have
-    // been re-cut into a different number of cells.  Without this the validated
-    // list keeps indices from the old cut, and getImageFrameArea() clamps them to
-    // the last frame -- so the animation plays the wrong art and says nothing.
+    // A refresh reaches us both when we were changed ourselves and when the image
+    // asset we depend on was, which is also the only warning we get that the image
+    // has changed which space our frames are counted in.
+    convertFramesForMode();
+
+    // Re-validate the frames.  The image may have been re-cut into a different
+    // number of cells, and without this the validated list keeps indices from the
+    // old cut, and getImageFrameArea() clamps them to the last frame -- so the
+    // animation plays the wrong art and says nothing.
     validateFrames();
 
     // Call parent.
@@ -162,6 +167,10 @@ void AnimationAsset::setImage( const char* pAssetId )
 
     // Update.
     mImageAsset = pAssetId;
+
+    // Repointing at an image that counts its frames differently is a mode switch
+    // like any other.
+    convertFramesForMode();
 
     // Validate frames.
     validateFrames();
@@ -181,10 +190,9 @@ void AnimationAsset::setAnimationFrames( const char* pAnimationFrames )
     //
     // This one did not, so writing the same frame list back counted as a change:
     // it announced itself, marked the asset unsaved, and -- once the Asset Manager
-    // started recording undo -- left a step that put nothing back. The mode is
-    // part of the comparison because this setter also clears named-cells mode, so
-    // an identical list still has work to do if that mode is on.
-    if ( !mNamedCellsMode )
+    // started recording undo -- left a step that put nothing back. The list is the
+    // whole comparison now; it used to have to consider the mode as well, because
+    // this setter also cleared named cells mode, and no longer does.
     {
         const U32 currentCount = StringUnit::getUnitCount( pAnimationFrames, " \t\n" );
 
@@ -219,7 +227,9 @@ void AnimationAsset::setAnimationFrames( const char* pAnimationFrames )
         mAnimationFrames.push_back( dAtoi( StringUnit::getUnit( pAnimationFrames, frameIndex, " \t\n" ) ) );
     }
 
-    mNamedCellsMode = false;
+    // The named list is left alone, deliberately. Both lists survive so that an
+    // image changing mode and changing back costs the animation nothing, and only
+    // the one in use is written to the file.
 
     // Validate frames.
     validateFrames();
@@ -242,7 +252,6 @@ void AnimationAsset::setAnimationFrames( const char* pAnimationFrames )
 void AnimationAsset::setNamedAnimationFrames( const char* pAnimationFrames )
 {
     // Ignore no change, for the same reason as the numbered setter above.
-    if ( mNamedCellsMode )
     {
         const U32 currentCount = StringUnit::getUnitCount( pAnimationFrames, " \t\n," );
 
@@ -277,7 +286,7 @@ void AnimationAsset::setNamedAnimationFrames( const char* pAnimationFrames )
         mNamedAnimationFrames.push_back( StringTable->insert( StringUnit::getUnit( pAnimationFrames, frameIndex, " \t\n," ) ) );
     }
 
-    mNamedCellsMode = true;
+    // The numbered list is left alone; see the sibling setter above.
 
     // Validate frames.
     validateFrames();
@@ -333,17 +342,127 @@ void AnimationAsset::setRandomStart( const bool randomStart )
 
 //------------------------------------------------------------------------------
 
-void AnimationAsset::setNamedCellsMode( const bool namedCellsMode )
+bool AnimationAsset::getNamedCellsMode( void ) const
 {
-    // Ignore no change.
-    if ( namedCellsMode == mNamedCellsMode)
+    // Asked of the image every time rather than cached, so there is nothing that
+    // can be left stale. An image in explicit mode has named cells; one cut into
+    // a grid does not.
+    return mImageAsset.notNull() && mImageAsset->getExplicitMode();
+}
+
+//------------------------------------------------------------------------------
+
+void AnimationAsset::translateFrames( const Vector<S32>& indices, const Vector<StringTableEntry>& cellNames, Vector<StringTableEntry>& outNames )
+{
+    outNames.clear();
+
+    for( Vector<S32>::const_iterator frameItr = indices.begin(); frameItr != indices.end(); ++frameItr )
+    {
+        const S32 frame = *frameItr;
+
+        if ( frame < 0 || frame >= cellNames.size() )
+            continue;
+
+        if ( cellNames[frame] == StringTable->EmptyString )
+            continue;
+
+        outNames.push_back( cellNames[frame] );
+    }
+}
+
+//------------------------------------------------------------------------------
+
+void AnimationAsset::translateFrames( const Vector<StringTableEntry>& names, const Vector<StringTableEntry>& cellNames, Vector<S32>& outIndices )
+{
+    outIndices.clear();
+
+    for( Vector<StringTableEntry>::const_iterator frameItr = names.begin(); frameItr != names.end(); ++frameItr )
+    {
+        StringTableEntry frame = *frameItr;
+
+        if ( frame == StringTable->EmptyString )
+            continue;
+
+        for ( S32 cellIndex = 0; cellIndex < cellNames.size(); ++cellIndex )
+        {
+            if ( cellNames[cellIndex] == frame )
+            {
+                outIndices.push_back( cellIndex );
+                break;
+            }
+        }
+    }
+}
+
+//------------------------------------------------------------------------------
+
+void AnimationAsset::convertFramesForMode( void )
+{
+    // Nothing to translate against.
+    if ( mImageAsset.isNull() )
         return;
 
-    // Update.
-    mNamedCellsMode = namedCellsMode;
+    const bool namedCellsMode = getNamedCellsMode();
 
-    // Refresh the asset.
-    refreshAsset();
+    // Only when the list the animation now needs has nothing in it and the other
+    // one does. That makes this idempotent, and it makes the switch reversible:
+    // going named leaves the numbers where they were, so coming back finds them
+    // rather than rebuilding them, and any editing done while named wins.
+    if ( namedCellsMode )
+    {
+        if ( mNamedAnimationFrames.size() > 0 || mAnimationFrames.size() == 0 )
+            return;
+    }
+    else
+    {
+        if ( mAnimationFrames.size() > 0 || mNamedAnimationFrames.size() == 0 )
+            return;
+    }
+
+    // What each cell is called, by index. Read from the explicit cells rather than
+    // the resolved frames, because this has to work while explicit mode is OFF --
+    // which is exactly the case that translates names back into indices.
+    Vector<StringTableEntry> cellNames;
+    const S32 cellCount = mImageAsset->getExplicitCellCount();
+    for ( S32 cellIndex = 0; cellIndex < cellCount; ++cellIndex )
+    {
+        cellNames.push_back( mImageAsset->getExplicitCellName( cellIndex ) );
+    }
+
+    if ( namedCellsMode )
+    {
+        translateFrames( mAnimationFrames, cellNames, mNamedAnimationFrames );
+    }
+    else
+    {
+        translateFrames( mNamedAnimationFrames, cellNames, mAnimationFrames );
+    }
+}
+
+//------------------------------------------------------------------------------
+
+void AnimationAsset::getMissingFrames( Vector<StringTableEntry>& missingFrames ) const
+{
+    missingFrames.clear();
+
+    if ( !getNamedCellsMode() )
+        return;
+
+    for( Vector<StringTableEntry>::const_iterator frameItr = mNamedAnimationFrames.begin(); frameItr != mNamedAnimationFrames.end(); ++frameItr )
+    {
+        if ( !mImageAsset->containsFrame( *frameItr ) )
+            missingFrames.push_back( *frameItr );
+    }
+}
+
+//------------------------------------------------------------------------------
+
+S32 AnimationAsset::getFrameCount( const bool validatedFrames ) const
+{
+    if ( getNamedCellsMode() )
+        return validatedFrames ? mValidatedNameFrames.size() : mNamedAnimationFrames.size();
+
+    return validatedFrames ? mValidatedFrames.size() : mAnimationFrames.size();
 }
 
 //------------------------------------------------------------------------------
@@ -447,7 +566,10 @@ void AnimationAsset::validateFrames( void )
     if ( mImageAsset.isNull() )
         return;
 
-    if (mNamedCellsMode)
+    // Only the list in use, and nothing else. This is a pure derivation -- it must
+    // not touch either specified list, because it runs from inside both setters
+    // and would otherwise be undoing the write that called it.
+    if (getNamedCellsMode())
     {
         validateNamedFrames();
     }
@@ -471,6 +593,14 @@ void AnimationAsset::initializeAsset( void )
     // Call parent.
     Parent::initializeAsset();
 
-    // Currently there is no specific initialization required.
+    // Settle the frames once, now that the whole file has been read.
+    //
+    // Until now this relied on each field validating as TAML applied it, so
+    // whichever of Image and the two frame lists happened to be written last got
+    // the final say. That was survivable while nothing depended on more than one
+    // field at a time. Converting between the two spaces depends on all three, so
+    // it has to happen where all three are known to be in.
+    convertFramesForMode();
+    validateFrames();
 }
 

@@ -343,6 +343,7 @@ set(TORQUE_ENGINE_SOURCES
     # ---- testing ----
     ${TORQUE_SRC}/testing/unitTesting.cc
     # ---- testing/tests ----
+    ${TORQUE_SRC}/testing/tests/animationFrameConversionTests.cc
     ${TORQUE_SRC}/testing/tests/assetStateCopyTests.cc
     ${TORQUE_SRC}/testing/tests/bitmapFontParseTests.cc
     ${TORQUE_SRC}/testing/tests/guiControlReparentTests.cc
@@ -355,6 +356,7 @@ set(TORQUE_ENGINE_SOURCES
     ${TORQUE_SRC}/testing/tests/guiTextEditTests.cc
     ${TORQUE_SRC}/testing/tests/guiTextWrapTests.cc
     ${TORQUE_SRC}/testing/tests/guiTreeRowLayoutTests.cc
+    ${TORQUE_SRC}/testing/tests/imageAssetCellNameTests.cc
     ${TORQUE_SRC}/testing/tests/namespaceLinkTests.cc
     ${TORQUE_SRC}/testing/tests/platformFileIoTests.cc
     ${TORQUE_SRC}/testing/tests/platformMemoryTests.cc

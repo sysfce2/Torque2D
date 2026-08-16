@@ -1931,6 +1931,14 @@ function BaseTheme::makeFrameGridProfile(%this)
 		fontColorHL = %this.color4;
 		fontColorSL = %this.color5;
 
+		// Errors, in the sense the console profile uses this slot for. The
+		// timeline outlines a frame naming a cell the image no longer has, and this
+		// is the color of that outline and of its label. The four FILL colors are
+		// all spoken for -- background, hover, selected, and about-to-be-discarded
+		// during a drag -- which is why a missing frame is a border rather than a
+		// wash.
+		fontColorNA = "255 0 0 255";
+
 		// The Delete key only reaches a control that can hold focus, and the
 		// timeline's whole keyboard depends on it.
 		canKeyFocus = true;

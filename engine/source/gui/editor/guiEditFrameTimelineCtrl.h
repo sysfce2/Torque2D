@@ -57,6 +57,18 @@ private:
 
 protected:
 	Vector<S32> mSlots;
+
+	/// What each slot is called, parallel to mSlots and ALWAYS the same size.
+	///
+	/// mSlots stays the drawing truth -- where the art comes from -- and this is
+	/// the authoring truth while the image names its cells. Both are needed
+	/// because a name whose cell has been deleted resolves to no index at all, and
+	/// every such name resolves to the same -1: carried in index space alone, two
+	/// different missing frames would come back from a single edit as one frame,
+	/// and committing would quietly delete the other. Empty strings throughout
+	/// when the image numbers its frames instead.
+	Vector<StringTableEntry> mSlotNames;
+
 	S32 mSelected;              ///< -1 when nothing is picked.
 	S32 mCaret;                 ///< Insertion point under a hovering drag, -1 when none.
 	S32 mPlayhead;              ///< The slot the preview is showing, -1 when unknown.
@@ -81,6 +93,16 @@ protected:
 	bool getCellBackColor(S32 index, bool isHovered, ColorI& color);
 	void renderCell(S32 index, const RectI& cellRect, bool isHovered);
 	void renderOverlay(const RectI& contentRect);
+	void getCellLabel(S32 index, char* buffer, U32 bufferSize);
+	const ColorI& getCellLabelColor(S32 index, bool isHovered);
+
+	/// Whether slot N names a cell the image no longer has. The name is kept and
+	/// shown rather than dropped, because dropping it is a deletion the user did
+	/// not ask for -- and one they could not undo, having never seen it happen.
+	bool isSlotMissing(S32 index) const;
+
+	/// What name a frame index should carry, given the image. "" in numbered mode.
+	StringTableEntry nameForFrame(S32 frame) const;
 
 	/// Tell script the list changed. One call per completed gesture, never per
 	/// drag tick, so script has exactly one place to commit from.
@@ -136,6 +158,19 @@ public:
 	/// AnimationAsset::getAnimationFrames, which leaves a trailing space.
 	const char* getFrames();
 	void setFrames(const char* frames);
+
+	/// The same list, by cell name, for an image that names its cells.
+	///
+	/// The rule the pair keeps, and the reason nothing else has to think about it:
+	/// setFrames takes indices and derives the names, setNamedFrames takes names
+	/// and derives the indices, and BOTH always fill both vectors. So whichever
+	/// way a list arrives -- a palette click, a drop, a typed range, a load -- it
+	/// can be read back either way.
+	const char* getNamedFrames();
+	void setNamedFrames(const char* names);
+
+	/// What slot N is called, or "" when the image does not name its cells.
+	StringTableEntry getNameAt(S32 index) const;
 
 	bool insertFrame(S32 slot, S32 frame);
 	bool removeSlot(S32 slot);

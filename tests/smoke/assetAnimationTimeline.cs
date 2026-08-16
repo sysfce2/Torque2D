@@ -540,6 +540,156 @@ function aniStep7()
 	aniCheck("the preview is split again",
 		getWordCount(AssetAdmin.previewFrames.getFrameLayout()) > 8);
 
+	schedule(300, 0, "aniStep8");
+}
+
+//-----------------------------------------------------------------------------
+// A named animation. 1234Animation lists four cells of an explicitly cut sheet
+// by name, and the editor used to refuse it outright: AssetAnimationStage::canEdit
+// returned false for named cells, so it got no palette and no timeline, and
+// AssetInspector sent it to the stock inspector as well.
+//
+// The whole editor still works in INDEX space -- the palette shows cell N, the
+// timeline holds cell N, a drag carries cell N. Only loading and committing know
+// about names, which is what keeps every gesture, the caret arithmetic and the
+// hold detection written once.
+//-----------------------------------------------------------------------------
+
+$aniNamedAnimId = "ToyAssets:1234Animation";
+$aniNamedImageId = "ToyAssets:1234";
+
+function aniStep8()
+{
+	$aniNamedTile = AssetAdmin.Dictionary["AnimationAsset"].getButton($aniNamedAnimId);
+	aniCheck("the named animation tile is in the library", isObject($aniNamedTile));
+
+	$aniNamedTile.onClick();
+
+	schedule(600, 0, "aniStep9");
+}
+
+function aniStep9()
+{
+	aniCheck("a named animation builds the split too", $aniStage.built);
+	aniCheck("the stage knows it is in named mode", $aniStage.namedMode());
+
+	if(!$aniStage.built)
+	{
+		echo("AANI DONE");
+		schedule(200, 0, "quit");
+		return;
+	}
+
+	$aniNamedTimeline = $aniStage.timelinePane.strip;
+	$aniNamedPalette = $aniStage.palettePane.strip;
+
+	aniCheck("the palette shows the four explicit cells",
+		$aniNamedPalette.getCellCount() == 4);
+	aniCheck("the timeline holds four slots", $aniNamedTimeline.getCellCount() == 4);
+
+	// Both lists, from one load. The strip fills its index list and its name list
+	// together whichever way it was given the frames, which is what lets every
+	// gesture below stay in index space.
+	aniCheck("the timeline read the names (" @ $aniNamedTimeline.getNamedFrames() @ ")",
+		$aniNamedTimeline.getNamedFrames() $= "block1 block2 block3 block4");
+	aniCheck("and resolved them to indices (" @ $aniNamedTimeline.getFrames() @ ")",
+		$aniNamedTimeline.getFrames() $= "0 1 2 3");
+
+	schedule(300, 0, "aniStep10");
+}
+
+//-----------------------------------------------------------------------------
+// Editing. The gestures are the numbered ones; what changes is what gets written.
+//-----------------------------------------------------------------------------
+
+function aniStep10()
+{
+	// The palette-click path, with an index, exactly as for a numbered animation.
+	$aniStage.appendFrame(1);
+
+	aniCheck("appending by index appends the right name (" @ $aniNamedTimeline.getNamedFrames() @ ")",
+		$aniNamedTimeline.getNamedFrames() $= "block1 block2 block3 block4 block2");
+
+	%asset = AssetDatabase.acquireAsset($aniNamedAnimId);
+	aniCheck("and the asset was written in name space (" @ trim(%asset.getNamedAnimationFrames()) @ ")",
+		trim(%asset.getNamedAnimationFrames()) $= "block1 block2 block3 block4 block2");
+	AssetDatabase.releaseAsset($aniNamedAnimId);
+
+	// Removing and reordering carry the names with them.
+	$aniNamedTimeline.removeSlot(4);
+	$aniNamedTimeline.moveSlot(0, 4);
+	$aniStage.timelinePane.commitFrames();
+
+	aniCheck("a move reorders the names (" @ $aniNamedTimeline.getNamedFrames() @ ")",
+		$aniNamedTimeline.getNamedFrames() $= "block2 block3 block4 block1");
+
+	schedule(300, 0, "aniStep11");
+}
+
+//-----------------------------------------------------------------------------
+// A frame whose cell has gone. Kept, not dropped -- and it survives being
+// committed, which is the part that would silently have deleted it.
+//-----------------------------------------------------------------------------
+
+function aniStep11()
+{
+	$aniNamedImage = AssetDatabase.acquireAsset($aniNamedImageId);
+	$aniNamedImage.removeExplicitCell(0);
+
+	schedule(300, 0, "aniStep12");
+}
+
+function aniStep12()
+{
+	aniCheck("the timeline still has all four slots", $aniNamedTimeline.getCellCount() == 4);
+	aniCheck("the missing one resolves to no frame", $aniNamedTimeline.getFrameAt(3) == -1);
+	aniCheck("but still knows what it was called",
+		$aniNamedTimeline.getNameAt(3) $= "block1");
+
+	// Committing without touching it must not be what finally loses it.
+	$aniStage.timelinePane.commitFrames();
+
+	%asset = AssetDatabase.acquireAsset($aniNamedAnimId);
+	aniCheck("committing writes the missing name back unchanged (" @ trim(%asset.getNamedAnimationFrames()) @ ")",
+		trim(%asset.getNamedAnimationFrames()) $= "block2 block3 block4 block1");
+	aniCheck("and the asset reports it as missing",
+		trim(%asset.getMissingFrames()) $= "block1");
+	AssetDatabase.releaseAsset($aniNamedAnimId);
+
+	schedule(300, 0, "aniStep13");
+}
+
+//-----------------------------------------------------------------------------
+// What reaches the file. Only the list the animation is actually using -- writing
+// both was a round trip that did not close, because the named list is applied
+// last and used to force named mode back on.
+//-----------------------------------------------------------------------------
+
+function aniStep13()
+{
+	$aniNamedImage.insertExplicitCell(0, 0, 0, 32, 32, "block1");
+	AssetDatabase.releaseAsset($aniNamedImageId);
+
+	%path = AssetDatabase.getAssetFilePath($aniNamedAnimId);
+	%file = new FileObject();
+
+	%text = "";
+	if(%file.openForRead(%path))
+	{
+		while(!%file.isEOF())
+		{
+			%text = %text @ %file.readLine() @ " ";
+		}
+		%file.close();
+	}
+	%file.delete();
+
+	aniCheck("the saved file has NamedAnimationFrames", strstr(%text, "NamedAnimationFrames") != -1);
+	aniCheck("and does NOT also have AnimationFrames",
+		strstr(strreplace(%text, "NamedAnimationFrames", ""), "AnimationFrames") == -1);
+	aniCheck("and has no NamedCellsMode, which is not a field any more",
+		strstr(%text, "NamedCellsMode") == -1);
+
 	echo("AANI DONE");
 	schedule(200, 0, "quit");
 }

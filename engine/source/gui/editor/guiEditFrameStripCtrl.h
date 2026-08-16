@@ -115,9 +115,22 @@ protected:
 	/// is hovering over. Returns false to leave the cell's background alone.
 	virtual bool getCellBackColor(S32 index, bool isHovered, ColorI& color);
 
-	/// One cell: the background, the frame, and its number. A subclass overrides
+	/// One cell: the background, the frame, and its label. A subclass overrides
 	/// to put a selection or a playhead on top of that.
 	virtual void renderCell(S32 index, const RectI& cellRect, bool isHovered);
+
+	/// What cell N is called: the explicit cell's name when the image has one for
+	/// it, the frame index otherwise.
+	///
+	/// One override point, so the palette and the timeline can never label the
+	/// same cell differently -- which would make dragging a frame from one to the
+	/// other a guess.
+	virtual void getCellLabel(S32 index, char* buffer, U32 bufferSize);
+
+	/// What ink to draw that label in. Hover aside, the base has one answer; the
+	/// timeline has another for a frame whose cell has gone, so that the outline
+	/// and the name it explains are plainly the same piece of news.
+	virtual const ColorI& getCellLabelColor(S32 index, bool isHovered);
 
 	/// Anything drawn over the whole grid rather than per cell -- an insertion
 	/// caret, say. Called inside the content clip, after every cell.
@@ -162,6 +175,28 @@ public:
 	/// The space the cells take up altogether, with no trailing gap on the last
 	/// row or column -- a pad of overshoot is a scroll bar for nothing.
 	static Point2I getContentExtent(S32 cellCount, S32 columns, S32 cellSize, S32 cellPad);
+
+	/// The longest prefix of text that fits maxWidth, with an ellipsis when it had
+	/// to cut. Writes what will actually be drawn into out and returns its width,
+	/// or 0 when not even the ellipsis fits -- draw nothing then, because "..." on
+	/// its own over a cell says less than the art already does.
+	///
+	/// Measures and draws the same string rather than reaching for getStrNWidth and
+	/// dglDrawTextN, whose counts are not the same unit: the first takes bytes, the
+	/// second takes UTF16 units, so the two disagree the moment a name is not
+	/// plain ASCII.
+	static S32 clipLabel(GFont* font, const char* text, S32 maxWidth, char* out, U32 outSize);
+
+	/// Whether this control's image names its frames -- the same question, asked of
+	/// the same place, that AnimationAsset::getNamedCellsMode answers. Derived from
+	/// the image rather than set, so the two cannot disagree about the asset they
+	/// are both looking at.
+	inline bool isNamedMode() const { return mImageAsset.notNull() && mImageAsset->getExplicitMode(); }
+
+	/// The full text for the cell under a point, which is what makes a clipped
+	/// label readable, or "" for none.
+	virtual const char* tipForPoint(const Point2I& globalPoint);
+	bool renderTooltip(Point2I& cursorPos, const char* tipText);
 
 	GuiEditFrameStripCtrl();
 	static void initPersistFields();

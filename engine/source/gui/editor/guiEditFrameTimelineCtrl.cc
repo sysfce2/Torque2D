@@ -158,9 +158,104 @@ const char* GuiEditFrameTimelineCtrl::getFrames()
 	return buffer;
 }
 
+StringTableEntry GuiEditFrameTimelineCtrl::nameForFrame(S32 frame) const
+{
+	if (!isNamedMode() || frame < 0)
+	{
+		return StringTable->EmptyString;
+	}
+
+	return mImageAsset->getExplicitCellName(frame);
+}
+
+StringTableEntry GuiEditFrameTimelineCtrl::getNameAt(S32 index) const
+{
+	if (index < 0 || index >= mSlotNames.size())
+	{
+		return StringTable->EmptyString;
+	}
+
+	return mSlotNames[index];
+}
+
+bool GuiEditFrameTimelineCtrl::isSlotMissing(S32 index) const
+{
+	if (index < 0 || index >= mSlots.size())
+	{
+		return false;
+	}
+
+	// A name that resolved to no cell. Only ever true in named mode: a numbered
+	// frame out of range is clamped by the asset rather than lost, so it has art
+	// to draw and nothing to report.
+	return mSlots[index] < 0 && getNameAt(index) != StringTable->EmptyString;
+}
+
+const char* GuiEditFrameTimelineCtrl::getNamedFrames()
+{
+	if (mSlotNames.size() == 0)
+	{
+		return "";
+	}
+
+	// Measured, because a region name has no length limit.
+	U32 bufferSize = 1;
+	for (S32 i = 0; i < mSlotNames.size(); ++i)
+	{
+		bufferSize += dStrlen(mSlotNames[i]) + 1;
+	}
+
+	char* buffer = Con::getReturnBuffer(bufferSize);
+	U32 offset = 0;
+
+	for (S32 i = 0; i < mSlotNames.size(); ++i)
+	{
+		offset += dSprintf(buffer + offset, bufferSize - offset, (i == 0) ? "%s" : " %s", mSlotNames[i]);
+	}
+
+	return buffer;
+}
+
+void GuiEditFrameTimelineCtrl::setNamedFrames(const char* names)
+{
+	mSlots.clear();
+	mSlotNames.clear();
+
+	if (names != NULL)
+	{
+		// Commas as well as whitespace, because that is what a named list looks
+		// like coming out of a TAML field -- TypeStringTableEntryVector joins with
+		// commas, and AnimationAsset::setNamedAnimationFrames splits on both for
+		// exactly the same reason.
+		char* copy = dStrdup(names);
+		for (const char* token = dStrtok(copy, " \t\n,"); token != NULL; token = dStrtok(NULL, " \t\n,"))
+		{
+			StringTableEntry name = StringTable->insert(token);
+
+			mSlotNames.push_back(name);
+
+			// -1 when the image has no such cell. Kept as a slot rather than
+			// skipped: the list the user gets back has to be the list they had, or
+			// the next edit commits a deletion nobody asked for.
+			mSlots.push_back(mImageAsset.notNull() ? mImageAsset->getExplicitCellIndex(name) : -1);
+		}
+		dFree(copy);
+	}
+
+	if (mSelected >= mSlots.size())
+	{
+		mSelected = -1;
+	}
+	mCaret = -1;
+
+	updateExtent();
+	setUpdate();
+}
+
 void GuiEditFrameTimelineCtrl::setFrames(const char* frames)
 {
 	mSlots.clear();
+	mSlotNames.clear();
 
 	if (frames != NULL)
 	{
@@ -169,7 +264,10 @@ void GuiEditFrameTimelineCtrl::setFrames(const char* frames)
 		char* copy = dStrdup(frames);
 		for (const char* token = dStrtok(copy, " \t\n"); token != NULL; token = dStrtok(NULL, " \t\n"))
 		{
-			mSlots.push_back(dAtoi(token));
+			const S32 frame = dAtoi(token);
+
+			mSlots.push_back(frame);
+			mSlotNames.push_back(nameForFrame(frame));
 		}
 		dFree(copy);
 	}
@@ -194,6 +292,9 @@ bool GuiEditFrameTimelineCtrl::insertFrame(S32 slot, S32 frame)
 	mSlots.insert(slot);
 	mSlots[slot] = frame;
 
+	mSlotNames.insert(slot);
+	mSlotNames[slot] = nameForFrame(frame);
+
 	// The picked slot moves along with everything else it was standing after.
 	if (mSelected >= slot)
 	{
@@ -213,6 +314,7 @@ bool GuiEditFrameTimelineCtrl::removeSlot(S32 slot)
 	}
 
 	mSlots.erase(slot);
+	mSlotNames.erase(slot);
 
 	if (mSelected == slot)
 	{
@@ -240,6 +342,7 @@ bool GuiEditFrameTimelineCtrl::moveSlot(S32 from, S32 to)
 	// `to` is an insertion point measured against the list as it stands, so once
 	// the slot is lifted out everything past it has shuffled down by one.
 	const S32 frame = mSlots[from];
+	StringTableEntry name = getNameAt(from);
 	const S32 landing = (to > from) ? (to - 1) : to;
 
 	if (landing == from)
@@ -250,6 +353,12 @@ bool GuiEditFrameTimelineCtrl::moveSlot(S32 from, S32 to)
 	mSlots.erase(from);
 	mSlots.insert(landing);
 	mSlots[landing] = frame;
+
+	// Carried, not re-derived. A slot whose cell has gone has no index to look a
+	// name up from, and moving it must not be what finally loses it.
+	mSlotNames.erase(from);
+	mSlotNames.insert(landing);
+	mSlotNames[landing] = name;
 
 	mSelected = landing;
 
@@ -404,9 +513,51 @@ bool GuiEditFrameTimelineCtrl::getCellBackColor(S32 index, bool isHovered, Color
 	return Parent::getCellBackColor(index, isHovered, color);
 }
 
+void GuiEditFrameTimelineCtrl::getCellLabel(S32 index, char* buffer, U32 bufferSize)
+{
+	// A missing slot answers with the name that failed rather than with its
+	// frame, which is -1 and tells the user nothing about what they have lost.
+	if (isSlotMissing(index))
+	{
+		dStrncpy(buffer, getNameAt(index), bufferSize - 1);
+		buffer[bufferSize - 1] = '\0';
+		return;
+	}
+
+	Parent::getCellLabel(index, buffer, bufferSize);
+}
+
+const ColorI& GuiEditFrameTimelineCtrl::getCellLabelColor(S32 index, bool isHovered)
+{
+	// The same ink as the outline around it. A red box with a white word in it
+	// reads as two things -- a broken cell, and a name -- when it is one: this
+	// name is why the cell is broken.
+	if (isSlotMissing(index))
+	{
+		return mProfile->getFontColor(DisabledState);
+	}
+
+	return Parent::getCellLabelColor(index, isHovered);
+}
+
 void GuiEditFrameTimelineCtrl::renderCell(S32 index, const RectI& cellRect, bool isHovered)
 {
 	Parent::renderCell(index, cellRect, isHovered);
+
+	// A frame whose cell has gone. Nothing was drawn for the art -- the frame is
+	// -1, and renderImageAssetFrame declines an out-of-range one -- so what is
+	// left is an empty cell with a name under it, which reads as a cell that has
+	// simply not loaded yet.
+	//
+	// Outlined rather than filled, and in the one profile color this control does
+	// not otherwise use. All four fills are spoken for, and the disabled one in
+	// particular already means "let go now and this is thrown away" during a drag
+	// -- the opposite of what this slot needs to say, which is that it is still
+	// here and wants attention.
+	if (isSlotMissing(index))
+	{
+		dglDrawRect(cellRect, mProfile->getFontColor(DisabledState));
+	}
 
 	// Selected and playing are drawn differently on purpose -- a background and a
 	// bar -- because they are frequently the same cell and the user needs to see
@@ -426,9 +577,19 @@ void GuiEditFrameTimelineCtrl::renderOverlay(const RectI& contentRect)
 	// A run of the same frame is a hold -- the only way the format has of making
 	// one frame last longer. Joining the repeats across the gap says "this is one
 	// pose held" rather than "somebody added the same frame twice by accident".
+	//
+	// Compared by name while the image names its cells, because two DIFFERENT
+	// missing frames are both slot -1, and joining those would draw a hold of a
+	// pose that does not exist out of two unrelated broken frames.
+	const bool namedMode = isNamedMode();
+
 	for (S32 i = 1; i < mSlots.size(); ++i)
 	{
-		if (mSlots[i] != mSlots[i - 1])
+		const bool sameFrame = namedMode
+			? (getNameAt(i) == getNameAt(i - 1))
+			: (mSlots[i] == mSlots[i - 1]);
+
+		if (!sameFrame)
 		{
 			continue;
 		}
