@@ -141,10 +141,17 @@ function AssetImageFrameEditTool::addImageFrameRow(%this, %name, %offset, %width
 	%this.startListening(%row);
 }
 
+// The name is the engine's to choose, and then read back.
+//
+// This used to build "Frame" @ %index itself, with no uniqueness check at all --
+// so adding a cell after deleting one from the middle produced a second cell
+// with a name that already existed, which onCellNameChange right below would have
+// refused had a person typed it. The engine names an unnamed cell on the way
+// through calculateExplicitMode, walking past any name already taken, and that is
+// now the only place the rule lives.
 function AssetImageFrameEditTool::addNewCell(%this)
 {
 	%index = %this.asset.getExplicitCellCount();
-	%name = "Frame" @ %index;
 	%x = 0;
 	%y = 0;
 	%width = %this.asset.getImageWidth();
@@ -152,7 +159,11 @@ function AssetImageFrameEditTool::addNewCell(%this)
 
 	%this.rowChain.callOnChildrenNoRecurse("updateCellCount", %index + 1);
 
-	%this.asset.addExplicitCell(%x, %y, %width, %height, %name);
+	// addExplicitCell refreshes the asset before it returns, so the name it picked
+	// is there to be read on the next line.
+	%this.asset.addExplicitCell(%x, %y, %width, %height, "");
+	%name = %this.asset.getExplicitCellName(%index);
+
 	%this.addImageFrameRow(%name, %x SPC %y, %width, %height, %index);
 }
 

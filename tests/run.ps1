@@ -30,10 +30,15 @@
     Seconds to let a test run before killing it. A debug build's AssertFatal is a
     modal message box, so a test that trips one hangs rather than crashing.
 
+.PARAMETER Keep
+    Leave behind the project folders and theme art the tests built, instead of
+    sweeping them at the end. For picking over the wreckage of a failure.
+
 .EXAMPLE
     tests\run.ps1
     tests\run.ps1 colorPopup
     tests\run.ps1 -Shots
+    tests\run.ps1 undo -Keep
 #>
 [CmdletBinding()]
 param(
@@ -41,16 +46,23 @@ param(
     [string]$Name = '*',
     [switch]$Shots,
     [switch]$List,
-    [int]$Timeout = 90
+    [int]$Timeout = 90,
+    [switch]$Keep
 )
 
 $ErrorActionPreference = 'Stop'
 
 $Root = Split-Path -Parent $PSScriptRoot
 $Exe  = Join-Path $Root 'Torque2D_DEBUG.exe'
-$Log  = Join-Path $Root 'console.log'
 $Boot = Join-Path $Root '_boot.cs'
 $Dir  = if ($Shots) { 'shots' } else { 'smoke' }
+
+# One log per test, rather than the console.log at the repo root that every
+# engine started from this folder writes to. Two reasons: a run no longer
+# collides with a hand-started editor, and the log of a suite that failed is
+# still there after the rest of the run has been and gone.
+$LogDir = Join-Path $PSScriptRoot 'logs'
+New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
 
 # Every suite is expected to pass, and none is on this list. It stays because a
 # genuinely known failure -- one that is not the suite's own fault and cannot be
@@ -68,11 +80,58 @@ $Expected = @{}
 # than starting from a clean one. Only the second half of a two-pass test.
 $KeepProject = @('bitmapPathRead')
 
+# Everything a test builds outside its own head, removed by reading the test's
+# own source for the two calls that make files.
+#
+#   setProjectFolder("X")  ProjectManager creates X/ at the repo root. Only the
+#                          throwaway names are touched -- PlanetX and toybox are
+#                          real content that several suites open, and deleting
+#                          those would be a disaster.
+#   createTheme("Y")       GuiProfileEditorLibrary::seedThemeCursors copies the
+#                          stock cursor art into <project>/themes/cursors/Y the
+#                          moment the theme is made, whether or not it is ever
+#                          saved -- and deleteTheme does not take it back, so a
+#                          suite could not tidy this itself even if it tried.
+#                          Suites working in a throwaway project lose it with the
+#                          folder; the ones that open PlanetX were leaving art
+#                          behind inside real content.
+#
+# Reading the source rather than watching the filesystem is deliberate: it can
+# only ever remove a name the test itself names, so a run cannot eat work that
+# happened to be in the tree at the time.
+function Remove-TestArtifacts([string]$test) {
+    $body = Get-Content (Join-Path $PSScriptRoot "$Dir\$test.cs") -Raw
+
+    # Only a spelled-out name can be read out of the source, so a test that hands
+    # either call a variable is one whose folder nobody deletes -- silently, and
+    # only noticed later as a stray directory. Say so instead.
+    foreach ($call in 'setProjectFolder', 'createTheme') {
+        $all = [regex]::Matches($body, [regex]::Escape($call) + '\(').Count
+        $literal = [regex]::Matches($body, [regex]::Escape($call) + '\("').Count
+        if ($all -gt $literal) {
+            Write-Host "[$test calls $call with a variable; that one cannot be swept] " -NoNewline -ForegroundColor Yellow
+        }
+    }
+
+    foreach ($m in [regex]::Matches($body, 'setProjectFolder\("([^"]+)"')) {
+        $folder = $m.Groups[1].Value
+        if ($folder -match '(SmokeProject|ShotProject)$' -or $folder -eq 'smokeThemeProject') {
+            Remove-Item (Join-Path $Root $folder) -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    foreach ($m in [regex]::Matches($body, 'createTheme\("([^"]+)"')) {
+        $theme = $m.Groups[1].Value
+        Remove-Item (Join-Path $Root "*\themes\cursors\$theme") -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 # The order matters for one pair only: bitmapPathWrite saves a profile that
 # bitmapPathRead boots fresh to read back.
 $Order = @(
     'profileEditor', 'profileForm', 'border', 'borderPane', 'standalone',
     'headerPane', 'colorPopup', 'themeApply', 'font', 'assetPicker',
+    'assetLibrary',
     'tooltipProfile', 'textClick', 'undo', 'clipboard', 'bitmapPathWrite',
     'bitmapPathRead', 'toybox', 'planetX'
 )
@@ -109,27 +168,29 @@ foreach ($test in $tests) {
 
     Write-Host ("  {0,-18} " -f $test) -NoNewline
 
+    $Log = Join-Path $LogDir "$test.log"
     Remove-Item $Log -ErrorAction SilentlyContinue
 
     # Start from a clean project folder. A test that finds one left by the last
     # run gets a cascade of "that name is already taken" and fails checks that
-    # have nothing to do with what it is testing. Only the throwaway folders a
-    # test builds for itself are removed -- PlanetX and toybox are real content
-    # that some of these suites open, and deleting those would be a disaster.
+    # have nothing to do with what it is testing. This is the guarantee the sweep
+    # at the foot of the file cannot make: a killed or crashed test never gets to
+    # tidy up, so the run that follows has to assume it did not.
     if ($test -notin $KeepProject) {
-        $body = Get-Content (Join-Path $PSScriptRoot "$Dir\$test.cs") -Raw
-        foreach ($m in [regex]::Matches($body, 'setProjectFolder\("([^"]+)"')) {
-            $folder = $m.Groups[1].Value
-            if ($folder -match '(SmokeProject|ShotProject)$' -or $folder -eq 'smokeThemeProject') {
-                Remove-Item (Join-Path $Root $folder) -Recurse -Force -ErrorAction SilentlyContinue
-            }
-        }
+        Remove-TestArtifacts $test
     }
     # The engine derives its working directory from the boot script's folder, so
     # the stub has to sit at the root. Only here is a plain "./" the repo root --
     # inside a test it means tests/smoke, which is what the prelude exists to fix.
+    #
+    # setLogFileName comes first and before the test's own setLogMode: the log
+    # otherwise defaults to console.log at the repo root, which every copy of the
+    # engine started from this folder shares. A run alongside a hand-started
+    # editor then either interleaves with it or -- in log mode 2, where the file
+    # is held open -- produces a log this script cannot read at all.
     $stub = @(
         '// Generated by tests/run.ps1. Not tracked; safe to delete.'
+        "setLogFileName(`"tests/logs/$test.log`");"
         'exec("./tests/lib/prelude.cs");'
         "exec(`"./$script`");"
     ) -join "`n"
@@ -195,7 +256,7 @@ foreach ($test in $tests) {
 
     # A killed process nearly always means a fatal assert put a modal box up, and
     # the reason is the last thing the engine managed to log. Show it, so nobody
-    # has to open console.log or watch for the dialog to find out what happened.
+    # has to open the log or watch for the dialog to find out what happened.
     if ($hung) {
         $last = $lines | Where-Object { $_.Trim() } | Select-Object -Last 1
         if ($last) {
@@ -207,6 +268,17 @@ foreach ($test in $tests) {
 }
 
 Remove-Item $Boot -ErrorAction SilentlyContinue
+
+# Leave the tree as it was found. Cleaning before each test keeps the run
+# correct; cleaning after keeps `git status` readable, which is the difference
+# between spotting a stray file and scrolling past thirty of them. Done here
+# rather than per test so the one handoff in the suite -- bitmapPathWrite saves
+# a profile that bitmapPathRead boots fresh to read -- still works.
+if (-not $Keep) {
+    foreach ($test in $tests) {
+        Remove-TestArtifacts $test
+    }
+}
 
 $bad = @($results | Where-Object { -not $_.Ok })
 

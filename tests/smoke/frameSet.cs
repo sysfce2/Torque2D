@@ -22,7 +22,7 @@
 // build; it is here because frame-set persistence had no coverage at all, and
 // this is the shape a broken one takes.
 //
-// Run: tests/run.ps1 frameSet ; grep FRAMESET in console.log.
+// Run: tests/run.ps1 frameSet ; grep FRAMESET in tests/logs/.
 //-----------------------------------------------------------------------------
 
 setLogMode(2);

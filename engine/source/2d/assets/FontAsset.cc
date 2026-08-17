@@ -162,23 +162,6 @@ void FontAsset::setFontFile( const char* pFontFile )
 
 //------------------------------------------------------------------------------
 
-void FontAsset::copyTo(SimObject* object)
-{
-    // Call to parent.
-    Parent::copyTo(object);
-
-    // Cast to asset.
-    FontAsset* pAsset = static_cast<FontAsset*>(object);
-
-    // Sanity!
-    AssertFatal(pAsset != NULL, "FontAsset::copyTo() - Object is not the correct type.");
-
-    // Copy state.
-    pAsset->setFontFile( getFontFile() );
-}
-
-//------------------------------------------------------------------------------
-
 void FontAsset::initializeAsset( void )
 {
     // Call parent.
@@ -209,6 +192,17 @@ void FontAsset::onAssetRefresh( void )
 
 void FontAsset::buildFontData( void )
 {
+   // Before the open, not after it.
+   //
+   // This runs again every time the font file changes, and what it used to clear
+   // was the page list and the textures -- never the glyphs or the kerning, which
+   // are maps that parseFont adds to. So pointing an asset at a second .fnt left
+   // the union of both fonts and a glyph count that only ever grew. And on a file
+   // that would not open it cleared nothing at all and returned, so a broken path
+   // kept the font it used to have and there was no way to tell from the outside
+   // that anything was wrong.
+   mBitmapFont.clear();
+
    FileStream fStream;
 
    if (!fStream.open(mFontFile, FileStream::Read))
@@ -217,13 +211,11 @@ void FontAsset::buildFontData( void )
       return;
    }
 
-   mBitmapFont.mPageName.clear();
    mBitmapFont.parseFont(fStream);
 
    fStream.close();
 
    //load the images
-   mBitmapFont.mTexture.clear();
    for (auto iter = mBitmapFont.mPageName.begin(); iter != mBitmapFont.mPageName.end(); iter++)
    {
       mBitmapFont.mTexture.push_back(mBitmapFont.LoadTexture(expandAssetFilePath(*iter)));

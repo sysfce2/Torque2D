@@ -1,5 +1,6 @@
 <AnimationAsset
     AssetName="bruteWalkAnim"
+    AssetCategory="badguy"
     Image="@asset=PlanetXGame:alienBrute"
-    animationFrames="0 1 2 3"
-    animationTime="0.6" />
+    AnimationFrames="0 1 2 3"
+    animationTime="0.600000024" />

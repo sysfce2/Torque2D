@@ -403,6 +403,20 @@ void renderStretchedImageAsset(RectI &bounds, U8 frame, GuiControlProfile *profi
 	}
 }
 
+// Renders one frame of a sheet, keeping the caller's bitmap modulation.
+void renderImageAssetFrame(const RectI &bounds, ImageAsset *imageAsset, U32 frame)
+{
+	if (imageAsset == NULL || !imageAsset->isAssetValid() || frame >= imageAsset->getFrameCount())
+	{
+		return;
+	}
+
+	const ImageAsset::FrameArea::PixelArea& pixelArea = imageAsset->getImageFrameArea(frame).mPixelArea;
+	RectI srcRect(pixelArea.mPixelOffset, Point2I(pixelArea.mPixelWidth, pixelArea.mPixelHeight));
+
+	dglDrawBitmapStretchSR(imageAsset->getImageTexture(), bounds, srcRect);
+}
+
 //Renders a color bullet at or one pixel smaller than maxSize.
 //It shrinks the given box until it is less than or equal to the 
 //maxSize in the x direction.

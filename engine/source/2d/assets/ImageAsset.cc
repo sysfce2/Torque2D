@@ -170,6 +170,7 @@ ImageAsset::ImageAsset() :  mImageFile(StringTable->EmptyString),
                             mForce16Bit(false),
                             mLocalFilterMode(FILTER_INVALID),
                             mExplicitMode(false),
+                            mExplicitModeStated(false),
                             mCellRowOrder(true),
                             mCellOffsetX(0),
                             mCellOffsetY(0),
@@ -270,53 +271,57 @@ void ImageAsset::setImageFile( const char* pImageFile )
 
 //------------------------------------------------------------------------------
 
-void ImageAsset::copyTo(SimObject* object)
+// The two things about an image that no persist field describes: the explicit
+// cells and the image layers. Both are written as TAML custom nodes, so the
+// generic field copy in AssetBase::copyTo cannot see either of them.
+//
+// Neither loop redraws. insertLayer only loads a layer's bitmap when the target
+// is owned, so a copy into an unowned scratch object touches no texture at all
+// -- which is what lets a snapshot be taken with no GL context. A copy onto a
+// live asset does want the composite rebuilt, so that happens once, at the end,
+// rather than once per layer.
+void ImageAsset::copyAssetStateTo( AssetBase* pTarget )
 {
-    // Call to parent.
-    Parent::copyTo(object);
-
     // Cast to asset.
-    ImageAsset* pAsset = static_cast<ImageAsset*>(object);
+    ImageAsset* pAsset = dynamic_cast<ImageAsset*>( pTarget );
 
     // Sanity!
-    AssertFatal(pAsset != NULL, "ImageAsset::copyTo() - Object is not the correct type.");
+    AssertFatal( pAsset != NULL, "ImageAsset::copyAssetStateTo() - Object is not the correct type." );
 
-    // Copy state.
-    pAsset->setImageFile( getImageFile() );
-    pAsset->setForce16Bit( getForce16Bit() );
-    pAsset->setFilterMode( getFilterMode() );
-    pAsset->setExplicitMode( getExplicitMode() );
-    pAsset->setCellRowOrder( getCellRowOrder() );
-    pAsset->setCellOffsetX( getCellCountX() );
-    pAsset->setCellOffsetY( getCellCountY() );
-    pAsset->setCellStrideX( getCellStrideX() );
-    pAsset->setCellStrideY( getCellStrideY() );
-    pAsset->setCellCountX( getCellCountX() );
-    pAsset->setCellCountY( getCellCountY() );
-    pAsset->setCellWidth( getCellWidth() );
-    pAsset->setCellHeight( getCellHeight() );
-
-    // Finish if not in explicit mode.
-    if ( !getExplicitMode() )
-        return;
-
-    // Fetch the explicit cell count.
-    const S32 explicitCellCount = getExplicitCellCount();
-
-    // Finish if no explicit cells exist.
-    if ( explicitCellCount == 0 )
-        return;
-
-    // Copy explicit cells.
+    // Copy the explicit cells. Note this happens whatever ExplicitMode says: the
+    // cells outlive being switched out of explicit mode, and a copy that dropped
+    // them would quietly destroy the user's work the moment they toggled it off.
     pAsset->clearExplicitCells();
+    const S32 explicitCellCount = getExplicitCellCount();
     for( S32 index = 0; index < explicitCellCount; ++index )
     {
         // Fetch the cell pixel area.
-        const FrameArea::PixelArea& pixelArea = getImageFrameArea( index ).mPixelArea;
+        const FrameArea::PixelArea& pixelArea = mExplicitFrames[index];
 
         // Add the explicit cell.
         pAsset->addExplicitCell( pixelArea.mPixelOffset.x, pixelArea.mPixelOffset.y, pixelArea.mPixelWidth, pixelArea.mPixelHeight, pixelArea.mRegionName );
     }
+
+    // Copy the image layers. Layer zero is the base image, made from ImageFile
+    // and BlendColor, so it is never copied -- insertLayer builds it.
+    while( pAsset->getLayerCount() > 0 )
+        pAsset->removeLayer( 1, false );
+
+    const U32 layerCount = mImageLayers.size();
+    for( U32 index = 1; index < layerCount; ++index )
+    {
+        const ImageLayer& layer = mImageLayers[index];
+        pAsset->addLayer( layer.mImageFile, layer.mPosition, layer.mBlendColor, false );
+    }
+
+    // The base layer is built by the first insertLayer above, from whatever
+    // BlendColor the field copy already wrote, so it only needs setting when
+    // there were layers to build it.
+    if ( layerCount > 0 )
+        pAsset->setBlendColor( getBlendColor(), false );
+
+    // One rebuild, and only for a live asset.
+    pAsset->completeLayerChange( pAsset->getOwned() );
 }
 
 //------------------------------------------------------------------------------
@@ -565,16 +570,27 @@ void ImageAsset::setCellHeight( const S32 cellheight )
 
 //------------------------------------------------------------------------------
 
+// Every one of these four range-checks its index rather than trusting the
+// caller. Vector<T>::at takes a U32 and asserts, which means it is unchecked in
+// a release build -- so at(-1) was a straight out-of-bounds read at index four
+// billion. Reachable the moment a name fails to resolve, since a failed lookup
+// is exactly what -1 means around here.
 Vector2 ImageAsset::getExplicitCellOffset(const S32 cellIndex)
 {
     if ( !getExplicitMode() )
     {
         // No, so warn.
         Con::warnf( "ImageAsset() - Cannot perform explicit cell operation when not in explicit mode." );
-        return NULL;
+        return Vector2::getZero();
     }
-    
-    ImageAsset::FrameArea::PixelArea thisCell = mExplicitFrames.at(cellIndex);
+
+    if ( cellIndex < 0 || cellIndex >= mExplicitFrames.size() )
+    {
+        Con::warnf( "ImageAsset::getExplicitCellOffset() - Invalid Cell Index of %d.", cellIndex );
+        return Vector2::getZero();
+    }
+
+    const ImageAsset::FrameArea::PixelArea& thisCell = mExplicitFrames[cellIndex];
     return(thisCell.mPixelOffset);
 
 }
@@ -589,8 +605,14 @@ S32 ImageAsset::getExplicitCellWidth(const S32 cellIndex)
         Con::warnf( "ImageAsset() - Cannot perform explicit cell operation when not in explicit mode." );
         return (0);
     }
-    
-    ImageAsset::FrameArea::PixelArea thisCell = mExplicitFrames.at(cellIndex);
+
+    if ( cellIndex < 0 || cellIndex >= mExplicitFrames.size() )
+    {
+        Con::warnf( "ImageAsset::getExplicitCellWidth() - Invalid Cell Index of %d.", cellIndex );
+        return (0);
+    }
+
+    const ImageAsset::FrameArea::PixelArea& thisCell = mExplicitFrames[cellIndex];
     return(thisCell.mPixelWidth);
 
 }
@@ -605,24 +627,34 @@ S32 ImageAsset::getExplicitCellHeight(const S32 cellIndex)
         Con::warnf( "ImageAsset() - Cannot perform explicit cell operation when not in explicit mode." );
         return (0);
     }
-    
-    ImageAsset::FrameArea::PixelArea thisCell = mExplicitFrames.at(cellIndex);
+
+    if ( cellIndex < 0 || cellIndex >= mExplicitFrames.size() )
+    {
+        Con::warnf( "ImageAsset::getExplicitCellHeight() - Invalid Cell Index of %d.", cellIndex );
+        return (0);
+    }
+
+    const ImageAsset::FrameArea::PixelArea& thisCell = mExplicitFrames[cellIndex];
     return(thisCell.mPixelHeight);
 
 }
 
 //------------------------------------------------------------------------------
 
+// No explicit-mode guard, unlike its three siblings above, and neither has
+// getExplicitCellIndex below.
+//
+// The cells outlive being switched out of explicit mode -- copyAssetStateTo
+// carries them across on purpose, and they are still written to the file -- and
+// asking what cell 3 is called is a question about that surviving data, not about
+// the mode. It has to be answerable while the mode is off, because that is
+// precisely when an animation's names are being translated back into indices.
 StringTableEntry ImageAsset::getExplicitCellName(const S32 cellIndex)
 {
-    if ( !getExplicitMode() )
-    {
-        // No, so warn.
-        Con::warnf( "ImageAsset() - Cannot perform explicit cell operation when not in explicit mode." );
-        return NULL;
-    }
-    
-    ImageAsset::FrameArea::PixelArea thisCell = mExplicitFrames.at(cellIndex);
+    if ( cellIndex < 0 || cellIndex >= mExplicitFrames.size() )
+        return StringTable->EmptyString;
+
+    const ImageAsset::FrameArea::PixelArea& thisCell = mExplicitFrames[cellIndex];
     return(thisCell.mRegionName);
 
 }
@@ -631,13 +663,10 @@ StringTableEntry ImageAsset::getExplicitCellName(const S32 cellIndex)
 
 S32 ImageAsset::getExplicitCellIndex(const char* regionName)
 {
-    if ( !getExplicitMode() )
-    {
-        // No, so warn.
-        Con::warnf( "ImageAsset() - Cannot perform explicit cell operation when not in explicit mode." );
+    // No name is not a name, and must not match the cells that have none.
+    if ( regionName == NULL || *regionName == 0 )
         return -1;
-    }
-    
+
     // Set up a frame counter
     S32 frameCounter = 0;
     
@@ -668,6 +697,13 @@ S32 ImageAsset::getExplicitCellIndex(const char* regionName)
 
 bool ImageAsset::containsNamedRegion(const char* regionName)
 {
+    // No name is not a name. Without this, an empty string would match the first
+    // frame of any ordinary cell-mode image -- every one of which now carries an
+    // empty region name -- and callers read a true here as "this image addresses
+    // its frames by name", which such an image does not.
+    if ( regionName == NULL || *regionName == 0 )
+        return false;
+
     for( typeFrameAreaVector::iterator frameItr = mFrames.begin(); frameItr != mFrames.end(); ++frameItr )
     {
         // Grab the current pixelArea
@@ -721,14 +757,14 @@ bool ImageAsset::addExplicitCell( const S32 cellOffsetX, const S32 cellOffsetY, 
     const S32 imageWidth = getImageWidth();
     const S32 imageHeight = getImageHeight();
     
-    // The region name cannot be empty
-    if ( regionName == StringTable->EmptyString )
-    {
-        Con::warnf( "ImageAsset::addExplicitCell() - Cell name of '%s' is invalid or was not set.", regionName );
-        U32 currentIndex = mExplicitFrames.size();
-        Con::warnf( "- Setting to the next index in the frame list: '%i'", currentIndex );
-        dSscanf(regionName, "%i", currentIndex);
-    }
+    // An empty name is allowed through, and named on the way out.
+    //
+    // calculateExplicitMode gives every unnamed cell a "Frame<N>" before anything
+    // can read one, and it is the only place that does -- it is the single funnel
+    // that a cell arriving from TAML passes through as well as one arriving from
+    // here. What stood in this spot instead was a "repair" that could not have
+    // worked: it read dSscanf FROM the empty name INTO a U32 passed by value,
+    // where a pointer was required, and never assigned a name to anything.
 
     // The Cell Offset X needs to be within the image.
     if ( cellOffsetX < 0 || cellOffsetX >= imageWidth )
@@ -791,13 +827,7 @@ bool ImageAsset::insertExplicitCell( const S32 cellIndex, const S32 cellOffsetX,
     // Fetch the explicit frame count.
     const S32 explicitFramelCount = mExplicitFrames.size();
     
-    // Region cannot be empty
-    if ( regionName == StringTable->EmptyString )
-    {
-        Con::warnf( "ImageAsset::insertExplicitCell() - Cell name of '%s' is invalid or was not set.", regionName );
-        Con::warnf( "- Setting to the next index in the frame list: '%i'", explicitFramelCount );
-        dSscanf(regionName, "%i", explicitFramelCount);
-    }
+    // An empty name is named by calculateExplicitMode; see addExplicitCell.
 
     // The cell index needs to be in range.
     if ( cellIndex < 0 )
@@ -878,13 +908,7 @@ bool ImageAsset::setExplicitCell( const S32 cellIndex, const S32 cellOffsetX, co
     // Fetch the explicit frame count.
     const S32 explicitFrameCount = mExplicitFrames.size();
     
-    // Region cannot be empty
-    if ( regionName == StringTable->EmptyString )
-    {
-        Con::warnf( "ImageAsset::setExplicitCell() - Cell name of '%s' is invalid or was not set.", regionName );
-        Con::warnf( "- Setting to the next index in the frame list: '%i'", explicitFrameCount );
-        dSscanf(regionName, "%i", explicitFrameCount);
-    }
+    // An empty name is named by calculateExplicitMode; see addExplicitCell.
 
     // The cell index needs to be in range.
     if ( cellIndex < 0 || cellIndex >= explicitFrameCount )
@@ -1006,8 +1030,14 @@ bool ImageAsset::removeExplicitCell( const char* regionName )
 
 ImageAsset::FrameArea& ImageAsset::getCellByName( const char* cellName)
 {
-    // If the cellName was empty
-    if (cellName == StringTable->EmptyString)
+    // If the cellName was empty.
+    //
+    // Tested by content, not by pointer. Comparing against StringTable->EmptyString
+    // only catches a string that has been interned, and the callers that matter --
+    // script argv and TAML field buffers -- never have been, so the guard let an
+    // empty name through to match the first frame of any image whose cells are
+    // unnamed.
+    if (cellName == NULL || *cellName == 0)
     {
         // Warn and return a bad frame
         Con::warnf( "ImageAsset::getCellByName() - Empty cell name was passed." );
@@ -1354,6 +1384,66 @@ void ImageAsset::calculateImplicitMode( void )
 
 //------------------------------------------------------------------------------
 
+StringTableEntry ImageAsset::nextAvailableCellName( const Vector<StringTableEntry>& used, const S32 seedIndex )
+{
+    char nameBuffer[32];
+
+    // Seeded at the cell's own index rather than at zero, so an image whose cells
+    // have never been named comes out Frame0, Frame1, Frame2 -- matching both the
+    // index a person reads off the frame grid and what the image editor's Add
+    // Cell button has always produced.
+    for ( S32 candidate = seedIndex; ; ++candidate )
+    {
+        dSprintf( nameBuffer, sizeof(nameBuffer), "Frame%d", candidate );
+
+        StringTableEntry name = StringTable->insert( nameBuffer );
+
+        bool taken = false;
+        for ( Vector<StringTableEntry>::const_iterator nameItr = used.begin(); nameItr != used.end(); ++nameItr )
+        {
+            if ( *nameItr == name )
+            {
+                taken = true;
+                break;
+            }
+        }
+
+        if ( !taken )
+            return name;
+    }
+}
+
+//------------------------------------------------------------------------------
+
+void ImageAsset::assignMissingExplicitCellNames( void )
+{
+    // What is spoken for. Collected first and added to as we go, so two unnamed
+    // cells cannot be handed the same name as each other.
+    Vector<StringTableEntry> usedNames;
+    for( typeExplicitFrameAreaVector::iterator frameItr = mExplicitFrames.begin(); frameItr != mExplicitFrames.end(); ++frameItr )
+    {
+        if ( frameItr->mRegionName != StringTable->EmptyString )
+            usedNames.push_back( frameItr->mRegionName );
+    }
+
+    S32 cellIndex = 0;
+    for( typeExplicitFrameAreaVector::iterator frameItr = mExplicitFrames.begin(); frameItr != mExplicitFrames.end(); ++frameItr, ++cellIndex )
+    {
+        // A cell that already has a name keeps it, always. Renaming one silently
+        // would break every animation that addresses it -- which is the whole
+        // failure this naming exists to prevent.
+        if ( frameItr->mRegionName != StringTable->EmptyString )
+            continue;
+
+        StringTableEntry name = nextAvailableCellName( usedNames, cellIndex );
+
+        frameItr->mRegionName = name;
+        usedNames.push_back( name );
+    }
+}
+
+//------------------------------------------------------------------------------
+
 void ImageAsset::calculateExplicitMode( void )
 {
     // Debug Profiling.
@@ -1376,11 +1466,20 @@ void ImageAsset::calculateExplicitMode( void )
     // Clear default frame.
     mFrames.clear();
 
+    // Before anything reads a name off one of them.
+    assignMissingExplicitCellNames();
+
     // Are any explicit frames set.
     if ( mExplicitFrames.size() == 0 )
     {
         // No, so set full-frame as default.
-        FrameArea frameArea( 0, 0, imageWidth, imageHeight, texelWidthScale, texelHeightScale );
+        //
+        // Named, like every other explicit frame. An animation addresses an
+        // explicit image by name, so "explicit mode means every frame has a name"
+        // has to hold for this synthesized one too -- otherwise a cell-less
+        // explicit image is the one shape of image that can be animated by
+        // neither name nor index.
+        FrameArea frameArea( 0, 0, imageWidth, imageHeight, texelWidthScale, texelHeightScale, StringTable->insert( "Frame0" ) );
         mFrames.push_back( frameArea );
 
         return;
@@ -1686,7 +1785,14 @@ void ImageAsset::onTamlCustomWrite( TamlCustomNodes& customNodes )
     // Call parent.
     Parent::onTamlCustomWrite( customNodes );
 
-    if (mExplicitMode && mExplicitFrames.size() > 0)
+    // Whenever there are cells, and NOT only while explicit mode is on.
+    //
+    // The cells are authored data that outlives the mode -- copyAssetStateTo says
+    // so in as many words, and turning the mode back on is meant to bring them
+    // back. Gated on the mode, saving an image with explicit mode switched off
+    // deleted every cell in the file, which silently and permanently unresolved
+    // the names of every animation built on it.
+    if (mExplicitFrames.size() > 0)
     {
         // Add cell custom node.
         TamlCustomNode* pCustomCellNodes = customNodes.addNode( cellCustomNodeCellsName );
@@ -1749,9 +1855,16 @@ void ImageAsset::loadTamlExplicitCells(const TamlCustomNodes& customNodes)
     // Continue if we have explicit cells.
     if ( pCustomCellNodes != NULL )
     {
-        // Set explicit mode.
-        mExplicitMode = true;
-        
+        // Cells imply the mode, but only for a file that did not say.
+        //
+        // Every image written before the cells outlived the mode has a Cells node
+        // and no ExplicitMode attribute, and turning the mode on for those is the
+        // only thing that keeps them loading. A file that states the mode is
+        // believed either way -- the attribute is read before this runs.
+        if ( !mExplicitModeStated )
+            mExplicitMode = true;
+
+
         // Fetch children cell nodes.
         const TamlCustomNodeVector& cellNodes = pCustomCellNodes->getChildren();
         
@@ -1822,18 +1935,9 @@ void ImageAsset::loadTamlExplicitCells(const TamlCustomNodes& customNodes)
                 }
             }
             
-            // Does the region have a name
-            if ( regionName == StringTable->EmptyString )
-            {
-                // No, so warn and set it to the next index
-                Con::warnf( "ImageAsset::onTamlCustomRead() - Cell name of '%s' is invalid or was not set.", regionName );
-                
-                U32 currentIndex = mExplicitFrames.size();
-                Con::warnf( "- Setting to the next index in the frame list: '%i'", currentIndex );
-                
-                dSscanf(regionName, "%i", currentIndex);
-            }
-            
+            // A cell with no name in the file is named by calculateExplicitMode,
+            // which runs on the way out of the load; see addExplicitCell.
+
             // Is cell offset valid?
             if ( cellOffset.x < 0 || cellOffset.y < 0 )
             {

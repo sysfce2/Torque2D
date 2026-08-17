@@ -134,15 +134,6 @@ protected:
 	virtual void renderItemGutter(const RectI& itemRect, RectI& contentRect, TreeItem* treeItem, GuiControlState currentState) { }
 	virtual void renderItemIcon(RectI& contentRect, TreeItem* treeItem, GuiControlState currentState);
 
-	/// One frame of a sheet, drawn with whatever bitmap modulation is current.
-	///
-	/// Deliberately not renderStretchedImageAsset: that one reads the asset off
-	/// the PROFILE, and its first act is dglClearBitmapModulation - which here
-	/// would throw away the row's font color. The sheets are white masks, the
-	/// modulation is already set for the row's state, so an icon inherits the
-	/// row's normal / highlight / selected / disabled ink for nothing.
-	void drawIconFrame(const RectI& dst, ImageAsset* sheet, U32 frame);
-
 	/// Which frame of the sheet a row should wear, asked of script once while the
 	/// tree is being built. -1 - the answer when no sheet is set, no handler
 	/// exists, or the handler declines - means no icon and no width spent.

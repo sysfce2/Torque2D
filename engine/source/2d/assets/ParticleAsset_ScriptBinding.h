@@ -289,11 +289,16 @@ ConsoleMethodWithDocs(ParticleAsset, getMaxTime, ConsoleFloat, 2, 2, ())
 
 //-----------------------------------------------------------------------------
 
-/*! Get the fields' value at the specified time.
+/*! Get the selected graph field's value at the specified time.
+
+    Named getFieldValueAtTime rather than getFieldValue because SimObject already
+    has a getFieldValue(fieldName), and this SHADOWED it -- see the matching note
+    on ParticleAssetEmitter. Reading Lifetime or LifeMode off a particle asset by
+    name answered with a sample of a curve.
     @param time The time to sample the field value at.
     @return The fields' value at the specified time or always 0.0 if no field is selected.
 */
-ConsoleMethodWithDocs(ParticleAsset, getFieldValue, ConsoleFloat, 3, 3, (time))
+ConsoleMethodWithDocs(ParticleAsset, getFieldValueAtTime, ConsoleFloat, 3, 3, (time))
 {
    return object->getParticleFields().getFieldValue( dAtof(argv[2]) );
 }

@@ -20,9 +20,31 @@
 // IN THE SOFTWARE.
 //-----------------------------------------------------------------------------
 
+// The room a dialog's content actually gets: the window's extent less its
+// border, and less the 30 pixel title bar above it.
+//
+// Worth having as a function because getting it wrong is invisible until the
+// content is tall enough to reach the bottom -- a button positioned from the
+// dialog's own height rather than from this lands below the fold, reachable only
+// by scrolling, which is how both the Frame Range and Duplicate dialogs shipped.
+function EditorDialog::contentWidth(%this)
+{
+	return getWord(%this.dialogSize, 0) - 8;
+}
+
+function EditorDialog::contentHeight(%this)
+{
+	return getWord(%this.dialogSize, 1) - 34;
+}
+
 function EditorDialog::onAdd(%this)
 {
 	ThemeManager.setProfile(%this, "overlayProfile");
+
+	// Resizable unless the dialog says otherwise. A form whose contents are laid
+	// out at fixed positions gains nothing from being dragged bigger and loses
+	// something from being dragged smaller, so those set dialogResizable = false.
+	%resizable = (%this.dialogResizable $= "") ? true : %this.dialogResizable;
 
 	%this.window = new GuiWindowCtrl()
 	{
@@ -36,6 +58,8 @@ function EditorDialog::onAdd(%this)
 		canMove = true;
 		CanMinimize = false;
 		CanMaximize = false;
+		resizeWidth = %resizable;
+		resizeHeight = %resizable;
 		titleHeight = 30;
 		dialog = %this;
 	};

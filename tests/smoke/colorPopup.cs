@@ -4,7 +4,7 @@
 // that matters most is that a color chosen from a swatch survives a rendered
 // frame unchanged -- the pickers re-read their color out of the framebuffer, and
 // used to overwrite whatever exact value the popup had been given.
-// Run: tests/run.ps1 colorPopup  ; grep CPSMOKE in console.log.
+// Run: tests/run.ps1 colorPopup  ; grep CPSMOKE in tests/logs/.
 
 setLogMode(1);
 $Scripts::ignoreDSOs = true;

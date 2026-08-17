@@ -81,6 +81,14 @@ namespace Audio
 bool OpenALInit();
 void OpenALShutdown();
 
+/// Whether there is a live OpenAL context.
+///
+/// OpenALInit begins by shutting the driver down, so calling it a second time is
+/// destructive: it drops every playing source and resets the channel volumes.
+/// Anything that wants to start the driver only if nobody else has -- an editor,
+/// say -- has to be able to ask first.
+bool OpenALIsInitialized();
+
 bool OpenALDLLInit();
 void OpenALDLLShutdown();
 

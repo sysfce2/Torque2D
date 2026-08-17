@@ -202,6 +202,10 @@ set(TORQUE_ENGINE_SOURCES
     ${TORQUE_SRC}/gui/editor/guiEditorCursorCtrl.cc
     ${TORQUE_SRC}/gui/editor/guiDebugger.cc
     ${TORQUE_SRC}/gui/editor/guiEditCtrl.cc
+    ${TORQUE_SRC}/gui/editor/guiEditFramePaletteCtrl.cc
+    ${TORQUE_SRC}/gui/editor/guiEditFrameStripCtrl.cc
+    ${TORQUE_SRC}/gui/editor/guiEditFrameTimelineCtrl.cc
+    ${TORQUE_SRC}/gui/editor/guiEditParticleColorGraph.cc
     ${TORQUE_SRC}/gui/editor/guiEditorExplorerTree.cc
     ${TORQUE_SRC}/gui/editor/guiGraphCtrl.cc
     ${TORQUE_SRC}/gui/editor/guiInspector.cc
@@ -339,13 +343,20 @@ set(TORQUE_ENGINE_SOURCES
     # ---- testing ----
     ${TORQUE_SRC}/testing/unitTesting.cc
     # ---- testing/tests ----
+    ${TORQUE_SRC}/testing/tests/animationFrameConversionTests.cc
+    ${TORQUE_SRC}/testing/tests/assetStateCopyTests.cc
+    ${TORQUE_SRC}/testing/tests/bitmapFontParseTests.cc
     ${TORQUE_SRC}/testing/tests/guiControlReparentTests.cc
     ${TORQUE_SRC}/testing/tests/guiCursorHotSpotTests.cc
+    ${TORQUE_SRC}/testing/tests/guiFrameStripLayoutTests.cc
     ${TORQUE_SRC}/testing/tests/guiHitTestTests.cc
+    ${TORQUE_SRC}/testing/tests/guiParticleColorGraphTests.cc
     ${TORQUE_SRC}/testing/tests/guiProfileThemeTests.cc
     ${TORQUE_SRC}/testing/tests/guiScrollLayoutTests.cc
     ${TORQUE_SRC}/testing/tests/guiTextEditTests.cc
+    ${TORQUE_SRC}/testing/tests/guiTextWrapTests.cc
     ${TORQUE_SRC}/testing/tests/guiTreeRowLayoutTests.cc
+    ${TORQUE_SRC}/testing/tests/imageAssetCellNameTests.cc
     ${TORQUE_SRC}/testing/tests/namespaceLinkTests.cc
     ${TORQUE_SRC}/testing/tests/platformFileIoTests.cc
     ${TORQUE_SRC}/testing/tests/platformMemoryTests.cc

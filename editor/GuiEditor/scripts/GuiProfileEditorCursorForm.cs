@@ -36,6 +36,11 @@ function GuiProfileEditorCursorForm::onAdd(%this)
 {
 	ThemeManager.setProfile(%this, "emptyProfile");
 	%this.rowWidth = 200;
+
+	// Every color row this form builds gets the popup that offers the selected
+	// theme's six colors. EditorFieldRow lives in EditorCore and cannot name a
+	// Gui Editor class, so the pane that wants one says so -- see its header.
+	%this.swatchClass = "GuiProfileEditorColorPopup";
 }
 
 function GuiProfileEditorCursorForm::build(%this)
@@ -289,7 +294,7 @@ function GuiProfileEditorCursorForm::addFieldRow(%this, %container, %field, %lab
 {
 	%row = new GuiControl()
 	{
-		class = "GuiProfileEditorFieldRow";
+		class = "EditorFieldRow";
 		Position = "0 0";
 		fieldName = %field;
 		labelText = %label;
@@ -416,7 +421,7 @@ function GuiProfileEditorCursorForm::currentTheme(%this)
 // Edits.
 //-----------------------------------------------------------------------------
 
-function GuiProfileEditorCursorForm::onProfileRowCommit(%this, %row)
+function GuiProfileEditorCursorForm::onFieldRowCommit(%this, %row)
 {
 	if(%this.populating || !isObject(%this.target))
 	{
@@ -436,7 +441,7 @@ function GuiProfileEditorCursorForm::onProfileRowCommit(%this, %row)
 	%this.afterCommit();
 }
 
-function GuiProfileEditorCursorForm::onProfileRowReset(%this, %row)
+function GuiProfileEditorCursorForm::onFieldRowReset(%this, %row)
 {
 	%theme = %this.currentTheme();
 	if(!isObject(%theme) || !isObject(%this.target))

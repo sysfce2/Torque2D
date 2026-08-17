@@ -59,6 +59,11 @@ GuiParticleGraphInspector::GuiParticleGraphInspector()
 	mDirty = true;
 	mPointList = Vector<GraphPoint>();
 
+	// RectI and Point2I leave their members alone, and onTouchDown reads mGridRect.
+	// A control can be clicked after inspect() but before its first render.
+	mGridRect = RectI(0, 0, 0, 0);
+	mCalculationOffset = Point2I(0, 0);
+
 	setField("profile", "GuiDefaultProfile");
 }
 
@@ -86,23 +91,32 @@ void GuiParticleGraphInspector::setDisplayField(const char* fieldName)
 
 void GuiParticleGraphInspector::setDisplayField(const char* fieldName, U16 index)
 {
+	// The same field on a different emitter is a different curve, and a point index
+	// into the old one addresses whatever happens to sit at that slot in the new.
+	if (mEmitterIndex != (U32)index)
+	{
+		mSelectedIndex = -1;
+	}
+
 	mEmitterIndex = index;
 	setDisplayField(fieldName);
 }
 
 void GuiParticleGraphInspector::setDisplayArea(StringTableEntry minX, StringTableEntry minY, StringTableEntry maxX, StringTableEntry maxY)
 {
-	mMinXLabel = minX;
+	char buffer[32];
+
 	mMinX = dAtof(minX);
+	mMinXLabel = StringTable->insert(formatAxisLabel(mMinX, buffer, sizeof(buffer)));
 
-	mMinYLabel = minY;
 	mMinY = dAtof(minY);
+	mMinYLabel = StringTable->insert(formatAxisLabel(mMinY, buffer, sizeof(buffer)));
 
-	mMaxXLabel = maxX;
 	mMaxX = dAtof(maxX);
+	mMaxXLabel = StringTable->insert(formatAxisLabel(mMaxX, buffer, sizeof(buffer)));
 
-	mMaxYLabel = maxY;
 	mMaxY = dAtof(maxY);
+	mMaxYLabel = StringTable->insert(formatAxisLabel(mMaxY, buffer, sizeof(buffer)));
 
 	mDirty = true;
 }
@@ -113,26 +127,102 @@ void GuiParticleGraphInspector::setDisplayLabels(const char* labelX, const char*
 	mLabelY = StringTable->insert(labelY, true);
 }
 
-ParticleAssetField* GuiParticleGraphInspector::getTargetField()
+ParticleAssetField* GuiParticleGraphInspector::findField(StringTableEntry fieldName)
 {
-	ParticleAssetFieldCollection& collection = mTargetAsset->getParticleFields();
-	ParticleAssetField* field = collection.findField(mTargetField);
-
-	if (field == NULL)
+	if (mTargetAsset == NULL || fieldName == NULL || fieldName == StringTable->EmptyString)
 	{
-		if (mEmitterIndex >= mTargetAsset->getEmitterCount())
-		{
-			mEmitterIndex = mTargetAsset->getEmitterCount() - 1;
-		}
-
-		ParticleAssetEmitter* emitter = mTargetAsset->getEmitter(mEmitterIndex);
-		ParticleAssetFieldCollection& emitterCollection = emitter->getParticleFields();
-		field = emitterCollection.findField(mTargetField);
+		return NULL;
 	}
 
-	AssertFatal(field != NULL, "GuiParticleGraphInspector::getTargetField() - Unable to find the requested field.");
+	ParticleAssetFieldCollection& collection = mTargetAsset->getParticleFields();
+	ParticleAssetField* field = collection.findField(fieldName);
+	if (field != NULL)
+	{
+		return field;
+	}
+
+	const U32 emitterCount = (U32)mTargetAsset->getEmitterCount();
+	if (emitterCount == 0)
+	{
+		// An asset with no emitters yet. Subtracting one from an unsigned zero is
+		// how this used to walk off the end.
+		return NULL;
+	}
+
+	// Clamp before asking rather than after: getEmitter warns on a bad index, and a
+	// bad index here is a per-frame condition, so asking politely first is the
+	// difference between a quiet editor and sixty warnings a second in the log.
+	if (mEmitterIndex >= emitterCount)
+	{
+		mEmitterIndex = emitterCount - 1;
+	}
+
+	ParticleAssetEmitter* emitter = mTargetAsset->getEmitter(mEmitterIndex);
+	if (emitter == NULL)
+	{
+		return NULL;
+	}
+
+	return emitter->getParticleFields().findField(fieldName);
+}
+
+ParticleAssetField* GuiParticleGraphInspector::getTargetField()
+{
+	ParticleAssetField* field = findField(mTargetField);
+
+	// A warning, not a fatal. A half-built asset with no emitters reaches here as a
+	// matter of course, and in a debug build an AssertFatal is a modal box -- which
+	// arrives as a hang rather than as a failure.
+	AssertWarn(field != NULL, "GuiParticleGraphInspector::getTargetField() - Unable to find the requested field.");
 
 	return field;
+}
+
+bool GuiParticleGraphInspector::repairDataKeys(ParticleAssetField* field)
+{
+	if (field == NULL)
+	{
+		return false;
+	}
+
+	bool changed = false;
+	F32 time = 0.0f;
+	U32 count = field->getDataKeyCount();
+
+	for (U32 i = 0; i < count; i++)
+	{
+		ParticleAssetField::DataKey key = field->getDataKey(i);
+
+		// Force the first key to always be at time zero.
+		//
+		// Only when it sits after zero: addDataKey inserts in time order and refuses
+		// nothing below mMaxTime, so with a key at a negative time the new one lands
+		// at index 1 and the removal below would delete what was just added.
+		if (i == 0 && key.mTime > 0.0f)
+		{
+			field->addDataKey(0.0f, key.mValue);
+			field->removeDataKey(1);
+			key = field->getDataKey(0);
+			count = field->getDataKeyCount();
+			changed = true;
+		}
+
+		// Remove the point if it has a bad time. Do not advance i: the key that
+		// followed the one just removed now sits at this index and has not been
+		// looked at.
+		if (i > 0 && key.mTime <= time)
+		{
+			field->removeDataKey(i);
+			count--;
+			i--;
+			changed = true;
+			continue;
+		}
+
+		time = key.mTime;
+	}
+
+	return changed;
 }
 
 void GuiParticleGraphInspector::resize(const Point2I &newPosition, const Point2I &newExtent)
@@ -164,6 +254,9 @@ void GuiParticleGraphInspector::onTouchDown(const GuiEvent &event)
 	{
 		//remove the point
 		ParticleAssetField* field = getTargetField();
+		if (!field)
+			return;
+
 		field->removeDataKey(mSelectedIndex);
 
 		mDirty = true;
@@ -172,6 +265,9 @@ void GuiParticleGraphInspector::onTouchDown(const GuiEvent &event)
 	{
 		//Time to create a new point!
 		ParticleAssetField* field = getTargetField();
+		if (!field)
+			return;
+
 		F32 time = getGraphTime(event.mousePoint.x);
 		F32 value = getGraphValue(event.mousePoint.y);
 		mSelectedIndex = field->addDataKey(time, value);
@@ -191,6 +287,9 @@ void GuiParticleGraphInspector::onTouchDragged(const GuiEvent &event)
 	{
 		//Time to move the first point!
 		ParticleAssetField* field = getTargetField();
+		if (!field)
+			return;
+
 		F32 value = getGraphValue(point.y);
 		field->setDataKeyValue(mSelectedIndex, value);
 
@@ -200,6 +299,9 @@ void GuiParticleGraphInspector::onTouchDragged(const GuiEvent &event)
 	{
 		//Time to move a point!
 		ParticleAssetField* field = getTargetField();
+		if (!field)
+			return;
+
 		F32 time = getGraphTime(point.x);
 		F32 value = getGraphValue(point.y);
 		if (time == field->getDataKeyTime(mSelectedIndex) || field->doesKeyExist(time))
@@ -218,14 +320,14 @@ void GuiParticleGraphInspector::onTouchDragged(const GuiEvent &event)
 	}
 }
 
-U32 GuiParticleGraphInspector::findHitGraphPoint(const Point2I &point)
+S32 GuiParticleGraphInspector::findHitGraphPoint(const Point2I &point)
 {
-	for (U32 i = 0; i < mPointList.size(); i++)
+	for (S32 i = 0; i < mPointList.size(); i++)
 	{
-		F32 x = mPointList[i].mPoint.x - point.x;
-		F32 y = mPointList[i].mPoint.y - point.y;
+		F32 x = (F32)(mPointList[i].mPoint.x - point.x);
+		F32 y = (F32)(mPointList[i].mPoint.y - point.y);
 		F32 dist = mSqrt((x * x) + (y * y));
-		if (dist <= mRadius)
+		if (dist <= smPointRadius)
 		{
 			return i;
 		}
@@ -249,6 +351,70 @@ F32 GuiParticleGraphInspector::getGraphTime(const F32 x)
 	return mMinX + ((mMaxX - mMinX) * ratio);
 }
 
+const char* GuiParticleGraphInspector::formatAxisLabel(const F32 value, char* buffer, const U32 bufferSize)
+{
+	if (buffer == NULL || bufferSize == 0)
+	{
+		return "";
+	}
+
+	dSprintf(buffer, bufferSize, "%g", value);
+
+	return buffer;
+}
+
+S32 GuiParticleGraphInspector::getUnderPlotReserve(const S32 bandHeight)
+{
+	return (bandHeight > 0) ? (bandHeight + (2 * smUnderPlotGap)) : 0;
+}
+
+RectI GuiParticleGraphInspector::snapRectToGrid(const RectI &rect, const S32 divisor)
+{
+	if (divisor < 1 || !rect.isValidRect())
+	{
+		return rect;
+	}
+
+	const S32 modX = rect.len_x() % divisor;
+	const S32 modY = rect.len_y() % divisor;
+
+	return RectI(rect.point.x + (modX / 2), rect.point.y + (modY / 2),
+		rect.extent.x - modX, rect.extent.y - modY);
+}
+
+RectI GuiParticleGraphInspector::calculatePlotRect(const RectI &contentRect)
+{
+	GFont *font = mProfile->getFont(mFontSizeAdjust);
+	const S32 fontHeight = (S32)font->getHeight();
+
+	//Make room for the graph labels, and for a band if a subclass asked for one
+	RectI rect = contentRect;
+	rect.extent.y -= (fontHeight + getUnderPlotReserve(getUnderPlotBandHeight()));
+
+	const S32 xReduction = getMax(getMax(fontHeight, (S32)font->getStrWidth(mMaxYLabel)), (S32)font->getStrWidth(mMinYLabel));
+	rect.extent.x -= xReduction;
+	rect.point.x += xReduction;
+
+	return snapRectToGrid(rect, 10);
+}
+
+RectI GuiParticleGraphInspector::getUnderPlotRect(const RectI &plotRect)
+{
+	const S32 bandHeight = getUnderPlotBandHeight();
+	if (bandHeight <= 0 || !plotRect.isValidRect())
+	{
+		return RectI(0, 0, 0, 0);
+	}
+
+	return RectI(plotRect.point.x, plotRect.point.y + plotRect.extent.y + smUnderPlotGap,
+		plotRect.extent.x, bandHeight);
+}
+
+S32 GuiParticleGraphInspector::getXLabelTop(const RectI &plotRect)
+{
+	return plotRect.point.y + plotRect.extent.y + getUnderPlotReserve(getUnderPlotBandHeight()) + 2;
+}
+
 void GuiParticleGraphInspector::onRender(Point2I offset, const RectI &updateRect)
 {
 	RectI ctrlRect = applyMargins(offset, mBounds.extent, NormalState, mProfile);
@@ -261,34 +427,32 @@ void GuiParticleGraphInspector::onRender(Point2I offset, const RectI &updateRect
 	RectI fillRect = applyBorders(ctrlRect.point, ctrlRect.extent, NormalState, mProfile);
 	RectI contentRect = applyPadding(fillRect.point, fillRect.extent, NormalState, mProfile);
 
-	//Make room for the graph labels
-	GFont *font = mProfile->getFont(mFontSizeAdjust);
-	U32 fontHeight = font->getHeight();
-	contentRect.extent.y -= fontHeight;
-	U8 xReduction = getMax(getMax(fontHeight, font->getStrWidth(mMaxYLabel)), font->getStrWidth(mMinYLabel));
-	contentRect.extent.x -= xReduction;
-	contentRect.point.x += xReduction;
-
-	//reduce the contentRect to be divisible by 10
-	U32 modX = contentRect.len_x() % 10;
-	U32 modY = contentRect.len_y() % 10;
-	contentRect.extent.set(contentRect.len_x() - modX, contentRect.len_y() - modY);
-	contentRect.point.set(contentRect.point.x + mFloor(modX / 2), contentRect.point.y + mFloor(modY / 2));
+	RectI plotRect = calculatePlotRect(contentRect);
 
 	//Draw the labels
 	ColorI gridColor = mProfile->getFillColor(HighlightState);
-	renderLabels(contentRect, gridColor);
+	renderLabels(plotRect, gridColor);
 
-	if (contentRect.isValidRect())
+	if (plotRect.isValidRect())
 	{
-		renderGrid(contentRect, gridColor);
+		renderGrid(plotRect, gridColor);
 
+		// Before the underlay rather than after it: a subclass caching anything of
+		// its own has to see the same dirty flag renderPoints is about to clear.
 		if (mCalculationOffset != offset)
 		{
 			mDirty = true;
 		}
-		renderPoints(contentRect, mProfile->getFillColor(SelectedState));
+
+		renderUnderlay(plotRect);
+		renderPoints(plotRect, getCurveColor());
 		mCalculationOffset = offset;
+
+		const RectI bandRect = getUnderPlotRect(plotRect);
+		if (bandRect.isValidRect())
+		{
+			renderUnderPlot(bandRect);
+		}
 	}
 }
 
@@ -302,19 +466,23 @@ void GuiParticleGraphInspector::renderLabels(const RectI &contentRect, const Col
 	//Set the color used for the grid. This will also be used for the text.
 	dglSetBitmapModulation(labelColor);
 
+	// The x row sits below anything a subclass reserved a band for, not directly
+	// under the plot -- otherwise the labels draw over the band.
+	const S32 xLabelTop = getXLabelTop(contentRect);
+
 	//x label
 	textWidth = font->getStrWidth(mLabelX);
-	textPoint = Point2I(contentRect.point.x + (contentRect.extent.x / 2) - (textWidth / 2), contentRect.point.y + contentRect.extent.y + 2);
+	textPoint = Point2I(contentRect.point.x + (contentRect.extent.x / 2) - (textWidth / 2), xLabelTop);
 	dglDrawText(font, textPoint, mLabelX, NULL, 0, 0);
 
 	//x min label
 	textWidth = font->getStrWidth(mMinXLabel);
-	textPoint = Point2I(contentRect.point.x + 1, contentRect.point.y + contentRect.extent.y + 2);
+	textPoint = Point2I(contentRect.point.x + 1, xLabelTop);
 	dglDrawText(font, textPoint, mMinXLabel, NULL, 0, 0);
 
 	//x max label
 	textWidth = font->getStrWidth(mMaxXLabel);
-	textPoint = Point2I((contentRect.point.x + contentRect.extent.x - 1) - textWidth, contentRect.point.y + contentRect.extent.y + 2);
+	textPoint = Point2I((contentRect.point.x + contentRect.extent.x - 1) - textWidth, xLabelTop);
 	dglDrawText(font, textPoint, mMaxXLabel, NULL, 0, 0);
 
 	//y label
@@ -379,34 +547,25 @@ void GuiParticleGraphInspector::calculatePoints(const RectI &contentRect)
 	mGridRect = RectI(contentRect);
 
 	mPointList.clear();
+
+	// Cleared here rather than at the end, so an early return still counts as
+	// having recalculated and the next frame does not try again.
+	mDirty = false;
+
 	ParticleAssetField* field = getTargetField();
-	
-	F32 time = 0;
-	U32 count = field->getDataKeyCount();
-	for (U32 i = 0; i < count; i++)
+	if (field == NULL)
 	{
-		ParticleAssetField::DataKey key = field->getDataKey(i);
+		return;
+	}
 
-		//force the first key to always be at time zero
-		if (i == 0 && key.mTime != 0)
-		{
-			field->addDataKey(0, key.mValue);
-			field->removeDataKey(1);
-			key = field->getDataKey(0);
-			count = field->getDataKeyCount();
-		}
-
-		//Remove the point if it has a bad time
-		if (i > 0 && key.mTime <= time)
-		{
-			field->removeDataKey(i);
-			count--;
-			continue;
-		}
-		time = key.mTime;
+	if (repairDataKeys(field))
+	{
+		// A removed key makes the selection an index into something else.
+		mSelectedIndex = -1;
 	}
 
 	Point2I p;
+	const U32 count = field->getDataKeyCount();
 	for (U32 i = 0; i < count; i++)
 	{
 		ParticleAssetField::DataKey key = field->getDataKey(i);
@@ -434,6 +593,14 @@ void GuiParticleGraphInspector::renderPoints(const RectI &contentRect, const Col
 		if (mDirty)
 		{
 			calculatePoints(contentRect);
+		}
+
+		// The tail below indexes count - 1, and renderVariation walks size() - 1.
+		// Both are unsigned, and calculatePoints leaves the list empty when the
+		// field it wanted has gone.
+		if (mPointList.size() == 0)
+		{
+			return;
 		}
 
 		//get the cursor position
@@ -566,25 +733,25 @@ void GuiParticleGraphInspector::renderDot(const RectI &contentRect, const Point2
 {
 	if(point.x >= contentRect.point.x && point.x <= contentRect.point.x + contentRect.extent.x && point.y >= contentRect.point.y && point.y <= contentRect.point.y + contentRect.extent.y)
 	{
-		F32 x = cursorPt.x - point.x;
-		F32 y = cursorPt.y - point.y;
+		F32 x = (F32)(cursorPt.x - point.x);
+		F32 y = (F32)(cursorPt.y - point.y);
 		F32 dist = mSqrt((x * x) + (y * y));
 		ColorI color;
 		if (isSelected)
 		{
 			color = mProfile->getFontColor(SelectedState);
 		}
-		else if (dist <= mRadius)
+		else if (dist <= smPointRadius)
 		{
 			color = mProfile->getFontColor(HighlightState);
-		} 
+		}
 		else
 		{
 			color = mProfile->getFontColor(NormalState);
 		}
 
-		dglDrawCircleFill(point, mRadius, ColorI(0, 0, 0, 100));
-		dglDrawCircleFill(point, mRadius - 2, color);
+		dglDrawCircleFill(point, smPointRadius, ColorI(0, 0, 0, 100));
+		dglDrawCircleFill(point, smPointRadius - 2, color);
 	}
 }
 

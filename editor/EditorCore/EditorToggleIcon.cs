@@ -34,7 +34,7 @@
 // inline. Clicks arrive at owner.onToggleIconChanged(%this).
 //-----------------------------------------------------------------------------
 
-function GuiEditorToggleIcon::onAdd(%this)
+function EditorToggleIcon::onAdd(%this)
 {
 	// Field assignment, not setBoxOffset/setBoxExtent: those bindings document
 	// one argument and read two (argv[2] and argv[3]), so a single "0 0" string
@@ -48,15 +48,23 @@ function GuiEditorToggleIcon::onAdd(%this)
 	%this.textOffset = "0 0";
 	%this.textExtent = "0 0";
 
+	// iconSize is the PICTURE, and the sprite holding it is deliberately bigger --
+	// the same arrangement, and the same reason, as EditorIconButton: a sprite
+	// clamps its picture to its own content rect, so a control the same size as
+	// the artwork loses a pixel or two of it to the profile's insets. The two
+	// widgets are frequently sat next to each other and have to agree.
+	%iconSize = (%this.iconSize $= "") ? 16 : %this.iconSize;
+	%holder = %iconSize + 4;
+
 	%this.icon = new GuiSpriteCtrl()
 	{
 		HorizSizing = "center";
 		VertSizing = "center";
-		Extent = "16 16";
-		MinExtent = "16 16";
+		Extent = %holder SPC %holder;
+		MinExtent = %holder SPC %holder;
 		Position = "0 0";
 		Image = "EditorCore:EditorIcons16";
-		ImageSize = "16 16";
+		ImageSize = %iconSize SPC %iconSize;
 		constrainProportions = "1";
 		fullSize = "0";
 		Frame = %this.frameOff;
@@ -77,7 +85,7 @@ function GuiEditorToggleIcon::onAdd(%this)
 	%this.refresh();
 }
 
-function GuiEditorToggleIcon::onThemeChange(%this, %theme)
+function EditorToggleIcon::onThemeChange(%this, %theme)
 {
 	%this.refresh();
 }
@@ -85,7 +93,7 @@ function GuiEditorToggleIcon::onThemeChange(%this, %theme)
 // GuiCheckBoxCtrl has already flipped mStateOn by the time the Command runs, so
 // the owner is told what the value became rather than being asked to work it
 // out.
-function GuiEditorToggleIcon::onToggled(%this)
+function EditorToggleIcon::onToggled(%this)
 {
 	%this.refresh();
 
@@ -96,30 +104,29 @@ function GuiEditorToggleIcon::onToggled(%this)
 }
 
 // Set the state without telling the owner, for loading a value in.
-function GuiEditorToggleIcon::setValue(%this, %on)
+function EditorToggleIcon::setValue(%this, %on)
 {
 	%this.setStateOn(%on);
 	%this.refresh();
 }
 
-function GuiEditorToggleIcon::getValue(%this)
+function EditorToggleIcon::getValue(%this)
 {
 	return %this.getStateOn();
 }
 
 // The single place the icon's look is decided: which frame, which tooltip, and
-// which of the profile's font colors tints it.
-function GuiEditorToggleIcon::refresh(%this)
+// what tints it.
+function EditorToggleIcon::refresh(%this)
 {
 	%on = %this.getStateOn();
-	%profile = ThemeManager.activeTheme.iconButtonProfile;
 
 	// frameOn is optional. Where there is only one icon for the idea, the tint
 	// alone carries the state.
 	%frame = (%on && %this.frameOn !$= "") ? %this.frameOn : %this.frameOff;
 
 	// So is frameOff. A button with no icon at all is a deliberate shape: it is
-	// how GuiEditorChoiceRow spells the "unset" end of a segmented control,
+	// how EditorChoiceRow spells the "unset" end of a segmented control,
 	// where the absence of a picture is the meaning.
 	%this.icon.setVisible(%frame !$= "");
 	if(%frame !$= "")
@@ -127,16 +134,25 @@ function GuiEditorToggleIcon::refresh(%this)
 		%this.icon.setImageFrame(%frame);
 	}
 
-	if(!%this.isActive())
-	{
-		%this.icon.setImageColor(%profile.fontColorNA);
-	}
-	else
-	{
-		%this.icon.setImageColor(%on ? %profile.fontColorHL : %profile.fontColor);
-	}
+	%this.icon.setImageColor(%this.getIconTint(%on));
 
 	%this.Tooltip = %this.buildTip(%on);
+}
+
+// What the icon is tinted with, split out so a toggle whose color is part of its
+// meaning can answer differently. The two profile inks below say "on" and "off"
+// in the editor's own palette, which is right for a switch but not for a button
+// that stands for a color -- see AssetParticleChannelToggle.
+function EditorToggleIcon::getIconTint(%this, %on)
+{
+	%profile = ThemeManager.activeTheme.iconButtonProfile;
+
+	if(!%this.isActive())
+	{
+		return %profile.fontColorNA;
+	}
+
+	return %on ? %profile.fontColorHL : %profile.fontColor;
 }
 
 // Two lines, now that a control's text can hold a line break: what this is and
@@ -149,7 +165,7 @@ function GuiEditorToggleIcon::refresh(%this)
 // buttons are choices rather than switches -- "Centre text - On" would be a
 // worse caption than "Centre text" -- so those pass no label and keep the one
 // line they had.
-function GuiEditorToggleIcon::buildTip(%this, %on)
+function EditorToggleIcon::buildTip(%this, %on)
 {
 	%tip = %on ? %this.tipOn : %this.tipOff;
 
@@ -163,12 +179,12 @@ function GuiEditorToggleIcon::buildTip(%this, %on)
 }
 
 // setActive does not repaint on its own, and the disabled tint is ours to draw.
-function GuiEditorToggleIcon::onActive(%this)
+function EditorToggleIcon::onActive(%this)
 {
 	%this.refresh();
 }
 
-function GuiEditorToggleIcon::onInactive(%this)
+function EditorToggleIcon::onInactive(%this)
 {
 	%this.refresh();
 }

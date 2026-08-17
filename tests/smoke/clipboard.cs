@@ -8,7 +8,7 @@
 // is ONE undo step however much it puts back, a copy is a real copy (children,
 // dynamic fields, a frame set's frames, and no second helping of whatever a
 // control's class builds for itself), and no two controls end up sharing a name.
-// Run: tests/run.ps1 clipboard ; grep CLIP in console.log.
+// Run: tests/run.ps1 clipboard ; grep CLIP in tests/logs/.
 //-----------------------------------------------------------------------------
 
 setLogMode(2);

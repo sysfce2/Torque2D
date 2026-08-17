@@ -96,6 +96,16 @@ void ImageFrameProviderCore::resetState( void )
     mAnimationPaused = false;
     mAnimationFinished = true;
 
+    // Initialized here, and nowhere else was.
+    //
+    // Neither the constructor nor clearAssets touched these two, and they are read
+    // by validRender() on the very first frame of every static sprite -- so an
+    // indeterminate true sent it to dereference an equally indeterminate frame
+    // name. Every path into this class goes through resetState, which is also what
+    // makes clearing them on clearAssets free.
+    mUsingNamedFrame = false;
+    mNamedImageFrame = StringTable->EmptyString;
+
     clearAssets();
 }
 

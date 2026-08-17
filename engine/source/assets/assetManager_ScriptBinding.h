@@ -393,7 +393,16 @@ ConsoleMethodWithDocs(AssetManager, preloadAsset, ConsoleVoid, 3, 3, (assetId))
 		return;
 	}
 
-	// Set the asset to auto-unload false
+	// Set the asset to auto-unload false.
+	//
+	// This is a setter like any other, so it marks the asset as changed -- and
+	// preloading a project's worth of assets at startup would otherwise greet the
+	// user with a pile of unsaved assets they had never touched. Suppress it:
+	// keeping an asset resident is a decision about this run, not an edit to the
+	// asset. (It used to WRITE AssetAutoUnload="0" into the content file for the
+	// same reason, which was worse.)
+	AssetManager::ScopedAssetUpdate scopedUpdate( object, true );
+
 	pAssetBase->setAssetAutoUnload(false);
 
 	// Release asset.
@@ -438,12 +447,97 @@ ConsoleMethodWithDocs( AssetManager, deleteAsset, ConsoleBool, 5, 5, (assetId, d
 //-----------------------------------------------------------------------------
 
 /*! Refresh the specified asset Id.
+    This marks the asset as having unsaved changes and tells everything watching it
+    that it changed.  It does NOT write the asset's file -- use saveAsset for that.
     @param assetId The selected asset Id.
     @return No return value.
 */
 ConsoleMethodWithDocs( AssetManager, refreshAsset, ConsoleVoid, 3, 3, (assetId))
 {
     object->refreshAsset( argv[2] );
+}
+
+//-----------------------------------------------------------------------------
+
+/*! Whether the specified asset has changes that have not been saved.
+    @param assetId The selected asset Id.
+    @return Whether the asset has unsaved changes or not.
+*/
+ConsoleMethodWithDocs( AssetManager, isAssetDirty, ConsoleBool, 3, 3, (assetId))
+{
+    return object->isAssetDirty( argv[2] );
+}
+
+//-----------------------------------------------------------------------------
+
+/*! Sets whether the specified asset counts as having unsaved changes.
+    This is for undo, which is the only thing that knows whether the state it just
+    restored is the saved one.  Everything else should use refreshAsset, saveAsset
+    or revertAsset rather than setting the flag directly.
+    @param assetId The selected asset Id.
+    @param assetDirty Whether the asset has unsaved changes or not.
+    @return Whether the flag was set or not.
+*/
+ConsoleMethodWithDocs( AssetManager, setAssetDirty, ConsoleBool, 4, 4, (assetId, assetDirty))
+{
+    return object->setAssetDirty( argv[2], dAtob(argv[3]) );
+}
+
+//-----------------------------------------------------------------------------
+
+/*! Gets how many declared assets have changes that have not been saved.
+    @return The number of assets with unsaved changes.
+*/
+ConsoleMethodWithDocs( AssetManager, getDirtyAssetCount, ConsoleInt, 2, 2, ())
+{
+    return (S32)object->getDirtyAssetCount();
+}
+
+//-----------------------------------------------------------------------------
+
+/*! Write the specified asset to its file.
+    @param assetId The selected asset Id.
+    @return Whether the save was successful or not.
+*/
+ConsoleMethodWithDocs( AssetManager, saveAsset, ConsoleBool, 3, 3, (assetId))
+{
+    return object->saveAsset( argv[2] );
+}
+
+//-----------------------------------------------------------------------------
+
+/*! Write every asset that has unsaved changes to its file.
+    @return The number of assets that were saved.
+*/
+ConsoleMethodWithDocs( AssetManager, saveAllDirtyAssets, ConsoleInt, 2, 2, ())
+{
+    return (S32)object->saveAllDirtyAssets();
+}
+
+//-----------------------------------------------------------------------------
+
+/*! Discard the specified asset's unsaved changes and reload it from its file.
+    The asset object itself is kept, so anything already using the asset keeps working.
+    @param assetId The selected asset Id.
+    @return Whether the revert was successful or not.
+*/
+ConsoleMethodWithDocs( AssetManager, revertAsset, ConsoleBool, 3, 3, (assetId))
+{
+    return object->revertAsset( argv[2] );
+}
+
+//-----------------------------------------------------------------------------
+
+/*! Write a copy of the specified asset to a new file and declare it.
+    The copy is taken from the asset as it stands in memory, so any unsaved changes are included.
+    @param assetId The asset Id to copy.
+    @param targetFilePath The file to write the copy to.
+    @param targetAssetName The asset name to give the copy.
+    @return Whether the duplication was successful or not.
+*/
+ConsoleMethodWithDocs( AssetManager, duplicateAsset, ConsoleBool, 5, 5, (assetId, targetFilePath, targetAssetName))
+{
+    return object->duplicateAsset( argv[2], argv[3], argv[4] );
 }
 
 //-----------------------------------------------------------------------------
@@ -721,7 +815,45 @@ ConsoleMethodWithDocs( AssetManager, findAssetPrivate, ConsoleInt, 4, 5, (assetQ
     const bool assetQueryAsSource = dAtob(argv[4]);
 
     // Perform query.
-    return object->findAssetInternal( pAssetQuery, assetPrivate, assetQueryAsSource );
+    return object->findAssetPrivate( pAssetQuery, assetPrivate, assetQueryAsSource );
+}
+
+//-----------------------------------------------------------------------------
+
+/*! Performs an asset query searching for assets with unsaved changes.
+    @param assetQuery The asset query object that will be populated with the results.
+    @param assetDirty The unsaved-changes flag to search for.
+    @param assetQueryAsSource Whether to use the asset query as the data-source rather than the asset managers database or not.  Doing this effectively filters the asset query.  Optional: Defaults to false.
+    @return The number of asset Ids found or (-1) if an error occurred.
+*/
+ConsoleMethodWithDocs( AssetManager, findAssetDirty, ConsoleInt, 4, 5, (assetQuery, assetDirty, [assetQueryAsSource?]))
+{
+    // Fetch asset query.
+    AssetQuery* pAssetQuery = Sim::findObject<AssetQuery>( argv[2] );
+
+    // Did we find the asset query?
+    if ( pAssetQuery == NULL )
+    {
+        // No, so warn.
+        Con::warnf( "AssetManager::findAssetDirty() - Could not find the asset query object '%s'.", argv[2] );
+        return -1;
+    }
+
+    // Fetch unsaved-changes flag.
+    const bool assetDirty = dAtob(argv[3]);
+
+    // Any more arguments?
+    if ( argc == 4 )
+    {
+        // No, so perform query.
+        return object->findAssetDirty( pAssetQuery, assetDirty );
+    }
+
+    // Fetch asset-query-as-source flag.
+    const bool assetQueryAsSource = dAtob(argv[4]);
+
+    // Perform query.
+    return object->findAssetDirty( pAssetQuery, assetDirty, assetQueryAsSource );
 }
 
 //-----------------------------------------------------------------------------

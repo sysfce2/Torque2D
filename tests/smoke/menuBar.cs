@@ -15,7 +15,7 @@
 // Runs on the real editor UI throughout, because all of it is gated on
 // isEditMode().
 //
-// Run: tests/run.ps1 menuBar ; grep MENUBAR in console.log.
+// Run: tests/run.ps1 menuBar ; grep MENUBAR in tests/logs/.
 //-----------------------------------------------------------------------------
 
 setLogMode(2);

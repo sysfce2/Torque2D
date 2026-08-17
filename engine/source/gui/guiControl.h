@@ -895,6 +895,18 @@ public:
     /// getLineList needs a font; this half does not, which is what lets it be
     /// tested on its own.
     static vector<string> splitParagraphs(const char* text);
+
+    /// How wide a string is, asked of whatever knows: a GFont at render time, a
+    /// stand-in in a unit test. wrapParagraph takes one of these rather than a
+    /// GFont so that it can be tested with no GL context -- asking a profile for
+    /// a font registers a texture, and TextureManager::refresh asserts without
+    /// one, which in a debug build is a modal box and so arrives as a hang.
+    typedef U32 (*TextWidthFn)(void* context, const char* text);
+
+    /// Breaks one paragraph into the lines it is drawn as. The word-fitting half
+    /// of getLineList, separated from the font for the same reason as above.
+    static vector<string> wrapParagraph(const string& paragraph, S32 totalWidth, TextWidthFn measure, void* context);
+
     virtual vector<string> getLineList(const char* text, GuiControlProfile* profile, S32 totalWidth);
     virtual void renderTextLine(const Point2I& startPoint, const string line, GuiControlProfile* profile, F32 rotationInDegrees, U32 ibeamPosAtLineStart, U32 lineNumber);
 
@@ -935,6 +947,13 @@ public:
 
 	virtual void setDataField(StringTableEntry slotName, const char* array, const char* value);
 
+	/// Where a block of text starts, given how tall it is and how tall the room
+	/// is. Static and public because it reads nothing off the control, and
+	/// because it is the step that turns a line count into a position -- which is
+	/// how one stray line in the line list becomes a caption drawn a line too
+	/// high. Tested beside wrapParagraph for exactly that reason.
+	static S32 getTextVerticalOffset(S32 textHeight, S32 totalHeight, VertAlignmentType align);
+
 protected:
 	bool mPreviouslyAwake;
 	virtual void interpolateTick(F32 delta) {};
@@ -942,7 +961,6 @@ protected:
 	virtual void advanceTime(F32 timeDelta) {};
 
 	S32 getTextHorizontalOffset(S32 textWidth, S32 totalWidth, AlignmentType align);
-	S32 getTextVerticalOffset(S32 textHeight, S32 totalHeight, VertAlignmentType align);
     AlignmentType getAlignmentType();
     VertAlignmentType getVertAlignmentType();
     AlignmentType getAlignmentType(GuiControlProfile* profile);

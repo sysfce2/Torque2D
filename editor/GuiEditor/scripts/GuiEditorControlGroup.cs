@@ -3,7 +3,7 @@
 // on -- holding a grid of GuiEditorControlTiles.
 //
 // The same shape the Asset Manager uses for its asset dictionaries
-// (AssetAdmin::buildDictionary, AssetDictionary.cs): a GuiPanelCtrl whose header
+// (AssetLibraryWindow::addDictionary, AssetDictionary.cs): a GuiPanelCtrl whose header
 // is the toggle, with the real content in a grid inside it.
 //
 // The tiles go in that inner grid and never directly on the panel.

@@ -36,6 +36,11 @@ function GuiProfileEditorProfileForm::onAdd(%this)
 {
 	ThemeManager.setProfile(%this, "emptyProfile");
 
+	// Every color row this form builds gets the popup that offers the selected
+	// theme's six colors. EditorFieldRow lives in EditorCore and cannot name a
+	// Gui Editor class, so the pane that wants one says so -- see its header.
+	%this.swatchClass = "GuiProfileEditorColorPopup";
+
 	%this.fieldSpec = new ScriptObject()
 	{
 		class = "GuiProfileEditorFieldSpec";
@@ -146,7 +151,7 @@ function GuiProfileEditorProfileForm::buildHeader(%this)
 	// starts with none -- setting it there also picks the preview's sample.
 	%this.categoryDrop = new GuiDropDownCtrl()
 	{
-		class = "GuiProfileEditorRowDropDown";
+		class = "EditorFieldRowDropDown";
 		Position = "38 28";
 		Extent = "150 22";
 		ConstantThumbHeight = false;
@@ -290,7 +295,7 @@ function GuiProfileEditorProfileForm::addFieldRow(%this, %container, %field, %la
 {
 	%row = new GuiControl()
 	{
-		class = "GuiProfileEditorFieldRow";
+		class = "EditorFieldRow";
 		Position = "0 0";
 		fieldName = %field;
 		labelText = %label;
@@ -668,7 +673,7 @@ function GuiProfileEditorProfileForm::refreshStateOverrides(%this, %row, %theme,
 // synchronous rebuild here can free a control the engine is mid-event on).
 //-----------------------------------------------------------------------------
 
-function GuiProfileEditorProfileForm::onProfileRowCommit(%this, %row)
+function GuiProfileEditorProfileForm::onFieldRowCommit(%this, %row)
 {
 	if(%this.populating || !isObject(%this.target))
 	{
@@ -699,7 +704,7 @@ function GuiProfileEditorProfileForm::onProfileStateColorCommit(%this, %row, %in
 		return;
 	}
 
-	// As in onProfileRowCommit: a swatch that came back holding what was loaded
+	// As in onFieldRowCommit: a swatch that came back holding what was loaded
 	// into it is not an edit, and must not record a theme override.
 	if(!%row.hasChanged(%index))
 	{
@@ -711,7 +716,7 @@ function GuiProfileEditorProfileForm::onProfileStateColorCommit(%this, %row, %in
 	%this.afterCommit();
 }
 
-function GuiProfileEditorProfileForm::onProfileRowReset(%this, %row)
+function GuiProfileEditorProfileForm::onFieldRowReset(%this, %row)
 {
 	%theme = %this.currentTheme();
 	if(!isObject(%theme) || !isObject(%this.target))

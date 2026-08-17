@@ -6,7 +6,7 @@
 //
 // Stack depth is checked as often as the values are. A gesture that records
 // eleven steps is as broken as one that records none, and only the count says
-// so. Run: tests/run.ps1 undo ; grep UNDO in console.log.
+// so. Run: tests/run.ps1 undo ; grep UNDO in tests/logs/.
 //-----------------------------------------------------------------------------
 
 setLogMode(2);

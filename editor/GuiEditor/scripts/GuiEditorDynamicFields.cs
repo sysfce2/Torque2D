@@ -146,7 +146,7 @@ function GuiEditorDynamicFields::addFieldRow(%this, %name)
 {
 	%row = new GuiControl()
 	{
-		class = "GuiProfileEditorFieldRow";
+		class = "EditorFieldRow";
 		Position = "0 0";
 		fieldName = %name;
 		labelText = %name;
@@ -158,7 +158,7 @@ function GuiEditorDynamicFields::addFieldRow(%this, %name)
 
 	// The row's reset button is already a small icon pinned to the cell's right
 	// edge, which is exactly where a remove wants to be, so it wears the bin;
-	// the row calls owner.onProfileRowReset when it is clicked, and for a
+	// the row calls owner.onFieldRowReset when it is clicked, and for a
 	// dynamic field "reset" means "take it away".
 	%row.resetButton.icon.setImageFrame($EditorIcon::trash);
 	%row.resetButton.Tooltip = "Remove this field";
@@ -182,7 +182,7 @@ function GuiEditorDynamicFields::hasFields(%this)
 // Editing.
 //-----------------------------------------------------------------------------
 
-function GuiEditorDynamicFields::onProfileRowCommit(%this, %row)
+function GuiEditorDynamicFields::onFieldRowCommit(%this, %row)
 {
 	if(!isObject(%this.target) || !%row.hasChanged())
 	{
@@ -214,7 +214,7 @@ function GuiEditorDynamicFields::onProfileRowCommit(%this, %row)
 // Remove. A dynamic field is cleared by writing "" to it -- there is no delete
 // -- and the row goes with it, so this rebinds rather than trying to unpick one
 // cell from the grid.
-function GuiEditorDynamicFields::onProfileRowReset(%this, %row)
+function GuiEditorDynamicFields::onFieldRowReset(%this, %row)
 {
 	if(!isObject(%this.target))
 	{

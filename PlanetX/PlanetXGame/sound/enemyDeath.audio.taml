@@ -1,4 +1,6 @@
 <AudioAsset
     AssetName="enemyDeath"
-    AudioFile="enemyDeath.wav"
+    AssetCategory="badguy"
+    AssetAutoUnload="false"
+    AudioFile="@assetFile=enemyDeath.wav"
     VolumeChannel="1" />

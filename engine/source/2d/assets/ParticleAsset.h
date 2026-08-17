@@ -83,7 +83,7 @@ public:
     virtual ~ParticleAsset();
 
     static void initPersistFields();
-    virtual void copyTo(SimObject* object);
+    virtual void copyAssetStateTo(AssetBase* pTarget);
     virtual void onDeleteNotify( SimObject* object );
 
     // Asset validation.

@@ -643,29 +643,10 @@ function GuiEditorBrain::selectionList(%this)
     return %list;
 }
 
+// Everything in Layout and Select, and the half of Edit that acts on controls,
+// answers one question: how much is selected. The menus know which items belong
+// to which threshold; all this has to say is the number.
 function GuiEditorBrain::toggleMenuItems(%this)
 {
-    %count = %this.getSelected().getCount();
-    EditorCore.menuBar.setMenuActive("Deselect", %count != 0);
-    EditorCore.menuBar.setMenuActive("Cut", %count != 0);
-    EditorCore.menuBar.setMenuActive("Copy", %count != 0);
-    EditorCore.menuBar.setMenuActive("Duplicate", %count != 0);
-    EditorCore.menuBar.setMenuActive("Delete", %count != 0);
-    EditorCore.menuBar.setMenuActive("Nudge Up", %count != 0);
-    EditorCore.menuBar.setMenuActive("Nudge Down", %count != 0);
-    EditorCore.menuBar.setMenuActive("Nudge Left", %count != 0);
-    EditorCore.menuBar.setMenuActive("Nudge Right", %count != 0);
-    EditorCore.menuBar.setMenuActive("Expand Height", %count != 0);
-    EditorCore.menuBar.setMenuActive("Shrink Height", %count != 0);
-    EditorCore.menuBar.setMenuActive("Expand Width", %count != 0);
-    EditorCore.menuBar.setMenuActive("Shrink Width", %count != 0);
-    EditorCore.menuBar.setMenuActive("Align Top", %count > 1);
-    EditorCore.menuBar.setMenuActive("Align Bottom", %count > 1);
-    EditorCore.menuBar.setMenuActive("Align Left", %count > 1);
-    EditorCore.menuBar.setMenuActive("Align Right", %count > 1);
-    EditorCore.menuBar.setMenuActive("Center Horizontally", %count > 1);
-    EditorCore.menuBar.setMenuActive("Space Vertically", %count > 2);
-    EditorCore.menuBar.setMenuActive("Space Horizontally", %count > 2);
-    EditorCore.menuBar.setMenuActive("Bring to Front", %count == 1);
-    EditorCore.menuBar.setMenuActive("Push to Back", %count == 1);
+    GuiEditor.menus.refreshSelection(%this.getSelected().getCount());
 }

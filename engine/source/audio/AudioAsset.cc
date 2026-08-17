@@ -32,6 +32,9 @@
 #include "console/consoleTypes.h"
 #endif
 
+// Script bindings.
+#include "AudioAsset_ScriptBinding.h"
+
 //-----------------------------------------------------------------------------
 
 ConsoleType( audioAssetPtr, TypeAudioAssetPtr, sizeof(AssetPtr<AudioAsset>), ASSET_ID_FIELD_PREFIX )
@@ -126,28 +129,6 @@ void AudioAsset::initPersistFields()
 
 //------------------------------------------------------------------------------
 
-void AudioAsset::copyTo(SimObject* object)
-{
-    // Call to parent.
-    Parent::copyTo(object);
-
-    // Cast to asset.
-    AudioAsset* pAsset = static_cast<AudioAsset*>(object);
-
-    // Sanity!
-    AssertFatal(pAsset != NULL, "AudioAsset::copyTo() - Object is not the correct type.");
-
-    // Copy state.
-    pAsset->setAudioFile( getAudioFile() );
-    pAsset->setVolume( getVolume() );
-    pAsset->setVolumeChannel( getVolumeChannel() );
-    pAsset->setLooping( getLooping() );
-    pAsset->setStreaming( getStreaming() );
-    pAsset->setPriority( getPriority() );
-}
-
-//--------------------------------------------------------------------------
-
 void AudioAsset::initializeAsset( void )
 {
     // Call parent.
@@ -197,12 +178,20 @@ void AudioAsset::setAudioFile( const char* pAudioFile )
 
 void AudioAsset::setVolume( const F32 volume )
 {
+    // Clamp first, then compare.
+    //
+    // The other way round -- which is what this used to do -- compares the raw
+    // value against the stored one, so handing it 5.0 twice does not read as no
+    // change: it clamps to 1.0, calls refreshAsset and marks the asset unsaved
+    // every time, for an edit that moves nothing.
+    const F32 clampedVolume = mClampF( volume, 0.0f, 1.0f );
+
     // Ignore no change.
-    if ( mIsEqual( volume, mDescription.mVolume ) )
+    if ( mIsEqual( clampedVolume, mDescription.mVolume ) )
         return;
 
     // Update.
-    mDescription.mVolume = mClampF(volume, 0.0f, 1.0f);;
+    mDescription.mVolume = clampedVolume;
 
     // Refresh the asset.
     refreshAsset();
@@ -212,12 +201,15 @@ void AudioAsset::setVolume( const F32 volume )
 
 void AudioAsset::setVolumeChannel( const S32 volumeChannel )
 {
+    // Clamp first, then compare -- see setVolume above.
+    const S32 clampedChannel = mClamp( volumeChannel, 0, Audio::AudioVolumeChannels-1 );
+
     // Ignore no change.
-    if ( volumeChannel == mDescription.mVolumeChannel )
+    if ( clampedChannel == mDescription.mVolumeChannel )
         return;
 
     // Update.
-    mDescription.mVolumeChannel = mClamp( volumeChannel, 0, Audio::AudioVolumeChannels-1 );
+    mDescription.mVolumeChannel = clampedChannel;
 
     // Refresh the asset.
     refreshAsset();

@@ -2,7 +2,7 @@
 // Editor's Image Asset row: the new "asset" row kind, the one-shot asset query,
 // live substring filtering, the grid re-flow that filtering depends on,
 // selection, choosing, cancelling and dialog cleanup.
-// Run: tests/run.ps1 assetPicker  ; grep APSMOKE in console.log.
+// Run: tests/run.ps1 assetPicker  ; grep APSMOKE in tests/logs/.
 
 // Mode 1 rather than the usual 2: it opens, appends and closes the log on every
 // write, so a crash mid-run still leaves every line that got as far as being
@@ -326,7 +326,7 @@ function fStep6()
 
 	// Reset must undo an asset the same as any other field.
 	%form = GuiEditor.profileEditorDialog.profileForm;
-	%form.onProfileRowReset($fRow);
+	%form.onFieldRowReset($fRow);
 	fCheck("reset cleared the asset override",
 		!$fTheme.isFieldOverridden(%form.target, "imageAsset"));
 	fCheck("reset hid the row's reset button", !$fRow.resetButton.isVisible());
@@ -346,7 +346,7 @@ function fStep6()
 // This block used to drive the native GuiInspector, whose GuiInspectorTypeAsset
 // baked an EditorCore.openAssetPicker call straight into a "..." button's
 // Command. The Gui Editor no longer builds an inspector -- GuiEditorInspectorPane
-// replaced it -- so the path under test is now GuiProfileEditorFieldRow's
+// replaced it -- so the path under test is now EditorFieldRow's
 // "asset" kind, which routes the click through onFindAssetClicked instead of a
 // baked-in command string. Same promise, one indirection later.
 //

@@ -147,6 +147,35 @@ sequence; otherwise it is picked up automatically and run last, alphabetically.
   `smokeThemeProject`) before each test, and never touches `PlanetX` or `toybox`,
   which are real content. A test that has to inherit the previous one's folder —
   only the second half of a two-pass test — goes in `$KeepProject`.
+- **`createTheme` writes cursor art the moment it is called**, into
+  `<project>/themes/cursors/<name>` — before any save, and `deleteTheme` does not
+  take it back. A suite working in its own throwaway project loses it with the
+  folder; a suite that opens `PlanetX` was leaving art behind inside real
+  content until the runner started sweeping it.
+
+## What a run leaves behind
+
+Nothing, by design. `Remove-TestArtifacts` reads each test's own source for
+`setProjectFolder("…")` and `createTheme("…")` and removes what those two make.
+It runs **before** each test — which is the guarantee, because a killed or
+crashed test never gets to tidy up — and again over every test that ran once the
+run is finished, so `git status` stays readable.
+
+Reading the source rather than watching the filesystem is deliberate: the sweep
+can only ever remove a name a test itself names, so it cannot eat work that
+happened to be in the tree at the time.
+
+**So spell the name out.** `setProjectFolder("mySmokeProject")`, not
+`setProjectFolder($folder)` — a name held in a variable is invisible to the
+sweep, and the folder simply stays. The runner prints a warning beside any test
+that does this rather than letting it pass unnoticed.
+
+`tests\run.ps1 <name> -Keep` skips the final sweep, for picking over the wreckage
+of a failure.
+
+**A suite cannot tidy up after itself in script**: there is no `deleteDirectory`
+binding, and the two things worth removing — a project folder and a theme's
+cursor art — are both directories. That is why this lives in the runner.
 
 ## Known failures
 

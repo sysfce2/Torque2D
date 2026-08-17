@@ -46,11 +46,6 @@ function GuiEditorClipboard::onAdd(%this)
 	// carries on where this one left off, instead of landing on what is already
 	// there.
 	%this.stepCount = 0;
-
-	// What the Edit menu was last told about Paste. setMenuActive walks the whole
-	// menu tree and re-applies every item's profile, so it is worth not saying
-	// the same thing twice.
-	%this.menuPaste = -1;
 }
 
 function GuiEditorClipboard::onRemove(%this)
@@ -539,25 +534,8 @@ function GuiEditorClipboard::clear(%this)
 
 function GuiEditorClipboard::refreshMenu(%this)
 {
-	%has = %this.isEmpty() ? 0 : 1;
-
-	if(%has == %this.menuPaste)
+	if(isObject(%this.owner) && isObject(%this.owner.menus))
 	{
-		return;
+		%this.owner.menus.refreshPaste(%this.isEmpty() ? 0 : 1);
 	}
-
-	%this.menuPaste = %has;
-
-	if(isObject(EditorCore) && isObject(EditorCore.menuBar))
-	{
-		EditorCore.menuBar.setMenuActive("Paste", %has);
-	}
-}
-
-// The menu looks rebuilt every time the editor is opened, and the cache above
-// would otherwise decide there was nothing to say.
-function GuiEditorClipboard::forceRefreshMenu(%this)
-{
-	%this.menuPaste = -1;
-	%this.refreshMenu();
 }

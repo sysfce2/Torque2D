@@ -111,7 +111,7 @@ function GuiEditorControlListWindow::onRemove(%this)
 }
 
 //-----------------------------------------------------------------------------
-// The view switch. GuiEditorChoiceRow is already "a radio group that looks like
+// The view switch. EditorChoiceRow is already "a radio group that looks like
 // a segmented control" -- a row of toggle buttons of which exactly one is down,
 // which is exactly this. It carries a caption by default; two icons say enough
 // on their own, so the label width goes to nothing.
@@ -121,7 +121,7 @@ function GuiEditorControlListWindow::buildModeRow(%this)
 {
 	%this.modeRow = new GuiControl()
 	{
-		class = "GuiEditorChoiceRow";
+		class = "EditorChoiceRow";
 		HorizSizing = "width";
 		Position = "4 2";
 		labelText = "";

@@ -246,7 +246,7 @@ function GuiProfileEditorBorderGrid::notifyCommit(%this)
 //-----------------------------------------------------------------------------
 // The numeric input boxes: up/down arrows nudge by 1. Clicking places the caret,
 // as it does in every other box in the editor - see the note in
-// GuiProfileEditorFieldRow for why nothing re-selects here.
+// EditorFieldRow for why nothing re-selects here.
 //-----------------------------------------------------------------------------
 
 function GuiProfileEditorBorderInput::onUpArrow(%this)

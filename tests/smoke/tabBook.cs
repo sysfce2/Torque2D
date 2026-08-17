@@ -13,7 +13,7 @@
 // isEditMode() is true - which needs the editor pushed onto the canvas rather
 // than merely registered.
 //
-// Run: tests/run.ps1 tabBook ; grep TABBOOK in console.log.
+// Run: tests/run.ps1 tabBook ; grep TABBOOK in tests/logs/.
 //-----------------------------------------------------------------------------
 
 setLogMode(2);

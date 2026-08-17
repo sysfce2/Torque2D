@@ -22,9 +22,12 @@
 
 function AssetAdmin::create(%this)
 {
+	exec("./AssetLibraryWindow.cs");
 	exec("./AssetDictionary.cs");
 	exec("./AssetWindow.cs");
 	exec("./AssetDictionaryButton.cs");
+	exec("./AssetDictionarySprite.cs");
+	exec("./AssetBase.cs");
 	exec("./AssetInspector.cs");
 	exec("./AssetAudioPlayButton.cs");
 	exec("./NewAssetButton.cs");
@@ -36,6 +39,20 @@ function AssetAdmin::create(%this)
 	exec("./DeleteAssetDialog.cs");
 	exec("./ParticleEditor/exec.cs");
 	exec("./ImageEditor/exec.cs");
+	exec("./Inspector/exec.cs");
+	exec("./Animation/exec.cs");
+	exec("./AssetPreviewSprite.cs");
+	exec("./AssetUndoRecorder.cs");
+	exec("./DuplicateAssetDialog.cs");
+	exec("./AssetAdminConfirmSaveDialog.cs");
+
+	// File and Edit, which this editor owns and lends to the shared bar for as
+	// long as it is the one open.
+	exec("./AssetAdminMenus.cs");
+
+	// Undo, redo and the record of what is unsaved. Built before the inspector,
+	// which asks it what to grey out as soon as it has a document bar.
+	%this.undoRecorder = new ScriptObject() { class = "AssetUndoRecorder"; };
 
 	%this.guiPage = EditorCore.RegisterEditor("Asset Manager", %this);
 	%this.content = %this.createFrameSet();
@@ -43,6 +60,33 @@ function AssetAdmin::create(%this)
 	%this.buildAudioPlayButton();
 	%this.buildInspector();
 	%this.buildLibrary();
+
+	// The manager that turns the preview into an animation editor and back. It
+	// owns the two panes it builds and deletes them in its own onRemove, so
+	// deleting it is the whole of the teardown.
+	%this.animationStage = new ScriptObject()
+	{
+		class = "AssetAnimationStage";
+		admin = %this;
+	};
+	// The range arithmetic, kept as an object so the dialog and the tests share
+	// one handle and no new global function appears.
+	%this.frameRange = new ScriptObject() { class = "AssetAnimationFrameRange"; };
+
+	%this.buildTransportBar();
+
+	// After the inspector, whose title dropdown the solo and mute switches ask
+	// which emitter is selected.
+	%this.buildParticleTransportBar();
+
+	// After the inspector, which its refresh asks what to grey out. Built into
+	// the shared bar and taken straight back off again; open() puts it on.
+	%this.menus = new ScriptObject()
+	{
+		class = "AssetAdminMenus";
+		superclass = "EditorMenuSet";
+		tool = %this;
+	};
 
 	EditorCore.FinishRegistration(%this.guiPage);
 
@@ -70,20 +114,32 @@ function AssetAdmin::createFrameSet(%this)
     %rightID = getWord(%idList, 1);
     %content.anchorFrame(%rightID);
     %content.setFrameSize(%rightID, 324);
-    
+
     %ids = %content.createVerticalSplit(%leftID);
     %centerFrameID = getWord(%ids, 0);
     %inspectorFrameID = getWord(%ids, 1);
 	%content.anchorFrame(%inspectorFrameID);
     %content.setFrameSize(%inspectorFrameID, 360);
 
+    // Kept because the only way to move a divider from script is to name the
+    // frame, and the ids are handed out once here and never again. The inspector
+    // is the bottom frame, so it opens wide and short -- which is why everything
+    // in it reflows.
+    %this.libraryFrameId = %rightID;
+    %this.previewFrameId = %centerFrameID;
+    %this.inspectorFrameId = %inspectorFrameID;
+
 	return %content;
 }
 
+// Everything inside the library -- the toolbar, the scroller, the chain and the
+// groups -- belongs to AssetLibraryWindow, which builds it in its own onAdd. All
+// this has to decide is where the window goes.
 function AssetAdmin::buildLibrary(%this)
 {
 	%this.libWindow = new GuiWindowCtrl()
     {
+        Class = "AssetLibraryWindow";
         HorizSizing = "right";
         VertSizing = "bottom";
         Position = "0 0";
@@ -104,62 +160,10 @@ function AssetAdmin::buildLibrary(%this)
     ThemeManager.setProfile(%this.libWindow, "windowButtonProfile", "MaxButtonProfile");
     %this.content.add(%this.libWindow);
 
-	%this.libScroller = new GuiScrollCtrl()
-	{
-        HorizSizing = "width";
-        VertSizing = "height";
-		Position="0 0";
-		Extent="324 356";
-		MinExtent="0 0";
-		hScrollBar="dynamic";
-		vScrollBar="alwaysOn";
-		constantThumbHeight="0";
-		showArrowButtons="1";
-		scrollBarThickness="14";
-	};
-	ThemeManager.setProfile(%this.libScroller, "scrollingPanelProfile");
-	ThemeManager.setProfile(%this.libScroller, "scrollingPanelThumbProfile", ThumbProfile);
-	ThemeManager.setProfile(%this.libScroller, "scrollingPanelTrackProfile", TrackProfile);
-	ThemeManager.setProfile(%this.libScroller, "scrollingPanelArrowProfile", ArrowProfile);
-	%this.libWindow.add(%this.libScroller);
-
-	%this.dictionaryList = new GuiChainCtrl()
-	{
-		HorizSizing="width";
-		VertSizing="height";
-		Position="0 0";
-		Extent="310 768";
-		MinExtent="220 200";
-	};
-	ThemeManager.setProfile(%this.dictionaryList, "emptyProfile");
-	%this.libScroller.add(%this.dictionaryList);
-
-	%this.dictionaryList.add(%this.buildDictionary("Images", "ImageAsset"));
-	%this.dictionaryList.add(%this.buildDictionary("Animations", "AnimationAsset"));
-	%this.dictionaryList.add(%this.buildDictionary("Particle Effects", "ParticleAsset"));
-	%this.dictionaryList.add(%this.buildDictionary("Fonts", "FontAsset"));
-	%this.dictionaryList.add(%this.buildDictionary("Audio", "AudioAsset"));
-	//%this.dictionaryList.add(%this.buildDictionary("Spines", "SpineAsset"));
-}
-
-function AssetAdmin::buildDictionary(%this, %title, %type)
-{
-	%this.Dictionary[%type] = new GuiPanelCtrl()
-	{
-		Class = AssetDictionary;
-		Text=%title;
-		command="";
-		HorizSizing="width";
-		VertSizing="bottom";
-		Position="0 0";
-		Extent="306 22";
-		MinExtent="80 22";
-		Type = %type;
-	};
-	%this.Dictionary[%type].setExpandEase("EaseInOut", 1000);
-	ThemeManager.setProfile(%this.Dictionary[%type], "panelProfile");
-
-	return %this.Dictionary[%type];
+    // Measure again. The window sized its own contents in onAdd, which is before
+    // any of the five profiles above were on it and before the frame set gave it
+    // its real extent -- so that pass was against GuiDefaultProfile's title bar.
+    %this.libWindow.fitScroller();
 }
 
 function AssetAdmin::buildInspector(%this)
@@ -170,7 +174,14 @@ function AssetAdmin::buildInspector(%this)
         VertSizing = "bottom";
         text = "Asset Inspector";
 		Extent = "706 380";
-		MinExtent = "500 250";
+
+		// Narrow enough to hold the cell table and its scroll bar, and no
+		// narrower. A frame set moves its divider whatever the window in the frame
+		// thinks, so a minimum the user can drag past is not a floor -- it is 106
+		// pixels of window hanging off the right-hand edge, clipped away, taking
+		// the Find button and a column of settings with them. The pane reflows all
+		// the way down to one column, so there is nothing here to protect.
+		MinExtent = "260 200";
         canMove = true;
         canClose = false;
         canMinimize = true;
@@ -199,6 +210,45 @@ function AssetAdmin::buildInspector(%this)
 
 function AssetAdmin::buildAssetWindow(%this)
 {
+	// Two layers between the frame and the preview, and each earns its place.
+	//
+	// previewFrames is a frame set so the preview can be split three ways for an
+	// animation -- the art, the frames available, and the timeline -- with
+	// dividers the user can drag. Unsplit it is a pass-through: GuiFrameSetCtrl
+	// resizes its one frame to its own extent with no insets, so every other
+	// asset type sees exactly what it saw before. Splitting it later never
+	// reparents anything either, because splitFrame only rewrites which frame
+	// holds a control, and removing one collapses the frame and hoists its twin.
+	//
+	// previewHost looks like a pointless wrapper and is not. GuiWindowCtrl finds
+	// its dock target as a cast of its parent's FIRST child to GuiFrameSetCtrl.
+	// Today that child is the background sprite, the cast fails, and docking is
+	// quietly off in the Asset Manager. Put the frame set there instead and
+	// docking switches itself on, aimed at the animation split -- so the Asset
+	// Inspector window would offer to dock into frames the stage later deletes
+	// out from under it. One plain control in between keeps that answer "no".
+	%this.previewHost = new GuiControl()
+	{
+		HorizSizing = "right";
+		VertSizing = "bottom";
+		Position = "0 0";
+		Extent = "100 100";
+	};
+	ThemeManager.setProfile(%this.previewHost, "emptyProfile");
+	%this.content.add(%this.previewHost);
+
+	%this.previewFrames = new GuiFrameSetCtrl()
+	{
+		HorizSizing = "width";
+		VertSizing = "height";
+		Position = "0 0";
+		Extent = "100 100";
+		DividerThickness = 6;
+	};
+	ThemeManager.setProfile(%this.previewFrames, "frameSetProfile");
+	ThemeManager.setProfile(%this.previewFrames, "dropButtonProfile", "dropButtonProfile");
+	%this.previewHost.add(%this.previewFrames);
+
 	%this.background = new GuiSpriteCtrl() {
 		HorizSizing = "right";
         VertSizing = "bottom";
@@ -214,7 +264,7 @@ function AssetAdmin::buildAssetWindow(%this)
 		constrainProportions = "1";
 	};
     ThemeManager.setProfile(%this.background, "emptyProfile");
-    %this.content.add(%this.background);
+    %this.previewFrames.add(%this.background);
 
 	%this.assetScene = new Scene();
 	%this.assetScene.setScenePause(true);
@@ -248,6 +298,47 @@ function AssetAdmin::buildAssetWindow(%this)
     %this.background.add(%this.assetWindow);
 }
 
+// Start the audio driver only if nothing else already has.
+//
+// The game owns audio. A project's Audio module calls OpenALInitDriver in its
+// create function and then sets the master and channel volumes, and that is the
+// arrangement -- nothing here should replace it, and nothing in a shipped game
+// may depend on the editor being present at all.
+//
+// But the Asset Manager can be opened before any project is picked, or against a
+// project with no audio module, and there the driver is simply not running: with
+// no context alxPlay answers with a null handle, and .wav is not even a
+// registered resource extension until OpenALInitDriver registers it. So this is a
+// fallback for that case and nothing more.
+//
+// Asking first is essential rather than tidy. OpenALInit BEGINS by calling
+// OpenALShutdown, so calling it when the driver is already up tears down the one
+// the game just built: every playing sound stops and every channel volume goes
+// back to 1, silently undoing the project's own audio settings.
+//
+// On demand rather than at editor startup, because an editor that takes the sound
+// card the moment it opens is a nuisance, and most of a session never plays
+// anything. Never shut down again either, for the same reason -- it is not ours
+// to stop.
+//
+// The attempt is remembered rather than the result, so a machine with no audio
+// device says so once instead of on every sound in the library.
+function AssetAdmin::ensureAudioDriver(%this)
+{
+	if(OpenALIsInitialized())
+	{
+		return true;
+	}
+
+	if(!%this.audioDriverTried)
+	{
+		%this.audioDriverTried = true;
+		%this.audioDriverReady = OpenALInitDriver();
+	}
+
+	return %this.audioDriverReady;
+}
+
 function AssetAdmin::buildAudioPlayButton(%this)
 {
 	%this.audioPlayButtonContainer = new GuiControl()
@@ -274,41 +365,338 @@ function AssetAdmin::buildAudioPlayButton(%this)
 	%this.background.add(%this.audioPlayButtonContainer);
 }
 
+// The animation transport, overlaid on the preview exactly as the audio play
+// button above is -- which is what proves an overlay here receives clicks over
+// the SceneWindow. Built once and only shown or hidden, because the stage comes
+// and goes many times in a session and this does not have to.
+function AssetAdmin::buildTransportBar(%this)
+{
+	%this.transportBarContainer = new GuiControl()
+	{
+		position = "0 0";
+		extent = %this.background.extent;
+		HorizSizing = "width";
+		VertSizing = "height";
+		Visible = "0";
+	};
+	ThemeManager.setProfile(%this.transportBarContainer, "emptyProfile");
+
+	// "top" anchors the BOTTOM edge -- the sizing names read the opposite way
+	// round to how they sound -- so the bar keeps the gap it is given below it
+	// and rides the bottom of the preview as the frame grows. The position is set
+	// against the extent the background has now, which is why it is a gap rather
+	// than a coordinate.
+	%barGap = 16;
+	%barTop = (getWord(%this.background.extent, 1) - $EditorTransportBar::playSize) - %barGap;
+
+	%this.transportBar = new GuiChainCtrl()
+	{
+		class = "AssetAnimationTransportBar";
+		superclass = "EditorTransportBar";
+		stage = %this.animationStage;
+		HorizSizing = "center";
+		VertSizing = "top";
+		Position = "0" SPC %barTop;
+
+		// IsVertical BEFORE Extent, and the order is the whole thing.
+		//
+		// A chain sizes itself along its LENGTH and leaves the cross axis alone --
+		// and GuiChainCtrl::resize enforces that by refusing whichever axis is
+		// currently the length. A GuiChainCtrl is born VERTICAL, so an Extent
+		// applied before this line is read as "you may not change my height", the
+		// height stays at the constructor's mEditOpenSpace of 30, and the 36 pixel
+		// play button is laid out centred in 30 -- three pixels off the top and
+		// three off the bottom, which is exactly how it was being clipped.
+		//
+		// Fields are applied in the order they are written, so this is a
+		// one-line-of-difference bug and worth the paragraph.
+		IsVertical = false;
+
+		// The tallest button. Nothing computes this: a chain never grows to fit a
+		// taller child. (IsExtentDynamic would not help either -- it is a
+		// GuiGridCtrl field and a chain never reads it.)
+		Extent = "160" SPC $EditorTransportBar::playSize;
+
+		ChildSpacing = $EditorTransportBar::spacing;
+	};
+	ThemeManager.setProfile(%this.transportBar, "emptyProfile");
+	%this.transportBarContainer.add(%this.transportBar);
+
+	%this.background.add(%this.transportBarContainer);
+}
+
+// The particle transport, built the same way and in the same place as the
+// animation one above. Two bars rather than one with swappable buttons: they
+// share no state and drive different objects, and the chrome they do share is
+// EditorTransportBar.
+function AssetAdmin::buildParticleTransportBar(%this)
+{
+	%this.particleTransportBarContainer = new GuiControl()
+	{
+		position = "0 0";
+		extent = %this.background.extent;
+		HorizSizing = "width";
+		VertSizing = "height";
+		Visible = "0";
+	};
+	ThemeManager.setProfile(%this.particleTransportBarContainer, "emptyProfile");
+
+	%barGap = 16;
+	%barTop = (getWord(%this.background.extent, 1) - $EditorTransportBar::playSize) - %barGap;
+
+	%this.particleTransportBar = new GuiChainCtrl()
+	{
+		class = "AssetParticleTransportBar";
+		superclass = "EditorTransportBar";
+		HorizSizing = "center";
+		VertSizing = "top";
+		Position = "0" SPC %barTop;
+
+		// IsVertical BEFORE Extent, as on the animation bar -- a chain refuses a
+		// resize along whatever axis is currently its length, and it is born
+		// vertical, so an Extent written first is read as "you may not change my
+		// height" and the big play button is laid out clipped into 30 pixels.
+		IsVertical = false;
+		Extent = "260" SPC $EditorTransportBar::playSize;
+		ChildSpacing = $EditorTransportBar::spacing;
+	};
+	ThemeManager.setProfile(%this.particleTransportBar, "emptyProfile");
+	%this.particleTransportBarContainer.add(%this.particleTransportBar);
+
+	%this.background.add(%this.particleTransportBarContainer);
+}
+
+// A particle preview was just built. The bar drives that player and nothing else,
+// so it is handed the new one and everything it was holding about the old one is
+// dropped.
+function AssetAdmin::showParticleTransport(%this, %player, %assetId)
+{
+	if(!isObject(%this.particleTransportBar))
+	{
+		return;
+	}
+
+	%this.particleTransportBarContainer.setVisible(true);
+	%this.particleTransportBar.onPreviewRebuilt(%assetId);
+}
+
+function AssetAdmin::hideParticleTransport(%this)
+{
+	if(isObject(%this.particleTransportBarContainer))
+	{
+		%this.particleTransportBarContainer.setVisible(false);
+	}
+}
+
+// Something about the selected asset changed and the preview has to catch up.
+//
+// The old answer was to re-click the tile, which rebuilds the preview scene from
+// nothing. That is right for an image or a font, where the picture is a pure
+// function of the asset -- and quite wrong for an animation being edited, where
+// it would clear the running sprite and start again from frame one on every
+// single change. Dragging one frame in the timeline would restart the playback.
+function AssetAdmin::refreshPreview(%this, %asset)
+{
+	// A live edit to what is already on show: the stage keeps the scene it has
+	// and re-reads only what moved, so the preview does not blink and the
+	// playhead does not jump back to the start.
+	if(%this.animationStage.absorbRefresh(%asset))
+	{
+		return;
+	}
+
+	if(isObject(%this.chosenButton))
+	{
+		%this.chosenButton.onClick();
+	}
+}
+
 function AssetAdmin::destroy(%this)
 {
-
+	if(isObject(%this.animationStage))
+	{
+		%this.animationStage.delete();
+	}
+	if(isObject(%this.frameRange))
+	{
+		%this.frameRange.delete();
+	}
+	// Its onRemove drops every snapshot it is holding.
+	if(isObject(%this.undoRecorder))
+	{
+		%this.undoRecorder.delete();
+	}
+	// Takes itself off the bar first if it is still on it.
+	if(isObject(%this.menus))
+	{
+		%this.menus.delete();
+	}
 }
 
 function AssetAdmin::open(%this)
 {
-	%this.Dictionary["ImageAsset"].load();
-	%this.Dictionary["AnimationAsset"].load();
-	%this.Dictionary["ParticleAsset"].load();
-	%this.Dictionary["FontAsset"].load();
-	%this.Dictionary["AudioAsset"].load();
-	//%this.Dictionary["SpineAsset"].load();
+	%this.libWindow.loadAssets();
 
 	%this.assetScene.setScenePause(false);
 	%this.isOpen = true;
+
+	// After loadAssets, so what the menus grey themselves against is the library
+	// as it stands rather than as it was left.
+	EditorCore.setEditorMenus(%this.menus);
+}
+
+//-----------------------------------------------------------------------------
+// Making one.
+//
+// Reached two ways: the New button on each library group, and the File menu's
+// New Asset submenu. Named methods rather than one newAsset(%kind), because both
+// callers want to name a command - the menu carries its command as a string, and
+// a string that reads AssetAdmin.newImageAsset() can be found by searching for
+// it. "Bitmap Font" would defeat a title built out of the type name anyway.
+//-----------------------------------------------------------------------------
+
+function AssetAdmin::openNewAssetDialog(%this, %class, %title, %height)
+{
+	%width = 700;
+	%dialog = new GuiControl()
+	{
+		class = %class;
+		superclass = "EditorDialog";
+		dialogSize = (%width + 8) SPC (%height + 8);
+		dialogCanClose = true;
+		dialogText = %title;
+	};
+	%dialog.init(%width, %height);
+
+	Canvas.pushDialog(%dialog);
+}
+
+function AssetAdmin::newImageAsset(%this)
+{
+	%this.openNewAssetDialog("NewImageAssetDialog", "New Image Asset", 340);
+}
+
+function AssetAdmin::newAnimationAsset(%this)
+{
+	%this.openNewAssetDialog("NewAnimationAssetDialog", "New Animation Asset", 390);
+}
+
+function AssetAdmin::newParticleAsset(%this)
+{
+	%this.openNewAssetDialog("NewParticleAssetDialog", "New Particle Asset", 440);
+}
+
+function AssetAdmin::newFontAsset(%this)
+{
+	%this.openNewAssetDialog("NewFontAssetDialog", "New Bitmap Font Asset", 340);
+}
+
+function AssetAdmin::newAudioAsset(%this)
+{
+	%this.openNewAssetDialog("NewAudioAssetDialog", "New Audio Asset", 340);
+}
+
+//-----------------------------------------------------------------------------
+// Unsaved assets.
+//
+// Any number of assets can be left unsaved at once, and switching between them --
+// or away from the Asset Manager entirely -- deliberately does not ask about it.
+// That is the point: trying a particle out, going to look at the image it uses,
+// and coming back should not cost three dialogs.
+//
+// The question is asked once, at the moments the work would actually be lost:
+// closing the project and leaving the application. See EditorCore::guardedCommand.
+//
+// The window's X cannot ask. quit() is posted straight from the window procedure
+// with no script in between, and onPreExit runs inside shutdown, long past the
+// point where a dialog could be shown. The Gui Editor has always had the same
+// hole; it is not one this can close from here.
+//-----------------------------------------------------------------------------
+
+function AssetAdmin::hasUnsavedAssets(%this)
+{
+	return AssetDatabase.getDirtyAssetCount() > 0;
+}
+
+function AssetAdmin::saveAllAssets(%this)
+{
+	// Compiled before saving, because saving is what takes them off the list.
+	%query = new AssetQuery();
+	AssetDatabase.findAssetDirty(%query, true);
+
+	%count = %query.getCount();
+	for(%i = 0; %i < %count; %i++)
+	{
+		%assetId = %query.getAsset(%i);
+
+		if(AssetDatabase.saveAsset(%assetId))
+		{
+			%this.undoRecorder.onAssetSaved(%assetId);
+		}
+	}
+
+	%query.delete();
+
+	%this.inspector.refreshDocumentBar();
+}
+
+// Ask about the unsaved assets, then hand %command on to whatever guards after
+// this one.
+function AssetAdmin::guardAssets(%this, %command)
+{
+	%this.pendingCommand = %command;
+
+	%count = AssetDatabase.getDirtyAssetCount();
+	%noun = (%count == 1) ? "asset has" : "assets have";
+
+	// The message line is 64 with room to grow into, and the buttons want 34 and a
+	// margin. Plus the 34 the title bar and border take out of the window before
+	// the content sees any of it.
+	%width = 460;
+	%height = 170;
+	%dialog = new GuiControl()
+	{
+		class = "AssetAdminConfirmSaveDialog";
+		superclass = "EditorDialog";
+		dialogSize = (%width + 8) SPC (%height + 8);
+		dialogCanClose = true;
+		dialogResizable = false;
+		dialogText = "Unsaved Assets";
+		message = %count SPC %noun SPC "changes that have not been saved.";
+	};
+	%dialog.init(%width, %height);
+
+	Canvas.pushDialog(%dialog);
+}
+
+// Carry on with what the user originally asked for.
+function AssetAdmin::runPendingCommand(%this)
+{
+	%command = %this.pendingCommand;
+	%this.pendingCommand = "";
+
+	if(%command !$= "")
+	{
+		EditorCore.guardedCommandAfterAssets(%command);
+	}
+}
+
+function AssetAdmin::dropPendingCommand(%this)
+{
+	%this.pendingCommand = "";
 }
 
 function AssetAdmin::close(%this)
 {
-	%this.Dictionary["ImageAsset"].unload();
-	%this.Dictionary["AnimationAsset"].unload();
-	%this.Dictionary["ParticleAsset"].unload();
-	%this.Dictionary["FontAsset"].unload();
-	%this.Dictionary["AudioAsset"].unload();
-	//%this.Dictionary["SpineAsset"].unload();
+	// The last chance to see where the user left the animation editor's dividers:
+	// a frame set announces nothing when one is dragged, so the sizes are read at
+	// the moments the split is about to go away.
+	%this.animationStage.rememberSizes();
+
+	%this.libWindow.unloadAssets();
 
 	%this.assetScene.setScenePause(true);
 	%this.isOpen = false;
-}
 
-function AssetBase::onRefresh(%this)
-{
-	if(AssetAdmin.isOpen  && isObject(AssetAdmin.chosenButton))
-	{
-		AssetAdmin.chosenButton.onClick();
-	}
+	EditorCore.setEditorMenus("");
 }

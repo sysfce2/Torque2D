@@ -205,6 +205,14 @@ static bool active = false;
 static bool newLogFile;
 static const char *logFileName;
 
+// Where the log is written. logFileName is NULL until something sets one, which
+// is what "use the default" means -- the two are kept apart so that clearing the
+// name gets the default back rather than an empty path.
+static const char *currentLogFileName()
+{
+   return logFileName ? logFileName : defLogFileName;
+}
+
 static const int MaxCompletionBufferSize = 4096;
 static char completionBuffer[MaxCompletionBufferSize];
 static char tabBuffer[MaxCompletionBufferSize] = {0};
@@ -436,7 +444,7 @@ static void log(const char *string)
    // In mode 1, we open, append, close on each log write.
    if ((consoleLogMode & 0x3) == 1) 
    {
-      consoleLogFile.open(defLogFileName, FileStream::ReadWrite);
+      consoleLogFile.open(currentLogFileName(), FileStream::ReadWrite);
    }
 
    // Write to the log if its status is hunky-dory.
@@ -1122,10 +1130,38 @@ void setLogMode(S32 newMode)
       else if ((newMode & 0x3) == 2)
       {
          // Starting mode 2, must open logfile.
-         consoleLogFile.open(defLogFileName, FileStream::Write);
+         consoleLogFile.open(currentLogFileName(), FileStream::Write);
       }
       consoleLogMode = newMode;
    }
+}
+
+//------------------------------------------------------------------------------
+
+// Where the log goes. Passing nothing puts it back to console.log.
+//
+// The name matters because the log lives at the working directory root and every
+// copy of the engine shares it: a test harness and a hand-run of the game write
+// the same file, and in mode 2 the first one to start holds it open, so the
+// second produces a log nobody can read.
+void setLogFileName(const char *name)
+{
+   StringTableEntry newName = (name && *name) ? StringTable->insert(name) : NULL;
+   if (newName == logFileName)
+      return;
+
+   // Mode 2 holds the file open, so it has to be let go before the name moves.
+   const bool holdingOpen = ((consoleLogMode & 0x3) == 2);
+   if (holdingOpen)
+      consoleLogFile.close();
+
+   logFileName = newName;
+
+   // The new file is a new file, whatever was written to the old one.
+   newLogFile = true;
+
+   if (holdingOpen)
+      consoleLogFile.open(currentLogFileName(), FileStream::Write);
 }
 
 Namespace *lookupNamespace(const char *ns)

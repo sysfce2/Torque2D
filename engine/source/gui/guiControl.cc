@@ -2575,6 +2575,77 @@ vector<string> GuiControl::splitParagraphs(const char* text)
     return paragraphList;
 }
 
+// The measurer getLineList hands to wrapParagraph: the real font.
+static U32 fontStrWidth(void* context, const char* text)
+{
+    return static_cast<GFont*>(context)->getStrWidth(text);
+}
+
+vector<string> GuiControl::wrapParagraph(const string& paragraph, S32 totalWidth, TextWidthFn measure, void* context)
+{
+    vector<string> lineList = vector<string>();
+
+    vector<string> wordList = vector<string>();
+    istringstream f2(paragraph);
+    string s2;
+    while (getline(f2, s2, ' ')) {
+        wordList.push_back(s2);
+    }
+
+    //now process the word list
+    string line;
+    bool newLine = true;
+    line.clear();
+    for (string& word : wordList)
+    {
+        if (measure(context, word.c_str()) >= totalWidth)
+        {
+            if (line.size() > 0)
+            {
+                lineList.push_back(string(line + " "));
+                line.clear();
+            }
+            lineList.push_back(word + " ");
+            newLine = true;
+            continue;
+        }
+
+        string prevLine = string(line);
+        line += (!newLine) ? " " + word : word;
+        newLine = false;
+        if (measure(context, line.c_str()) >= totalWidth && word.length() != 0)
+        {
+            lineList.push_back(prevLine + " ");
+            line = word;
+        }
+    }
+    // back() on an empty string is undefined behaviour, and an empty
+    // paragraph is ordinary now: it is what a blank line between two
+    // others is made of.
+    if (!paragraph.empty() && paragraph.back() == ' ')
+    {
+        line += " ";
+    }
+
+    // A word too long to fit is pushed as a line of its own and leaves nothing
+    // behind it, so pushing again here would put an empty line after it -- and
+    // that line is not free. It counts into blockHeight, which is what both
+    // vertical alignment and mTextExtend are measured from, so a one-word
+    // caption came out a whole line high under BottomVAlign, half a line high
+    // under MiddleVAlign, and pushed a control that fitted into the "too tall to
+    // fit" branch of renderText.
+    //
+    // An empty paragraph must still produce its one empty line: that is what a
+    // blank line between two others is made of, and what gives an empty
+    // multi-line box somewhere to put its caret.
+    if (!line.empty() || lineList.empty())
+    {
+        lineList.push_back(string(line));
+    }
+
+    return lineList;
+}
+
 vector<string> GuiControl::getLineList(const char* text, GuiControlProfile* profile, S32 totalWidth)
 {
     GFont* font = profile->getFont(mFontSizeAdjust);
@@ -2590,48 +2661,8 @@ vector<string> GuiControl::getLineList(const char* text, GuiControlProfile* prof
 
         for (string& paragraph : paragraphList)
         {
-            vector<string> wordList = vector<string>();
-            istringstream f2(paragraph);
-            string s2;
-            while (getline(f2, s2, ' ')) {
-                wordList.push_back(s2);
-            }
-
-            //now process the word list
-            string line;
-            bool newLine = true;
-            line.clear();
-            for (string& word : wordList)
-            {
-                if (font->getStrWidth(word.c_str()) >= totalWidth)
-                {
-                    if (line.size() > 0)
-                    {
-                        lineList.push_back(string(line + " "));
-                        line.clear();
-                    }
-                    lineList.push_back(word + " ");
-                    newLine = true;
-                    continue;
-                }
-
-                string prevLine = string(line);
-                line += (!newLine) ? " " + word : word;
-                newLine = false;
-                if (font->getStrWidth(line.c_str()) >= totalWidth && word.length() != 0)
-                {
-                    lineList.push_back(prevLine + " ");
-                    line = word;
-                }
-            }
-            // back() on an empty string is undefined behaviour, and an empty
-            // paragraph is ordinary now: it is what a blank line between two
-            // others is made of.
-            if (!paragraph.empty() && paragraph.back() == ' ')
-            {
-                line += " ";
-            }
-            lineList.push_back(string(line));
+            vector<string> paragraphLines = wrapParagraph(paragraph, totalWidth, &fontStrWidth, font);
+            lineList.insert(lineList.end(), paragraphLines.begin(), paragraphLines.end());
         }
     }
 

@@ -103,13 +103,22 @@ engine/compilers/android-studio/app/.cxx/
 # tests build to have something to edit. A test that adds a project folder wants
 # a line here too; ProjectManager.setProjectFolder names them.
 /shots/
+# One console log per test, written by tests/run.ps1 and run-unit.ps1 so a run
+# neither collides with a hand-started editor nor throws away the log of the
+# suite that failed.
+/tests/logs/
+/assetLibrarySmokeProject/
 /assetPickerSmokeProject/
 /borderPaneSmokeProject/
 /borderSmokeProject/
 /colorPopupShotProject/
 /colorPopupSmokeProject/
+/cursorPaneSmokeProject/
+/cursorSlotsSmokeProject/
 /fontShotProject/
 /fontSmokeProject/
+/inspectorTextSmokeProject/
+/inspectorVariantsSmokeProject/
 /profileFormShotProject/
 /profileFormSmokeProject/
 /smokeThemeProject/

@@ -3,7 +3,7 @@
 // cursor node is selected, the seeded per-theme art, the hot-spot magnifier and
 // its drag arithmetic, extras within a category, and the theme rename that has
 // to take the art folder with it.
-// Run: tests/run.ps1 cursorPane  ; grep CURSMOKE in console.log.
+// Run: tests/run.ps1 cursorPane  ; grep CURSMOKE in tests/logs/.
 
 setLogMode(2);
 $Scripts::ignoreDSOs = true;
@@ -144,20 +144,20 @@ function cStep2()
 	// either has to move it. It used to report the pixel the dot had left,
 	// which reads as the magnifier disagreeing with its own numbers.
 	%d.cursorForm.row["hotSpot"].applyValue("5 6");
-	%d.cursorForm.onProfileRowCommit(%d.cursorForm.row["hotSpot"]);
+	%d.cursorForm.onFieldRowCommit(%d.cursorForm.row["hotSpot"]);
 	cCheck("a typed nudge moved where the cursor points", %editor.getEffectiveHotSpot() $= "5 6");
 	cCheck("the readout followed the typed nudge",
 		strstr(%d.cursorForm.readout.getText(), "5, 6") >= 0);
 
 	%d.cursorForm.row["hotSpot"].applyValue("1 1");
-	%d.cursorForm.onProfileRowCommit(%d.cursorForm.row["hotSpot"]);
+	%d.cursorForm.onFieldRowCommit(%d.cursorForm.row["hotSpot"]);
 
 	// --- A tint edit is an override; the art is not. ---
 	// applyValue rather than setValue: setValue also records the new value as
 	// the baseline, so the commit that follows would see nothing changed -- the
 	// guard that stops a text box committing a field the user only tabbed past.
 	%d.cursorForm.row["color"].applyValue("10 20 30 255");
-	%d.cursorForm.onProfileRowCommit(%d.cursorForm.row["color"]);
+	%d.cursorForm.onFieldRowCommit(%d.cursorForm.row["color"]);
 	cCheck("tint committed to the cursor",
 		getWord(%cursor.color, 0) == 10 && getWord(%cursor.color, 2) == 30);
 	cCheck("tint counts as a theme override", %theme.isFieldOverridden(%cursor, "color"));

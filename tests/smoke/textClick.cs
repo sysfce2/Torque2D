@@ -3,7 +3,7 @@
 // Driven by textClick.input.ps1, which posts a real WM_LBUTTONDOWN/UP into the
 // middle of the box, so the whole engine input path is exercised.
 //
-// Old behaviour: GuiProfileEditorRowInput::onTouchDown re-selected everything
+// Old behaviour: EditorFieldRowInput::onTouchDown re-selected everything
 // after the engine had placed the caret, which left the caret at the END of the
 // text and the selection anchored at the start.
 //-----------------------------------------------------------------------------
@@ -49,7 +49,7 @@ function clickStep1()
 
     $box = new GuiTextEditCtrl()
     {
-        class = "GuiProfileEditorRowInput";
+        class = "EditorFieldRowInput";
         Position = "200 200";
         Extent = "500 30";
         Text = $clickText;

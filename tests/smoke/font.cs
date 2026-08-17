@@ -3,7 +3,7 @@
 // machine, the project keeps its caches in one predetermined folder nobody is
 // asked about, and Save bakes a cache for every face/size that was rendered --
 // including the sizes a control's fontSizeAdjust produced, which no field names.
-// Run: tests/run.ps1 font  ; grep FSMOKE in console.log.
+// Run: tests/run.ps1 font  ; grep FSMOKE in tests/logs/.
 
 // Mode 1 rather than the usual 2: it opens, appends and closes the log on every
 // write, so a crash mid-run still leaves every line that got as far as being

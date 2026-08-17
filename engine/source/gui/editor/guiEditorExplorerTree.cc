@@ -22,6 +22,7 @@
 
 #include "gui/editor/guiEditorExplorerTree.h"
 #include "graphics/dgl.h"
+#include "gui/guiDefaultControlRender.h"
 #include "gui/guiCanvas.h"
 #include "gui/editor/guiEditCtrl.h"
 
@@ -234,7 +235,7 @@ void GuiEditorExplorerTree::renderGutterCell(const RectI& cell, const Point2I& c
 	// put the row's own back afterwards, so the icon is the same ink on every row.
 	if (showIcon && frame >= 0 && !mStateImageAsset.isNull())
 	{
-		drawIconFrame(box, mStateImageAsset, (U32)frame);
+		renderImageAssetFrame(box, mStateImageAsset, (U32)frame);
 	}
 }
 

@@ -1,7 +1,7 @@
 // Border-pane persistence smoke test. Drives the Profile Editor's Borders pane
 // through creating a custom border, editing a value, saving, and reloading from
 // disk -- for a themed profile and for a standalone (bundled) profile.
-// Run: tests/run.ps1 border  ; grep BSMOKE in console.log.
+// Run: tests/run.ps1 border  ; grep BSMOKE in tests/logs/.
 
 setLogMode(2);
 $Scripts::ignoreDSOs = true;

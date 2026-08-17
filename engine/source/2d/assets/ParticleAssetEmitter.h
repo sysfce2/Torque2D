@@ -191,6 +191,13 @@ public:
     inline bool getPhysicsParticles(void) const { return mPhysicsParticles; }
     //Phyiscs particles end---
     //Particle Target
+    // The one setter here that deliberately does NOT refreshAsset(), so do not
+    // "fix" it to match its neighbours. A target position is aimed at something
+    // that moves: AngleToy steers an emitter at the cursor by calling this on
+    // every mouse move. A refresh from here would mark the asset dirty and run the
+    // whole notify chain per frame, and ParticlePlayer::onAssetRefreshed rebuilds
+    // every emitter node -- so following the cursor would drop the live particles
+    // continuously. An editor writing this field asks for the refresh itself.
     inline void setTargetPosition(const Vector2& targetPos) { mTargetPosition = targetPos; }
     inline const Vector2& getTargetPosition(void) const { return mTargetPosition; }
     inline void setIsTargeting(const bool targetParticle) { mTargetParticle = targetParticle; refreshAsset(); }

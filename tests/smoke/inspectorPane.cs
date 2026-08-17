@@ -3,7 +3,7 @@
 // of each family, checking that what it shows matches what the class can
 // actually use, that a commit reaches the control, and that reparenting into a
 // layout container makes the geometry it no longer owns go inert.
-// Run: tests/run.ps1 inspectorPane  ; grep IPSMOKE in console.log.
+// Run: tests/run.ps1 inspectorPane  ; grep IPSMOKE in tests/logs/.
 
 setLogMode(1);
 $Scripts::ignoreDSOs = true;
@@ -609,7 +609,7 @@ function pStep8()
 	pCheck("dynamic field survived reselect", isObject(%dyn.row["smokeTag"]));
 
 	// Remove, which is the row's reset button repurposed.
-	%dyn.onProfileRowReset(%dyn.row["smokeTag"]);
+	%dyn.onFieldRowReset(%dyn.row["smokeTag"]);
 	schedule(100, 0, "pStep9");
 }
 

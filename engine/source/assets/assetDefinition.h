@@ -58,6 +58,7 @@ public:
         mAssetLoadedCount = 0;
         mAssetUnloadedCount = 0;
         mAssetRefreshEnable = true;
+        mAssetDirty = false;
         mAssetLooseFiles.clear();
 
         // Reset persisted state.
@@ -77,6 +78,15 @@ public:
     U32                         mAssetLoadedCount;
     U32                         mAssetUnloadedCount;
     bool                        mAssetRefreshEnable;
+
+    /// Whether the asset has been changed in memory since it was last saved.
+    ///
+    /// This lives on the definition and not on the asset because the definition
+    /// outlives the asset: unloadAsset deletes mpAssetBase and keeps the
+    /// definition, so a flag on the asset would be destroyed along with the
+    /// unsaved edits, and along with the record that there were any.
+    bool                        mAssetDirty;
+
     Vector<StringTableEntry>    mAssetLooseFiles;
 
     /// Persisted state.

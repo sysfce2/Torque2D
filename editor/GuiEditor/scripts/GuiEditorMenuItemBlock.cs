@@ -106,7 +106,7 @@ function GuiEditorMenuItemBlock::buildKind(%this)
 {
 	%row = new GuiControl()
 	{
-		class = "GuiEditorChoiceRow";
+		class = "EditorChoiceRow";
 		labelText = "Kind";
 		labelWidth = 76;
 		fieldName = "kind";
@@ -256,7 +256,7 @@ function GuiEditorMenuItemBlock::bind(%this, %ctrl)
 // written itself, per keystroke, so it puts the old value back and writes it
 // once - which is what makes an edit one step on the undo stack however many
 // keys it took.
-function GuiEditorMenuItemBlock::onProfileRowCommit(%this, %row)
+function GuiEditorMenuItemBlock::onFieldRowCommit(%this, %row)
 {
 	if(%this.populating || !isObject(%this.pane.target))
 	{
@@ -299,7 +299,7 @@ function GuiEditorMenuItemBlock::onProfileRowCommit(%this, %row)
 }
 
 // Nothing here has a reset button, so this is only ever the row asking politely.
-function GuiEditorMenuItemBlock::onProfileRowReset(%this, %row)
+function GuiEditorMenuItemBlock::onFieldRowReset(%this, %row)
 {
 }
 

@@ -38,6 +38,11 @@ function GuiEditorInspectorPane::onAdd(%this)
 {
 	ThemeManager.setProfile(%this, "emptyProfile");
 
+	// The font color swatch gets the popup that offers the theme's six colors.
+	// EditorFieldRow lives in EditorCore and cannot name a Gui Editor class, so
+	// the pane that wants one says so -- see its header.
+	%this.swatchClass = "GuiProfileEditorColorPopup";
+
 	%this.spec = new ScriptObject()
 	{
 		class = "GuiEditorControlSpec";
@@ -364,7 +369,7 @@ function GuiEditorInspectorPane::makeFieldRow(%this, %container, %field, %label,
 {
 	%row = new GuiControl()
 	{
-		class = "GuiProfileEditorFieldRow";
+		class = "EditorFieldRow";
 
 		// A grid resizes every cell it lays out, which makes the flag moot there;
 		// a chain does not, so a row in one follows the pane's width from here.
@@ -1520,7 +1525,7 @@ function GuiEditorInspectorPane::fillProfileRow(%this, %row, %field)
 // Commits. Every write to the control goes through here.
 //-----------------------------------------------------------------------------
 
-function GuiEditorInspectorPane::onProfileRowCommit(%this, %row)
+function GuiEditorInspectorPane::onFieldRowCommit(%this, %row)
 {
 	if(%this.populating || !isObject(%this.target))
 	{
@@ -1714,7 +1719,7 @@ function GuiEditorInspectorPane::commitFontColor(%this, %row)
 // else, which has no analogue for a control -- so every other row here hides
 // the button. The font color row keeps it, meaning "stop overriding the
 // profile's".
-function GuiEditorInspectorPane::onProfileRowReset(%this, %row)
+function GuiEditorInspectorPane::onFieldRowReset(%this, %row)
 {
 	if(%row.fieldName !$= "fontColor" || !isObject(%this.target))
 	{
