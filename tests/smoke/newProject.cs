@@ -63,6 +63,12 @@ function npFileHas(%path, %needle)
 	return strpos(strlwr(npRead(%path)), strlwr(%needle)) != -1;
 }
 
+// Case sensitive, for the one thing here where case IS the subject.
+function npFileHasExact(%path, %needle)
+{
+	return strpos(npRead(%path), %needle) != -1;
+}
+
 // Where a control ends, in its parent's coordinates.
 function npBottomOf(%control)
 {
@@ -196,6 +202,16 @@ function npStep3()
 	npCheck("the description is the one typed in", npFileHas(%definition, "A project made by the New Project smoke test."));
 	npCheck("the template's own description is gone", !npFileHas(%definition, "ready for you to craft"));
 	npCheck("the template markers are gone", !npFileHas(%definition, "Template=") && !npFileHas(%definition, "DisplayName="));
+
+	// The declared paths are directories on a case sensitive filesystem, and a
+	// taml round trip used to fold them to whatever spelling the string table
+	// happened to hold -- so a project came out declaring Sprites and Fonts,
+	// and anything put in sprites/ afterwards was never scanned. Checked
+	// exactly, because the whole point is the spelling.
+	npCheck("the declared sprites path keeps its spelling", npFileHasExact(%definition, "Path=\"sprites\""));
+	npCheck("the declared fonts path keeps its spelling", npFileHasExact(%definition, "Path=\"fonts\""));
+	npCheck("the declared extensions keep their spelling", npFileHasExact(%definition, "Extension=\"image.taml\""));
+	npCheck("the script file keeps its spelling", npFileHasExact(%definition, "ScriptFile=\"game.cs\""));
 
 	// The namespace the engine calls, and an asset id, in a file no taml visitor
 	// can reach.

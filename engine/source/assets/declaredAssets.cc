@@ -39,7 +39,16 @@ void DeclaredAssets::initPersistFields()
     // Call Parent.
     Parent::initPersistFields();
         
-    addField("Path", TypeString, Offset(mPath, DeclaredAssets), "" );
-    addField("Extension", TypeString, Offset(mExtension, DeclaredAssets), "" );
+    // TypeCaseString, not TypeString: both of these are read off a case
+    // sensitive filesystem and written back to it. TypeString interns without
+    // caseSens, and the string table's hash is case insensitive, so whichever
+    // spelling of a name reached the table first is the spelling that comes
+    // back -- a module declaring "sprites" gets "Sprites" written into its
+    // module.taml the moment anything else in the process has interned that.
+    // Safe to make case sensitive here because neither value is ever compared
+    // as a StringTableEntry: getPath only ever feeds a dSprintf, and
+    // getExtension is matched with dStricmp inside the scan.
+    addField("Path", TypeCaseString, Offset(mPath, DeclaredAssets), "" );
+    addField("Extension", TypeCaseString, Offset(mExtension, DeclaredAssets), "" );
     addField("Recurse", TypeBool, Offset(mRecurse, DeclaredAssets), "" );
 }

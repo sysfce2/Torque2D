@@ -45,5 +45,8 @@ void ModuleMergeDefinition::initPersistFields()
     Parent::initPersistFields();
 
     /// Module merge.
-    addField( "MergePath", TypeString, Offset(mModuleMergePath, ModuleMergeDefinition), "The path where the modules to be merged can be found." );
+    // TypeCaseString: a directory on disk, so it has to come back out of the
+    // string table spelled the way it went in. Never compared as a string table
+    // pointer -- moduleManager.cc only reads it to build a path from.
+    addField( "MergePath", TypeCaseString, Offset(mModuleMergePath, ModuleMergeDefinition), "The path where the modules to be merged can be found." );
 }
