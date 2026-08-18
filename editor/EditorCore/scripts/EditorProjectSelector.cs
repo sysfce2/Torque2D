@@ -188,14 +188,19 @@ function EditorProjectSelector::onProjectSelected(%this, %folder)
 
 function EditorProjectSelector::onNewProject(%this)
 {
+	// Six 50 pixel form rows, the feedback line, and the button row, plus the 34
+	// pixels the window keeps for its title bar and border. A fixed form gains
+	// nothing from being dragged bigger and loses the bottom of itself behind a
+	// scroll bar when dragged smaller, so it does not resize.
 	%width = 700;
-	%height = 340;
+	%height = 470;
 	%dialog = new GuiControl()
 	{
 		class = "NewProjectDialog";
 		superclass = "EditorDialog";
 		dialogSize = (%width + 8) SPC (%height + 8);
 		dialogCanClose = true;
+		dialogResizable = false;
 		dialogText = "New Project";
 	};
 	%dialog.init(%width, %height);

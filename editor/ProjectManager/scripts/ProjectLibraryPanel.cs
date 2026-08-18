@@ -24,7 +24,9 @@ function ProjectLibraryPanel::load(%this)
 
 function ProjectLibraryPanel::addModule(%this, %module)
 {
-	if(%module.type !$= "Template")
+	// Template modules are stamped out into a project by New Module or New
+	// Project, not installed alongside it, so they do not belong in this list.
+	if(!%module.Template)
 	{
 		%this.list.addItemWithID(%this.getModuleName(%module), %module);
 	}

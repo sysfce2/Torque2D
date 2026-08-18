@@ -42,6 +42,22 @@ function EditorForm::addFormItem(%this, %text, %size)
 	return %label;
 }
 
+// Explains a row on hover. The tip goes on the caption as well as on the input,
+// because the caption is the bigger target and it is what someone is looking at
+// when the question comes up -- and the caption is the input's parent, so
+// without both, half the row says nothing.
+function EditorForm::setItemTip(%this, %label, %control, %tip)
+{
+	%label.Tooltip = %tip;
+	ThemeManager.setProfile(%label, "tipProfile", "TooltipProfile");
+
+	if(isObject(%control))
+	{
+		%control.Tooltip = %tip;
+		ThemeManager.setProfile(%control, "tipProfile", "TooltipProfile");
+	}
+}
+
 function EditorForm::createTextEditItem(%this, %label)
 {
 	%textEdit = new GuiTextEditCtrl()

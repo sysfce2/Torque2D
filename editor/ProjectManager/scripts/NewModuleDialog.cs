@@ -61,17 +61,35 @@ function NewModuleDialog::populateModuleDropDown(%this)
 
 	%allModules = %manager.findModules(false);
 
+	// The dropdown shows a display name, and sortByText reorders it, so the id a
+	// name belongs to is remembered against the name rather than by position. The
+	// manager and its module definitions are gone by the time a choice is made.
 	for(%i = 0; %i < getWordCount(%allModules); %i++)
 	{
 		%mod = getWord(%allModules, %i);
-		if(%mod.type $= "template")
+		if(%mod.Template)
 		{
-			%this.templateDropDown.addItem(%mod.ModuleID);
+			%name = ModuleStamper.displayName(%mod);
+			%this.templateDropDown.addItem(%name);
+			%this.templateID[%name] = %mod.ModuleID;
 		}
 	}
 	%this.templateDropDown.sortByText();
 	%this.templateDropDown.insertItem(0, "none");
 	%this.templateDropDown.setSelected(0);
+
+	%manager.delete();
+}
+
+function NewModuleDialog::getSelectedTemplate(%this)
+{
+	%name = %this.templateDropDown.getText();
+	if(%name $= "none" || %this.templateID[%name] $= "")
+	{
+		return "none";
+	}
+
+	return %this.templateID[%name];
 }
 
 function NewModuleDialog::onDropDownClosed(%this, %dropDown)
@@ -93,7 +111,6 @@ function NewModuleDialog::Validate(%this)
 {
 	%this.createButton.active = false;
 
-	%module = %this.templateDropDown.getText();
 	%name = %this.moduleNameBox.getText();
 	%path = pathConcat(getMainDotCsDir(), ProjectManager.getProjectFolder(), %name);
 
@@ -112,7 +129,7 @@ function NewModuleDialog::onCreate(%this)
 {
 	if(%this.validate())
 	{
-		%module = %this.templateDropDown.getText();
+		%module = %this.getSelectedTemplate();
 		%name = %this.moduleNameBox.getText();
 		%path = pathConcat(getMainDotCsDir(), ProjectManager.getProjectFolder(), %name);
 
