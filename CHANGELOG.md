@@ -55,6 +55,8 @@ and makes CMake the only build system.
 - `PlanetX`, a complete twin-stick demo game, ships as a reference project: a title screen, a noise-generated level, co-op, weapon upgrades chosen between levels, an options screen with rebindable controls, and a pause menu. It is also the reference implementation for `TORQUE_SCRIPT.md`, the new prescriptive style guide for TorqueScript.
 - `TruckToy` was reskinned as an alien-world space rover with a camera-driven parallax background and object-pooled effects.
 - The test suites got runners: `tests\run.ps1` (and `tests/run.sh` for macOS and Linux) for the TorqueScript integration suites, and `tests\run-unit.ps1` for the GoogleTest unit suite.
+- The New Project dialog asks for a **Module Name**, an **Author** and a **Description**, and offers a **Game Core** template to copy from. Module Name defaults to the title stripped to identifier characters with `Game` appended, and follows the title until you edit it.
+- `BlankGame` ships the folders it declares. It had declared eight asset paths and shipped three, so every project made from it warned four times the first time it was opened. Each new folder carries a readme saying what belongs in it and how a file there becomes an asset.
 
 ### Changed
 
@@ -69,6 +71,8 @@ and makes CMake the only build system.
 - Zoom works on the 0-to-1 particle graphs (all four color channels and alpha), which had exactly one zoom level and two dead buttons.
 - A `GuiControlProfile`'s `bitmap` and a `GuiCursor`'s `bitmapName` are written relative to the game root when they point inside it. Both are `TypeFilename`, which expands to an absolute path the moment it is set, so what got saved named a folder on one developer's machine. TAML no longer collapses a path that is already relative back into an absolute one.
 - Font caches are no longer baked while you edit a theme; a save bakes each face and size the theme actually rendered at. Changing a font size went from several seconds of frozen engine to nothing.
+- A new project's game module is named after the project rather than being called `BlankGame`. The Author and Description you type now reach that module too, instead of only AppCore. Existing projects are unaffected -- their module keeps the name it was made with.
+- Renaming a module rewrites the module's own source, not just its `module.taml`. A ModuleId is also the namespace the engine calls `<ModuleId>::create()` on and the front half of every asset id, so changing only the definition file left a module that loaded, reported its new name everywhere the editor looked, and silently never ran. All three rename paths go through one place now.
 
 ### Fixed
 
@@ -94,6 +98,8 @@ and makes CMake the only build system.
 - A bitmap font was never initialized and never cleared, so an asset pointed at a missing `.fnt` kept the glyphs of the font it used to have and pointing one at a second `.fnt` left the union of both.
 - `GuiMenuItemCtrl`'s `Radio` field was declared as an integer over a one-byte member, so a plain command could read back as a radio item.
 - A menu bar's `findHitControl` hid rather than overrode its base, so clicking a menu on an authored bar handed the editor the wrong control.
+- Declared asset paths kept the case they were written in. `Path` and `Extension` were plain strings, which the string table interns case-insensitively and hands back whichever spelling reached it first -- so a module copied from a template could come out declaring `Path="Sprites"` where the template said `sprites`. On Windows nobody noticed; on Linux that directory does not exist, so images dropped into `sprites/` were never scanned and never became assets, silently, with a `module.taml` that looked correct.
+- Directory names survive a scan with the case they have on disk. `readdir` results were interned case-insensitively, and two of the most ordinary asset folder names -- `sprites` and `fonts` -- are interned during static initialisation by unrelated engine code, so those two could never come back correctly. A folder could be reported by a scan and then fail to open.
 
 ### Removed
 
