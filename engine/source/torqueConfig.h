@@ -26,13 +26,14 @@
 //-----------------------------------------------------------------------------
 
 /// Version number is major * 1000 + minor * 100 + revision * 10.
-#define TORQUE_GAME_ENGINE          1000
+#define TORQUE_GAME_ENGINE          4000
 
 /// What's the name of your game? Used in a variety of places.
 #define TORQUE_GAME_NAME            "Torque 2D 4.0: Rocket Edition"
 
-/// Human readable version string.
-#define TORQUE_GAME_VERSION_STRING  "Open Source"
+/// Human readable version string.  Printed at start-up and returned by the script
+/// function getVersionString().
+#define TORQUE_GAME_VERSION_STRING  "4.0 Early Access 4"
 
 //-----------------------------------------------------------------------------
 

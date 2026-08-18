@@ -363,7 +363,7 @@ void ParticlePlayer::integrateObject( const F32 totalTime, const F32 elapsedTime
 
                 // Fetch the quantity base and variation fields.
                 const ParticleAssetField& quantityBaseField = pParticleAssetEmitter->getQuantityBaseField();
-                const ParticleAssetField& quantityVaritationField = pParticleAssetEmitter->getQuantityBaseField();
+                const ParticleAssetField& quantityVaritationField = pParticleAssetEmitter->getQuantityVariationField();
 
                 // Fetch the emissions.
                 const F32 baseEmission = quantityBaseField.getFieldValue( particlePlayerAge );
@@ -582,9 +582,17 @@ void ParticlePlayer::sceneRender( const SceneRenderState* pSceneRenderState, con
         else
         {
             // No, so set standard blend options.
-            if ( mBlendMode )
+            //
+            // The EMITTER's blend options, not the player's. These are per-emitter
+            // fields that round-tripped through TAML and were read by nothing but
+            // their own write predicates -- this branch used mBlendMode /
+            // mSrcBlendFactor / mDstBlendFactor, which ParticlePlayer does not
+            // declare, so they resolved to the inherited SceneObject members and
+            // one setting covered every emitter at once. Intense particles above
+            // still override, as they always did.
+            if ( pParticleAssetEmitter->getBlendMode() )
             {
-                pBatchRenderer->setBlendMode( mSrcBlendFactor, mDstBlendFactor );
+                pBatchRenderer->setBlendMode( pParticleAssetEmitter->getSrcBlendFactor(), pParticleAssetEmitter->getDstBlendFactor() );
             }
             else
             {
@@ -1254,10 +1262,16 @@ void ParticlePlayer::configureParticle( EmitterNode* pEmitterNode, ParticleSyste
     const ParticleAssetField& alphaChannelScale = pParticleAsset->getAlphaChannelScaleField();
 
     // Calculate the color.
+    //
+    // The channel fields are sampled at the PARTICLE's age -- zero here, because
+    // this particle is being born -- while the asset's alpha scale, like every
+    // other asset-scope scale field, is sampled at the EFFECT's age. It used to be
+    // sampled at zero as well, which read only its first key and threw away the
+    // rest of the curve the Scale Graph tab lets you draw.
     pParticleNode->mColor.set(  mClampF( redChannel.getFieldValue( 0.0f ), redChannel.getMinValue(), redChannel.getMaxValue() ),
                                 mClampF( greenChannel.getFieldValue( 0.0f ),greenChannel.getMinValue(), greenChannel.getMaxValue() ),
                                 mClampF( blueChannel.getFieldValue( 0.0f ), blueChannel.getMinValue(),blueChannel.getMaxValue() ),
-                                mClampF( alphaChannel.getFieldValue( 0.0f ) * alphaChannelScale.getFieldValue( 0.0f ), alphaChannel.getMinValue(), alphaChannel.getMaxValue() ) );
+                                mClampF( alphaChannel.getFieldValue( 0.0f ) * alphaChannelScale.getFieldValue( particlePlayerAge ), alphaChannel.getMinValue(), alphaChannel.getMaxValue() ) );
 
 
     // **********************************************************************************************************************
@@ -1390,10 +1404,14 @@ void ParticlePlayer::integrateParticle( EmitterNode* pEmitterNode, ParticleSyste
     const ParticleAssetField& alphaChannelScale = pParticleAsset->getAlphaChannelScaleField();
 
     // Calculate the color.
+    //
+    // Two different clocks, as in configureParticle above: the channel fields run
+    // on the particle's normalized age, the asset's alpha scale on the effect's
+    // age (mAge). Sampling the scale at zero read only its first key.
     pParticleNode->mColor.set(  mClampF( redChannel.getFieldValue( particleAge ), redChannel.getMinValue(), redChannel.getMaxValue() ),
                                 mClampF( greenChannel.getFieldValue( particleAge ),greenChannel.getMinValue(), greenChannel.getMaxValue() ),
                                 mClampF( blueChannel.getFieldValue( particleAge ), blueChannel.getMinValue(),blueChannel.getMaxValue() ),
-                                mClampF( alphaChannel.getFieldValue( particleAge ) * alphaChannelScale.getFieldValue( 0.0f ), alphaChannel.getMinValue(), alphaChannel.getMaxValue() ) );
+                                mClampF( alphaChannel.getFieldValue( particleAge ) * alphaChannelScale.getFieldValue( mAge ), alphaChannel.getMinValue(), alphaChannel.getMaxValue() ) );
 
 
     // **********************************************************************************************************************

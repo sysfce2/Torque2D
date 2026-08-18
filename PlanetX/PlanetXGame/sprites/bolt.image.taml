@@ -1,0 +1,4 @@
+<ImageAsset
+    AssetName="bolt"
+    ImageFile="bolt.png"
+    FilterMode="NEAREST" />

@@ -1,0 +1,33 @@
+<ParticleAsset
+    AssetName="steam">
+    <ParticleAssetEmitter
+        EmitterName="vent"
+        FixedForceAngle="90"
+        OldestInFront="1"
+        Image="@asset=PlanetXGame:puff">
+        <ParticleAssetEmitter.Fields>
+            <Quantity
+                Keys="0 26" />
+            <Lifetime
+                Keys="0 0.7" />
+            <LifetimeVariation
+                Keys="0 0.25" />
+            <EmissionArc
+                Keys="0 40" />
+            <EmissionAngle
+                Keys="0 90" />
+            <Speed
+                Keys="0 2" />
+            <SpeedVariation
+                Keys="0 1" />
+            <FixedForce
+                Keys="0 5" />
+            <SizeXLife
+                Keys="0 0.4 0.3 0.9 1 1.4" />
+            <SizeXVariation
+                Keys="0 0.4" />
+            <AlphaChannel
+                Keys="0 0 0.1 0.45 0.6 0.3 1 0" />
+        </ParticleAssetEmitter.Fields>
+    </ParticleAssetEmitter>
+</ParticleAsset>

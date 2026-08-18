@@ -47,8 +47,21 @@ typedef U32 AUDIOHANDLE;
 namespace Audio
 {
    enum Constants {
-    
-      AudioVolumeChannels = 32
+
+      AudioVolumeChannels = 32,
+
+      /// The channel an editor auditions an asset on.
+      ///
+      /// Reserved so a preview cannot be silenced by, or interfere with, the
+      /// running game's mix: a game that has turned its music channel down to
+      /// nothing would otherwise make the Asset Manager unable to play a music
+      /// asset at all, because alxCreateSource refuses to build a source on a
+      /// muted channel rather than building a quiet one.
+      ///
+      /// The last channel rather than the first free one, because channel
+      /// numbering is a per-game convention with no engine meaning and games
+      /// count up from zero.
+      AudioPreviewChannel = AudioVolumeChannels - 1
    };
 
    //--------------------------------------
@@ -59,6 +72,7 @@ namespace Audio
       S32  mVolumeChannel;
       bool mIsLooping;
       bool mIsStreaming;
+      bool mIsPriority; // when the voice pool is full, a priority sound is only culled if every other source is also a priority sound
 
       bool mIs3D;
       F32  mReferenceDistance;
@@ -99,6 +113,14 @@ void alxStopAll();
 
 // one-shot helper alxPlay functions, create and play in one call
 AUDIOHANDLE alxPlay(const AudioAsset *profile, const MatrixF *transform=NULL, const Point3F *velocity=NULL);
+
+/// Audition an asset as it was authored, ignoring the running game's mix.
+///
+/// Same file, looping and streaming flags as alxPlay, but at full volume on
+/// Audio::AudioPreviewChannel and past the master volume, so an editor hears the
+/// asset itself rather than the asset as this particular game happens to be
+/// mixing it. For editor previews only -- a game wants alxPlay.
+AUDIOHANDLE alxPlayPreview(const AudioAsset *profile);
 
 
 // Source

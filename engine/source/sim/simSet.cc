@@ -404,6 +404,37 @@ void SimGroup::onChildRemoved(SimObject* obj)
 
 //////////////////////////////////////////////////////////////////////////
 
+void SimGroup::deepCloneChildren(SimObject* clone)
+{
+   SimGroup* pCloneGroup = dynamic_cast<SimGroup*>( clone );
+   if ( pCloneGroup == NULL )
+      return;
+
+   // The child is added while it is still empty, and only then filled in. That
+   // order is the point: a container that places its own children takes what it
+   // wants from a child as the child arrives - a GuiChainCtrl zeroes its
+   // position, a GuiGridCtrl forces its sizing off center, a GuiFrameSetCtrl
+   // puts it in a frame - and every one of those would overwrite the values a
+   // copy is trying to carry if they were written first.
+   //
+   // Order within the list is the arrival order, so the copy holds its children
+   // in the same order the original does. Anything that lays out by list order
+   // (which is all of them) therefore lays the copy out the same way.
+   for (iterator itr = begin(); itr != end(); itr++)
+   {
+      SimObject* pChild = *itr;
+
+      SimObject* pChildClone = pChild->allocClone();
+      if ( pChildClone == NULL )
+         continue;
+
+      pCloneGroup->addObject( pChildClone );
+      pChild->cloneInto( pChildClone );
+   }
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 void SimGroup::onRemove()
 {
    lock();

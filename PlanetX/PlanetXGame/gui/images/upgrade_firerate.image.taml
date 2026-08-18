@@ -1,0 +1,4 @@
+<ImageAsset
+    AssetName="upgrade_firerate"
+    AssetCategory="card"
+    ImageFile="@assetFile=upgrade_firerate.png" />

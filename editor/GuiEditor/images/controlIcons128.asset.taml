@@ -1,0 +1,8 @@
+<ImageAsset
+    AssetName="controlIcons128"
+    ImageFile="controlIcons128.png"
+    CellCountX="8"
+    CellCountY="4"
+    CellWidth="128"
+    CellHeight="128"
+	AssetInternal="1" />

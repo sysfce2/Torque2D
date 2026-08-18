@@ -63,6 +63,7 @@ function BaseTheme::onAdd(%this)
 	%this.makeDropDownProfile();
 	%this.makeWindowProfile();
 	%this.makeListBoxProfile();
+	%this.makeFrameGridProfile();
 	%this.makeTreeViewProfile();
 	%this.makeGraphProfile();
 	%this.makeTextDisplayProfile();
@@ -80,7 +81,7 @@ function BaseTheme::init(%this)
 	%this.font[1] = "raleway";//Most common font
 	%this.font[2] = "black ops one";//Title fontType
 	%this.font[3] = "fira code semibold";//Code and console font
-	%this.fontDirectory = expandPath("^EditorCore/Themes/BaseTheme/Fonts");
+	%this.fontDirectory = expandPath("^EditorCore/Themes/BaseTheme/fonts");
 	%this.fontSize = 20;
 
 	%this.color1 = "10 10 10 255";//Most commonly used for backgrounds
@@ -1156,6 +1157,20 @@ function BaseTheme::makeTextEditProfile(%this)
 		borderDefault = %labelBorder;
 	};
 
+	%this.overrideLabelProfile = new GuiControlProfile()
+	{
+		fillColor = "0 0 0 0";
+
+		fontType = %this.font[2];
+		fontDirectory = %this.fontDirectory;
+		fontSize = %this.fontSize - 2;
+		fontColor = %this.color5;
+		align = "left";
+		vAlign = "top";
+
+		borderDefault = %labelBorder;
+	};
+
 	%textBorderV = new GuiBorderProfile()
 	{
 		padding = 2;
@@ -1872,6 +1887,66 @@ function BaseTheme::makeListBoxProfile(%this)
 	};
 }
 
+//-----------------------------------------------------------------------------
+// The animation editor's frame grids -- the palette of an image's frames and the
+// timeline of the frames an animation plays.
+//
+// They had been borrowing listBoxProfile, because it is the one with canKeyFocus,
+// and three of its fields mean something different there to what they have to
+// mean here:
+//
+//   fillColorHL   a list row's hover is deliberately a whisper -- color1 nudged
+//                 by 4 -- which over a picture is no change at all
+//   fontColorSL   is the ink drawn ON a selected row, so it is dark against the
+//                 accent. Used as a playhead bar it vanished completely
+//   fillColorSL   the accent, which reads well as a selection but leaves nothing
+//                 distinct for the playhead sitting on top of it
+//
+// So the grids get their own, and what each field is for is written down here
+// because there is no other way to know from the far end:
+//
+//   fillColor     the strip behind the cells
+//   fillColorHL   the cell under the pointer -- a real, visible change
+//   fillColorSL   the picked cell: a raised surface, NOT the accent, so that
+//                 the playhead stays legible on top of it
+//   fillColorNA   the cell a drag would discard if released now
+//   fontColor     the frame numbers, quiet enough to read art through
+//   fontColorHL   the insertion caret, which is transient and wants to be seen
+//   fontColorSL   the playhead. The accent, and the only thing here that has to
+//                 be findable at a glance while the animation runs
+//-----------------------------------------------------------------------------
+function BaseTheme::makeFrameGridProfile(%this)
+{
+	%this.frameGridProfile = new GuiControlProfile()
+	{
+		fillColor = %this.adjustValue(%this.color1, 2);
+		fillColorHL = %this.color2;
+		fillColorSL = %this.color3;
+		fillColorNA = %this.setAlpha(%this.color3, 110);
+
+		fontType = %this.font[3];
+		fontDirectory = %this.fontDirectory;
+		fontSize = %this.fontSize;
+		fontColor = %this.setAlpha(%this.color4, 200);
+		fontColorHL = %this.color4;
+		fontColorSL = %this.color5;
+
+		// Errors, in the sense the console profile uses this slot for. The
+		// timeline outlines a frame naming a cell the image no longer has, and this
+		// is the color of that outline and of its label. The four FILL colors are
+		// all spoken for -- background, hover, selected, and about-to-be-discarded
+		// during a drag -- which is why a missing frame is a border rather than a
+		// wash.
+		fontColorNA = "255 0 0 255";
+
+		// The Delete key only reaches a control that can hold focus, and the
+		// timeline's whole keyboard depends on it.
+		canKeyFocus = true;
+
+		borderDefault = %this.emptyBorder;
+	};
+}
+
 function BaseTheme::makeTreeViewProfile(%this)
 {
 	%this.treeViewProfile = new GuiControlProfile ()
@@ -2009,6 +2084,19 @@ function BaseTheme::makeTextDisplayProfile(%this)
 		borderLeft = %spacerBorder;
 		borderRight = %spacerBorder;
 		borderBottom = %spacerBorder;
+	};
+
+	%this.impactProfile = new GuiControlProfile()
+	{
+		fillColor = %this.color5;
+		fontType = %this.font[3];
+		fontDirectory = %this.fontDirectory;
+		fontSize = 16;
+		fontColor = %this.color1;
+		align = "center";
+		vAlign = "middle";
+
+		borderDefault = %this.emptyBorder;
 	};
 }
 

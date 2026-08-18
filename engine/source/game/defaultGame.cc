@@ -125,17 +125,23 @@ bool initializeLibraries()
 
     // Create the stock colors.
     StockColor::create();
-    
-#if defined(TORQUE_OS_IOS) || defined(TORQUE_OS_ANDROID) || defined(TORQUE_OS_EMSCRIPTEN)
-   //3MB default is way too big for iPhone!!!
-#ifdef	TORQUE_SHIPPING
-    FrameAllocator::init(256 * 1024);	//256KB for now... but let's test and see!
-#else
-    FrameAllocator::init(512 * 1024);	//512KB for now... but let's test and see!
-#endif	//TORQUE_SHIPPING
-#else
+
+    // Create GuiDefaultProfile. Every control falls back to it by name, so the
+    // engine owns it rather than trusting a script module to define one.
+    GuiControlProfile::createDefaultProfile();
+
+    // Every target — desktop, iOS, Emscripten AND Android — boots the SAME
+    // desktop-class editor (main.cs), which is sized for the 3MB frame-allocator
+    // budget. The historical 256/512KB mobile limit (a 2013, ~256MB-RAM-era iPhone
+    // value) is far too small: a single editor-boot allocation overruns it, tripping
+    // the FrameAllocator "alloc too large" path -> the app halts (a black screen, or a
+    // hard SEGV in FrameAllocator::alloc on Android). In particular, once a font
+    // actually resolves on Android, GFont::read() allocates a FrameTemp to decompress
+    // the .uft glyph table that exceeds 512KB (GuiListBoxCtrl::updateSize -> getFont ->
+    // GFont::create -> GFont::read). iOS and Emscripten were already bumped to 3MB for
+    // exactly this; Android is the same editor, so it gets the same budget. 3MB is
+    // negligible on any modern device or the browser heap.
     FrameAllocator::init(3 << 20);      // 3 meg frame allocator buffer
-#endif	//TORQUE_OS_IOS
 
     TextureManager::create();
     ResManager::create();
@@ -301,7 +307,18 @@ bool initializeGame(int argc, const char **argv)
     Platform::makeFullPathName(useDefaultScript ? defaultScriptName : argv[1], buffer, sizeof(buffer), Platform::getCurrentDirectory());
     ptr = dStrrchr( buffer, '/' );
     if ( ptr )
-        *ptr = 0;
+    {
+        // If the only slash is the leading one, the script lives at the filesystem
+        // root (e.g. "/main.cs" on Android, where the asset tree is the APK root).
+        // Truncating at that slash would leave an EMPTY main.cs dir, and an empty
+        // cwd feeds makeFullPathName a buffer whose end pointer underflows past its
+        // start -> out-of-bounds path math -> crash during module registration.
+        // Keep the leading slash so the directory is "/" rather than "".
+        if ( ptr == buffer )
+            ptr[1] = 0;   // "/"
+        else
+            *ptr = 0;
+    }
     Platform::setMainDotCsDir(buffer);
     Platform::setCurrentDirectory(buffer);
 

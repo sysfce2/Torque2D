@@ -1,0 +1,4 @@
+<ImageAsset
+    AssetName="upgrade_ventfast"
+    AssetCategory="card"
+    ImageFile="@assetFile=upgrade_ventfast.png" />

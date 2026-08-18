@@ -1,0 +1,4 @@
+<ImageAsset
+    AssetName="upgrade_selfdestruct"
+    AssetCategory="card"
+    ImageFile="@assetFile=upgrade_selfdestruct.png" />

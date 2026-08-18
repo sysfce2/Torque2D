@@ -88,7 +88,12 @@ function loadToy( %moduleDefinition )
     %moduleDefinition.ScopeSet.add( SandboxScene );    
     
     // Add toy scope-set as a listener.
-    SandboxWindow.addInputListener( %moduleDefinition.ScopeSet );        
+    SandboxWindow.addInputListener( %moduleDefinition.ScopeSet );
+
+    // The toy just set its own (fixed-aspect) camera size during load. Re-fit it
+    // to the current window so the scene isn't stretched when the toy is loaded
+    // into a window that's been resized away from the toy's intended ratio.
+    SandboxWindow.updateCameraAspect();
 }
 
 //-----------------------------------------------------------------------------

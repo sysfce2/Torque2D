@@ -50,9 +50,10 @@ public:
 
     static void initPersistFields();
 
-    inline void setPath( const char* pPath )            { mPath = StringTable->insert( pPath ); }
+    // Case sensitive, to match the TypeCaseString fields these back.
+    inline void setPath( const char* pPath )            { mPath = StringTable->insert( pPath, true ); }
     inline StringTableEntry getPath( void ) const       { return mPath; }
-    inline void setExtension( const char* pPath )       { mExtension = StringTable->insert( pPath ); }
+    inline void setExtension( const char* pPath )       { mExtension = StringTable->insert( pPath, true ); }
     inline StringTableEntry getExtension( void ) const  { return mExtension; }
     inline void setRecurse( const bool recurse )        { mRecurse = recurse; }
     inline bool getRecurse( void ) const                { return mRecurse; }

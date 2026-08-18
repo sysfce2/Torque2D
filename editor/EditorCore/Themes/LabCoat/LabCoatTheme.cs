@@ -6,7 +6,7 @@ function LabCoatTheme::init(%this)
 	%this.font[1] = "roboto";//Most common font
 	%this.font[2] = "zen dots";//Title fontType
 	%this.font[3] = "share tech mono";//Code and console font
-	%this.fontDirectory = expandPath("^EditorCore/Themes/LabCoat/Fonts");
+	%this.fontDirectory = expandPath("^EditorCore/Themes/LabCoat/fonts");
 	%this.fontSize = 20;
 
 	%this.color1 = "255 255 255 255";

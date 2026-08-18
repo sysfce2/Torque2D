@@ -21,6 +21,7 @@
 //-----------------------------------------------------------------------------
 #include "gui/editor/guiInspector.h"
 #include "gui/buttons/guiButtonCtrl.h"
+#include "gui/guiProfileTheme.h"
 #include "memory/frameAllocator.h"
 
 #pragma region GuiInspector
@@ -43,6 +44,9 @@ GuiInspector::GuiInspector()
 
    mLabelProfile = NULL;
    setField("LabelProfile", "GuiDefaultProfile");
+
+   mOverrideLabelProfile = NULL;
+   setField("OverrideLabelProfile", "GuiDefaultProfile");
 
    mTextEditProfile = NULL;
    setField("TextEditProfile", "GuiTextEditProfile");
@@ -94,6 +98,7 @@ void GuiInspector::initPersistFields()
 	addField("GroupPanelProfile", TypeGuiProfile, Offset(mGroupPanelProfile, GuiInspector));
 	addField("GroupGridProfile", TypeGuiProfile, Offset(mGroupGridProfile, GuiInspector));
 	addField("LabelProfile", TypeGuiProfile, Offset(mLabelProfile, GuiInspector));
+	addField("OverrideLabelProfile", TypeGuiProfile, Offset(mOverrideLabelProfile, GuiInspector));
 	addField("TextEditProfile", TypeGuiProfile, Offset(mTextEditProfile, GuiInspector));
 	addField("DropDownProfile", TypeGuiProfile, Offset(mDropDownProfile, GuiInspector));
 	addField("DropDownItemProfile", TypeGuiProfile, Offset(mDropDownItemProfile, GuiInspector));
@@ -130,6 +135,9 @@ bool GuiInspector::onWake()
 
 	if (mLabelProfile != NULL)
 		mLabelProfile->incRefCount();
+
+	if (mOverrideLabelProfile != NULL)
+		mOverrideLabelProfile->incRefCount();
 
 	if (mTextEditProfile != NULL)
 		mTextEditProfile->incRefCount();
@@ -188,6 +196,9 @@ void GuiInspector::onSleep()
 
 	if (mLabelProfile != NULL)
 		mLabelProfile->decRefCount();
+
+	if (mOverrideLabelProfile != NULL)
+		mOverrideLabelProfile->decRefCount();
 
 	if (mTextEditProfile != NULL)
 		mTextEditProfile->decRefCount();
@@ -510,6 +521,8 @@ GuiInspectorField::GuiInspectorField( GuiInspectorGroup* parent, SimObjectPtr<Si
    mField      = field;
    mCanSave    = false;
    mFieldArrayIndex = NULL;
+   mEdit       = NULL;
+   mResetButton = NULL;
 }
 
 GuiInspectorField::GuiInspectorField()
@@ -520,6 +533,83 @@ GuiInspectorField::GuiInspectorField()
    mField         = NULL;
    mFieldArrayIndex = NULL;
    mCanSave       = false;
+   mEdit          = NULL;
+   mResetButton   = NULL;
+}
+
+GuiProfileTheme* GuiInspectorField::getTargetTheme()
+{
+   SimObject* target = mTarget;
+   if( target == NULL )
+      return NULL;
+
+   GuiControlProfile* profile = dynamic_cast<GuiControlProfile*>( target );
+   if( profile != NULL )
+      return profile->getTheme();
+
+   GuiBorderProfile* border = dynamic_cast<GuiBorderProfile*>( target );
+   if( border != NULL )
+      return border->getTheme();
+
+   return NULL;
+}
+
+bool GuiInspectorField::isThemeOverridden()
+{
+   if( mField == NULL || getTargetTheme() == NULL )
+      return false;
+
+   SimObject* target = mTarget;
+   GuiControlProfile* profile = dynamic_cast<GuiControlProfile*>( target );
+   if( profile != NULL )
+      return profile->isThemeFieldOverridden( mField->pFieldname );
+
+   GuiBorderProfile* border = dynamic_cast<GuiBorderProfile*>( target );
+   if( border != NULL )
+      return border->isThemeFieldOverridden( mField->pFieldname );
+
+   return false;
+}
+
+void GuiInspectorField::refreshOverrideDisplay()
+{
+   if( getTargetTheme() == NULL || mGroup == NULL || mGroup->mInspector == NULL )
+      return;
+
+   const bool overridden = isThemeOverridden();
+
+   GuiControlProfile* labelProfile = ( overridden && mGroup->mInspector->mOverrideLabelProfile != NULL )
+      ? mGroup->mInspector->mOverrideLabelProfile
+      : mGroup->mInspector->mLabelProfile;
+   if( labelProfile != NULL )
+      setControlProfile( labelProfile );
+
+   if( mResetButton != NULL )
+      mResetButton->setVisible( overridden );
+}
+
+void GuiInspectorField::resetToThemeDefault()
+{
+   GuiProfileTheme* theme = getTargetTheme();
+   if( theme == NULL || mField == NULL )
+      return;
+
+   SimObject* target = mTarget;
+   GuiControlProfile* profile = dynamic_cast<GuiControlProfile*>( target );
+   if( profile != NULL )
+      profile->clearThemeFieldOverride( mField->pFieldname );
+
+   GuiBorderProfile* border = dynamic_cast<GuiBorderProfile*>( target );
+   if( border != NULL )
+      border->clearThemeFieldOverride( mField->pFieldname );
+
+   theme->restamp();
+
+   updateValue( getData() );
+   refreshOverrideDisplay();
+
+   if( mGroup != NULL && mGroup->mInspector != NULL && mGroup->mInspector->isMethod( "onPostApply" ) )
+      Con::executef( mGroup->mInspector, 3, "onPostApply", Con::getIntArg( mTarget->getId() ) );
 }
 
 GuiInspectorField::~GuiInspectorField()
@@ -550,6 +640,8 @@ void GuiInspectorField::setData( const char* data )
    {
 	   Con::executef(mGroup->mInspector, 3, "onPostApply", Con::getIntArg(mTarget->getId()));
    }
+
+   refreshOverrideDisplay();
 }
 
 const char* GuiInspectorField::getData()
@@ -675,6 +767,32 @@ bool GuiInspectorField::onAdd()
 	// Force our editField to set it's value
 	updateValue( getData() );
 
+	// Themed profile members get a reset-to-theme button on the label line;
+	// every other target keeps the row exactly as before.
+	if( getTargetTheme() != NULL )
+	{
+		mResetButton = new GuiButtonCtrl();
+		if( mGroup->mInspector->mButtonProfile != NULL )
+			mResetButton->setControlProfile( mGroup->mInspector->mButtonProfile );
+		mResetButton->setField( "text", "R" );
+		mResetButton->setField( "tooltip", "Reset this field to the value stamped by the theme." );
+		if( mGroup->mInspector->mTooltipProfile != NULL )
+		{
+			char profileBuffer[32];
+			dSprintf( profileBuffer, sizeof(profileBuffer), "%d", mGroup->mInspector->mTooltipProfile->getId() );
+			mResetButton->setField( "tooltipProfile", profileBuffer );
+		}
+
+		char commandBuffer[64];
+		dSprintf( commandBuffer, sizeof(commandBuffer), "%d.resetToTheme();", getId() );
+		mResetButton->setField( "Command", commandBuffer );
+		mResetButton->mBounds.set( Point2I( innerRect.extent.x - 17, 1 ), Point2I( 16, 16 ) );
+		mResetButton->registerObject();
+		addObject( mResetButton );
+
+		refreshOverrideDisplay();
+	}
+
 	return true;
 }
 
@@ -689,6 +807,12 @@ ConsoleMethod( GuiInspectorField, apply, void, 3,3, "(newValue) Applies the give
               "@return No return value." )
 {
    object->setData( argv[2] );
+}
+
+ConsoleMethod( GuiInspectorField, resetToTheme, void, 2, 2, "() Clears the field's theme override so it re-derives from the theme\n"
+              "@return No return value." )
+{
+   object->resetToThemeDefault();
 }
 #pragma endregion
 
@@ -897,6 +1021,7 @@ bool GuiInspectorGroup::inspectGroup()
                if( field != NULL )
                {
                   field->updateValue( field->getData() );
+                  field->refreshOverrideDisplay();
                   continue;
                }
 
@@ -928,6 +1053,7 @@ bool GuiInspectorGroup::inspectGroup()
             if( field != NULL )
             {
                field->updateValue( field->getData() );
+               field->refreshOverrideDisplay();
                continue;
             }
 

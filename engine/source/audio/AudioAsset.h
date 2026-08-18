@@ -63,10 +63,14 @@ private:
 public:
    AudioAsset();
    static void initPersistFields();
-   virtual void copyTo(SimObject* object);
 
    void setAudioFile( const char* pAudioFile );
    inline StringTableEntry getAudioFile( void ) const { return mAudioFile; }
+
+   /// The audio file as it is stored on disk -- relative to the folder the asset
+   /// itself lives in. getAudioFile answers the expanded absolute path, which is
+   /// what the mixer needs and is neither readable nor portable anywhere else.
+   inline StringTableEntry getRelativeAudioFile( void ) const { return collapseAssetFilePath(mAudioFile); }
 
    void setVolume( const F32 volume );
    inline F32 getVolume( void ) const { return mDescription.mVolume; }
@@ -79,6 +83,9 @@ public:
 
    void setStreaming( const bool streaming );
    inline bool getStreaming( void ) const { return mDescription.mIsStreaming; }
+
+   void setPriority( const bool priority );
+   inline bool getPriority( void ) const { return mDescription.mIsPriority; }
 
    void setDescription( const Audio::Description& audioDescription );
    inline const Audio::Description& getAudioDescription( void ) const { return mDescription; }
@@ -107,6 +114,9 @@ protected:
 
     static bool setStreaming( void* obj, const char* data )                     { static_cast<AudioAsset*>(obj)->setStreaming(dAtob(data)); return false; }
     static bool writeStreaming( void* obj, StringTableEntry pFieldName )        { return static_cast<AudioAsset*>(obj)->getStreaming() == true; }
+
+    static bool setPriority( void* obj, const char* data )                      { static_cast<AudioAsset*>(obj)->setPriority(dAtob(data)); return false; }
+    static bool writePriority( void* obj, StringTableEntry pFieldName )         { return static_cast<AudioAsset*>(obj)->getPriority() == true; }
 };
 
 #endif  // _AUDIO_ASSET_H_

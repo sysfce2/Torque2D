@@ -22,6 +22,7 @@
 #include "platform/platform.h"
 #include "gui/guiListBoxCtrl.h"
 #include "gui/guiCanvas.h"
+#include "persistence/taml/tamlCustom.h"
 #include <algorithm>
 
 #include "guiListBoxCtrl_ScriptBinding.h"
@@ -607,6 +608,380 @@ void GuiListBoxCtrl::setItemText( S32 index, StringTableEntry text )
    }
 
    mItems[ index ]->itemText = StringTable->insert( text );
+}
+#pragma endregion
+
+#pragma region Persistence
+//-----------------------------------------------------------------------------
+// Static rows: the ones a list is authored with rather than filled with at
+// runtime.
+//
+// An item is not a field and not a child object - GuiListBoxCtrl::addObject
+// refuses children outright - so neither of the two things a writer walks can
+// see one. They go out as TAML custom nodes instead, which is what
+// GuiFrameSetCtrl does with its frame tree for exactly the same reason:
+//
+//     <GuiListBoxCtrl Extent="180 120">
+//         <GuiListBoxCtrl.Items>
+//             <Item Text="Easy" ID="1" />
+//             <Item Text="Normal" ID="2" Selected="1" />
+//             <Item Text="Hard" ID="3" Color="1 0 0 1" Active="0" />
+//         </GuiListBoxCtrl.Items>
+//     </GuiListBoxCtrl>
+//
+// TamlXmlWriter::compileCustomElements prefixes the section with the element
+// name it is writing, so a subclass gets <GuiDropDownCtrl.Items> with nothing
+// extra to do, and the reader's findNode() sees the unprefixed name either way.
+//
+// Everything but the caption is written only when it differs from what LBItem's
+// constructor sets, so an ordinary list of captions stays one attribute a row.
+//
+// The two limitations are the frame set's, and worth naming: the legacy .gui
+// script writer knows nothing of custom nodes, so a Gui saved in that format
+// loses its rows (the Gui Editor's save dialog says so), and a deep clone has
+// to copy them by hand - see deepCloneChildren below.
+//-----------------------------------------------------------------------------
+
+// Interned case-INSENSITIVELY, which is what every one of these is compared
+// against: TamlCustomNodes::findNode and the XML parser both intern with the
+// default, so a name interned the case-sensitive way is a different pointer and
+// silently matches nothing.
+//
+// It is not theoretical. StringTable hands back the first spelling of a name it
+// was ever given, so a case-sensitive "ID" here wrote itself out as whatever
+// spelling reached the table first - "Id", from somewhere else in the engine -
+// and then failed to recognise it on the way back in, dropping every ID in the
+// file with a warning. Which spelling wins depends on static initialisation
+// order across translation units, so it can change from one build to the next.
+//
+// It also means a hand-edited file may spell these however it likes.
+static StringTableEntry itemsNodeName		= StringTable->insert("Items");
+static StringTableEntry itemNodeName		= StringTable->insert("Item");
+static StringTableEntry itemTextName		= StringTable->insert("Text");
+static StringTableEntry itemIDName			= StringTable->insert("ID");
+static StringTableEntry itemActiveName		= StringTable->insert("Active");
+static StringTableEntry itemSelectedName	= StringTable->insert("Selected");
+static StringTableEntry itemColorName		= StringTable->insert("Color");
+
+void GuiListBoxCtrl::onTamlCustomWrite(TamlCustomNodes& customNodes)
+{
+	// Debug Profiling.
+	PROFILE_SCOPE(GuiListBoxCtrl_OnTamlCustomWrite);
+
+	// Call parent.
+	Parent::onTamlCustomWrite(customNodes);
+
+	if (!writesItems() || mItems.size() == 0)
+	{
+		return;
+	}
+
+	TamlCustomNode* pItemsNode = customNodes.addNode(itemsNodeName);
+
+	for (S32 i = 0; i < mItems.size(); i++)
+	{
+		LBItem* item = mItems[i];
+		TamlCustomNode* pItemNode = pItemsNode->addNode(itemNodeName);
+
+		pItemNode->addField(itemTextName, item->itemText);
+
+		if (item->ID != 0)
+		{
+			pItemNode->addField(itemIDName, item->ID);
+		}
+		if (!item->isActive)
+		{
+			pItemNode->addField(itemActiveName, item->isActive);
+		}
+		if (item->isSelected)
+		{
+			pItemNode->addField(itemSelectedName, item->isSelected);
+		}
+		if (item->hasColor)
+		{
+			pItemNode->addField(itemColorName, item->color);
+		}
+	}
+}
+
+void GuiListBoxCtrl::onTamlCustomRead(const TamlCustomNodes& customNodes)
+{
+	// Debug Profiling.
+	PROFILE_SCOPE(GuiListBoxCtrl_OnTamlCustomRead);
+
+	// Call parent.
+	Parent::onTamlCustomRead(customNodes);
+
+	const TamlCustomNode* pItemsNode = customNodes.findNode(itemsNodeName);
+
+	if (pItemsNode == NULL)
+	{
+		return;
+	}
+
+	// Whatever the control was built holding. A list read into an object that
+	// already has rows is a replacement, not an append.
+	clearItems();
+
+	const TamlCustomNodeVector& itemNodes = pItemsNode->getChildren();
+	for (TamlCustomNodeVector::const_iterator nodeItr = itemNodes.begin(); nodeItr != itemNodes.end(); ++nodeItr)
+	{
+		const TamlCustomNode* pItemNode = *nodeItr;
+
+		if (pItemNode->getNodeName() != itemNodeName)
+		{
+			Con::warnf("GuiListBoxCtrl::onTamlCustomRead() - Unknown tag name of '%s'. Only '%s' is valid.",
+				pItemNode->getNodeName(), itemNodeName);
+			continue;
+		}
+
+		// Made before the fields are read, because every field below writes into
+		// it. A row with no Text at all is still a row - an empty caption is a
+		// legal item, and the editor can make one.
+		LBItem* item = appendItemInternal(StringTable->EmptyString);
+		if (!item)
+		{
+			continue;
+		}
+
+		const TamlCustomFieldVector& fields = pItemNode->getFields();
+		for (TamlCustomFieldVector::const_iterator fieldItr = fields.begin(); fieldItr != fields.end(); ++fieldItr)
+		{
+			const TamlCustomField* pField = *fieldItr;
+			StringTableEntry fieldName = pField->getFieldName();
+
+			if (fieldName == itemTextName)
+			{
+				item->itemText = StringTable->insert(pField->getFieldValue(), true);
+			}
+			else if (fieldName == itemIDName)
+			{
+				pField->getFieldValue(item->ID);
+			}
+			else if (fieldName == itemActiveName)
+			{
+				pField->getFieldValue(item->isActive);
+			}
+			else if (fieldName == itemSelectedName)
+			{
+				pField->getFieldValue(item->isSelected);
+			}
+			else if (fieldName == itemColorName)
+			{
+				pField->getFieldValue(item->color);
+				item->hasColor = true;
+			}
+			else
+			{
+				Con::warnf("GuiListBoxCtrl::onTamlCustomRead() - Encountered an unknown field name of '%s'.", fieldName);
+			}
+		}
+
+		// The selection list is kept beside the items and has to agree with them.
+		if (item->isSelected)
+		{
+			mSelectedItems.push_front(item);
+		}
+	}
+
+	updateSize();
+}
+
+//-----------------------------------------------------------------------------
+// The list as one string, for the two callers that want all of it at once: the
+// Gui Editor's Items section, which edits the list as a whole rather than a row
+// at a time, and its undo stack, which records what the list was and what it
+// became. The same job getFrameLayout/setFrameLayout do for a frame set, and
+// like those it is opaque - the file format is the custom nodes above.
+//
+// One record per item, newline separated; TAB between fields, in a fixed order:
+//
+//     text  ID  active  selected  hasColor  "r g b a"
+//
+// A caption may hold neither character. A list row is one line, and a
+// GuiTextEditCtrl can produce neither - Enter commits (handleEnterKey has no
+// insert path) and Tab moves the focus - but setItemList strips them anyway,
+// because a caption arriving from script has been through neither.
+//-----------------------------------------------------------------------------
+
+const char* GuiListBoxCtrl::getItemList()
+{
+	// Measured rather than guessed: a list is any length, and the return buffer
+	// has to be asked for at the size it will actually need. 64 covers the five
+	// numbers, the four color components and the separators.
+	U32 size = 1;
+	for (S32 i = 0; i < mItems.size(); i++)
+	{
+		size += dStrlen(mItems[i]->itemText) + 64;
+	}
+
+	char* buffer = Con::getReturnBuffer(size);
+	buffer[0] = '\0';
+
+	U32 used = 0;
+	for (S32 i = 0; i < mItems.size(); i++)
+	{
+		LBItem* item = mItems[i];
+
+		// A row without a color has no color to write: ColorF's default
+		// constructor is empty (gColor.h), so item->color is whatever was in
+		// that memory until something sets it. Printing it would make two
+		// identical lists read as different strings, which is the one thing an
+		// opaque round-trippable form may not do.
+		ColorF color = item->hasColor ? item->color : ColorF(0.0f, 0.0f, 0.0f, 0.0f);
+
+		used += dSprintf(buffer + used, size - used, "%s%s\t%d\t%d\t%d\t%d\t%g %g %g %g",
+			(i == 0) ? "" : "\n",
+			item->itemText,
+			item->ID,
+			item->isActive ? 1 : 0,
+			item->isSelected ? 1 : 0,
+			item->hasColor ? 1 : 0,
+			color.red, color.green, color.blue, color.alpha);
+	}
+
+	return buffer;
+}
+
+// One field of a record, copied out of the middle of the string it sits in.
+// Returns the buffer, so it reads as an argument to dAtoi and friends.
+static const char* copyItemField(char* buffer, const U32 size, const char* start, S32 length)
+{
+	if (length < 0)
+	{
+		length = 0;
+	}
+	if ((U32)length >= size)
+	{
+		length = size - 1;
+	}
+
+	dMemcpy(buffer, start, length);
+	buffer[length] = '\0';
+
+	return buffer;
+}
+
+void GuiListBoxCtrl::setItemList(const char* itemList)
+{
+	// The order the fields are written in above. A record may stop short of all
+	// six: a script handing over a bare list of captions is a legal list, and
+	// every field left off keeps whatever LBItem's constructor gave it.
+	const S32 fieldMax = 6;
+
+	clearItems();
+
+	for (const char* at = itemList; at != NULL && *at; )
+	{
+		const char* recordEnd = dStrchr(at, '\n');
+		if (recordEnd == NULL)
+		{
+			recordEnd = at + dStrlen(at);
+		}
+
+		// Split on TAB by pointer rather than through getWord or getUnit: the
+		// first field is a caption, which may be empty and may hold spaces, and
+		// neither of those survives a word split.
+		const char* field[fieldMax];
+		S32 fieldLength[fieldMax];
+		S32 fieldCount = 0;
+
+		const char* fieldStart = at;
+		for (const char* scan = at; scan <= recordEnd; scan++)
+		{
+			if (scan != recordEnd && *scan != '\t')
+			{
+				continue;
+			}
+
+			if (fieldCount < fieldMax)
+			{
+				field[fieldCount] = fieldStart;
+				fieldLength[fieldCount] = (S32)(scan - fieldStart);
+				fieldCount++;
+			}
+			fieldStart = scan + 1;
+		}
+
+		char scratch[1024];
+
+		LBItem* item = appendItemInternal(StringTable->insert(
+			copyItemField(scratch, sizeof(scratch), field[0], fieldLength[0]), true));
+
+		if (item != NULL)
+		{
+			if (fieldCount > 1)
+			{
+				item->ID = dAtoi(copyItemField(scratch, sizeof(scratch), field[1], fieldLength[1]));
+			}
+			if (fieldCount > 2)
+			{
+				item->isActive = dAtob(copyItemField(scratch, sizeof(scratch), field[2], fieldLength[2]));
+			}
+			if (fieldCount > 3)
+			{
+				item->isSelected = dAtob(copyItemField(scratch, sizeof(scratch), field[3], fieldLength[3]));
+			}
+			if (fieldCount > 4)
+			{
+				item->hasColor = dAtob(copyItemField(scratch, sizeof(scratch), field[4], fieldLength[4]));
+			}
+			if (fieldCount > 5 && item->hasColor)
+			{
+				const char* colorText = copyItemField(scratch, sizeof(scratch), field[5], fieldLength[5]);
+				Con::setData(TypeColorF, &item->color, 0, 1, &colorText);
+			}
+
+			// The selection list is kept beside the items and has to agree with
+			// them, or getSelectedItem and the render disagree about what is on.
+			if (item->isSelected)
+			{
+				mSelectedItems.push_front(item);
+			}
+		}
+
+		at = (*recordEnd == '\0') ? recordEnd : (recordEnd + 1);
+	}
+
+	// The list is the control's size, so the canvas has to be told. This is what
+	// makes a row typed in the Gui Editor appear under the cursor as it is typed.
+	updateSize();
+	setUpdate();
+}
+
+// A row added with none of the noise the public paths make: insertItem resizes
+// the control once per item and addSelection scrolls and fires onSelect, and
+// neither belongs in the middle of loading a list.
+GuiListBoxCtrl::LBItem* GuiListBoxCtrl::appendItemInternal(StringTableEntry text)
+{
+	LBItem* newItem = createItem();
+	if (!newItem)
+	{
+		Con::warnf("GuiListBoxCtrl::appendItemInternal - error allocating item memory!");
+		return NULL;
+	}
+
+	newItem->itemText = text;
+	mItems.push_back(newItem);
+
+	return newItem;
+}
+
+// Items are neither fields nor children, so a clone made by copying both comes
+// back with an empty list. GuiFrameSetCtrl overrides the same phase for the same
+// reason, and it is what makes the Gui Editor's copy, cut and paste carry the
+// rows without knowing anything about them.
+void GuiListBoxCtrl::deepCloneChildren(SimObject* clone)
+{
+	Parent::deepCloneChildren(clone);
+
+	GuiListBoxCtrl* pListBox = dynamic_cast<GuiListBoxCtrl*>(clone);
+	if (pListBox == NULL)
+	{
+		return;
+	}
+
+	pListBox->setItemList(getItemList());
 }
 #pragma endregion
 

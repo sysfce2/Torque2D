@@ -148,6 +148,15 @@ bool Platform::pathCopy(const char *fromName, const char *toName, bool nooverwri
    backslash(filebuf);
    fromName = filebuf;
 
+   // The folder the destination sits in may not exist yet: copying a single file
+   // into a new folder is an ordinary thing to ask for, and the directory branch
+   // below already makes its folders as it walks. Without this ::CopyFile simply
+   // fails, and the two halves of pathCopy disagree about who makes the path.
+   //
+   // Before the backslash conversion, because createPath splits on forward
+   // slashes only and would find nothing to make afterwards.
+   Platform::createPath(toName);
+
    static char filebuf2[2048];
    dStrcpy(filebuf2, toName);
    backslash(filebuf2);
@@ -178,6 +187,21 @@ bool Platform::pathCopy(const char *fromName, const char *toName, bool nooverwri
       // If the destination path exists and we don't want to overwrite, return.
       if ((Platform::isDirectory(toName) || Platform::isFile(toName)) && nooverwrite)
          return false;
+
+      // Refuse to copy a tree into itself, which would recurse until the path
+      // outgrew MAX_PATH. The same guard the UNIX build has carried since
+      // pathCopy was implemented there; this one was missed. Both names are in
+      // backslash form by now, and a Windows path compares without case.
+      dsize_t fromLen = dStrlen(fromName);
+      while (fromLen > 1 && (fromName[fromLen - 1] == '\\' || fromName[fromLen - 1] == '/'))
+         fromLen--;   // a trailing separator would put the destination past the comparison
+
+      if (dStrnicmp(fromName, toName, fromLen) == 0 &&
+          (toName[fromLen] == '\\' || toName[fromLen] == '/' || toName[fromLen] == '\0'))
+      {
+         Con::errorf("Platform::pathCopy: %s is inside %s", toName, fromName);
+         return false;
+      }
 
       Vector<StringTableEntry> directoryInfo;
       Platform::dumpDirectories(fromName, directoryInfo, -1);

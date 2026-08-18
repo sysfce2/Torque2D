@@ -154,11 +154,24 @@ function setCustomScene( %scene )
     setSceneToWindow();
 }
 
-function SceneWindow::onExtentChange(%this)
+//-----------------------------------------------------------------------------
+// Match the camera's horizontal extent to the current window aspect ratio,
+// keeping the camera height fixed. This fires on every live window resize, and
+// is also re-applied after a toy loads/resets (see loadToy / RestartToyOverlay) --
+// toys set a fixed camera size in their reset(), which bakes in a specific
+// aspect, so without re-applying this the scene stretches when the toy is
+// reloaded/restarted on a window that has since been resized to another shape.
+//-----------------------------------------------------------------------------
+function SceneWindow::updateCameraAspect(%this)
 {
     %extent = Canvas.extent;
     %aspect = %extent.x / %extent.y;
-    %cam = SandboxWindow.getCameraSize();
+    %cam = %this.getCameraSize();
     %cam.x = %cam.y * %aspect;
     %this.setCameraSize(%cam);
+}
+
+function SceneWindow::onExtentChange(%this)
+{
+    %this.updateCameraAspect();
 }

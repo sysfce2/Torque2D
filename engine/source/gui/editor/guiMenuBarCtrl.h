@@ -56,10 +56,93 @@ public:
    virtual void inspectPostApply();
    virtual void onChildAdded(GuiControl *child);
    virtual void onChildRemoved(SimObject *child);
+   virtual void childrenReordered();
+   /// Re-runs calculateMenus, because a top-level menu is as wide as its text
+   /// and so anything that changes the text changes the layout.
+   virtual void setUpdate();
    virtual void calculateMenus();
-   virtual GuiControl* findHitControl(const Point2I &pt, S32 initialLayer);
+   /// GuiControl's signature, so this overrides rather than hides it. The bar
+   /// answers for its own items; nothing outside may descend into them.
+   virtual GuiControl* findHitControl(const Point2I &pt, S32 initialLayer = -1, const bool ignoreUseInput = false, const bool ignoreEditSelected = true);
    virtual GuiMenuItemCtrl* findHitMenu(const Point2I &pt);
    virtual void onRender(Point2I offset, const RectI &updateRect);
+
+   /// @name Authoring
+   ///
+   /// A GuiMenuItemCtrl is not something the control palette offers - it means
+   /// nothing outside a bar - so the bar makes its own, from a "+" it draws after
+   /// the last menu while the Gui is being authored.
+   /// @{
+
+   /// The editor-only "+", in the same coordinates as an item's mBounds: local to
+   /// the bar's CONTENT, which is the space calculateMenus lays items out in.
+   /// Empty whenever the bar is not being authored, which is how everything
+   /// tests for it.
+   RectI mAddItemRect;
+
+   /// The menu whose dropdown is showing while authoring, and the rectangles of
+   /// what is in it - one row per command, then the "+" row, inside a box. All
+   /// in the same content-local space as mAddItemRect.
+   ///
+   /// Drawn by the bar rather than opened for real: the runtime dropdown is a
+   /// full-canvas dialog pushed at layer 99, and a dialog at that layer takes
+   /// every click, so the Gui Editor would never see one. Drawing it here costs
+   /// nothing at runtime and leaves the editor holding the mouse.
+   GuiMenuItemCtrl *mEditOpenMenu;
+   RectI mEditBoxRect;
+   Vector<RectI> mEditRowRects;
+   RectI mEditAddRowRect;
+
+   /// The menu the selection is in - that item, or anything inside it. Derived
+   /// rather than toggled, so the dropdown follows the Explorer tree as readily
+   /// as the canvas and cannot disagree with what is selected.
+   GuiMenuItemCtrl* findSelectedMenu();
+   /// Re-derive which menu is open and re-lay its rows. Called every frame from
+   /// onPreRender, and on demand by the geometry accessors - the selection can
+   /// change without anything drawing.
+   void refreshEditMenu();
+   void layoutEditMenu();
+   /// A separator is a rule between two groups, so it gets the profile's chrome
+   /// and none of the height a line of text would need.
+   S32 editRowHeight(GuiMenuItemCtrl* item, S32 rowHeight, S32 spacerHeight);
+   void renderEditMenu(const Point2I &contentOffset);
+
+   /// The dropdown's "+" row in global coordinates, or an empty rect.
+   RectI getAddSubItemGlobalRect();
+
+   virtual void onPreRender();
+
+   /// Control-local to content-local. findHitMenu reaches the same space through
+   /// a child's mRenderInsetLT, which only says anything once the bar has drawn
+   /// and only if there is a child to ask.
+   Point2I getMenuLocalCoord(const Point2I &src);
+
+   /// The "+" in global coordinates, or an empty rect when there is none.
+   RectI getAddItemGlobalRect();
+
+   /// The menu under a content-local point, drawn or not, active or not - which
+   /// is what authoring needs and findHitMenu deliberately does not give.
+   GuiMenuItemCtrl* findMenuAt(const Point2I &menuLocalPt);
+
+   /// Draw the "+". Ghosted rather than drawn as a menu, because it is an
+   /// affordance and not an item.
+   void renderAddItem(RectI itemRect);
+
+   /// Ask the Gui Editor for an item. The bar draws the affordance; it does not
+   /// make the item, because an item made while authoring has to be themed,
+   /// recorded for undo and announced to the Explorer tree.
+   /// @param parent The menu to put it in, or NULL for a top-level one.
+   void requestNewMenuItem(GuiMenuItemCtrl *parent);
+
+   virtual bool onMouseDownEditor(const GuiEvent &event, const Point2I& offset);
+
+   /// The bar's own bounds, plus the dropdown it draws below them while
+   /// authoring. Hit testing walks bounds, and the dropdown hangs outside the
+   /// bar's - so without this the click never reaches the bar at all and the
+   /// "+" row is unreachable.
+   virtual bool pointInControl(const Point2I& parentCoordPoint);
+
+   /// @}
 
    virtual void processHover(const GuiEvent &event);
    virtual void setHoverTarget(GuiMenuItemCtrl *ctrl);
@@ -163,6 +246,19 @@ public:
 	virtual void inspectPostApply();
 	virtual void onChildAdded(GuiControl *child);
 	virtual void onChildRemoved(SimObject *child);
+
+	/// A menu item only means anything inside a bar or inside another item, so it
+	/// refuses every other parent. See GuiControl::canBeChildOf.
+	bool canBeChildOf(GuiControl* parent);
+
+	/// Its bar decides where it sits and how wide it is, from the text. See
+	/// GuiControl::isGeometryEditable.
+	bool isGeometryEditable() { return false; };
+
+	/// Tell whoever is laying this out that its text - and so its width -
+	/// changed. The properties pane writes the text on every keystroke, so this
+	/// is what makes the bar reflow as you type.
+	virtual void setText(const char *txt = NULL);
 	void checkForGoodChildren();
 	virtual void closeMenu();
 	void ApplyMenuSettings();

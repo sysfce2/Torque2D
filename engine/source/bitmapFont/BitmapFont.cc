@@ -32,9 +32,35 @@
 
 namespace font
 {
+   // Every one of these used to be left at whatever was on the heap. It did not
+   // show while the only reader was TextSprite -- a font that failed to load drew
+   // nothing either way -- but an editor puts the numbers on screen, and mWidth and
+   // mHeight are worse than cosmetic: ProcessCharacter divides the glyph rects by
+   // them to make texture coordinates, so a .fnt with char lines but no common line
+   // produced garbage UVs rather than none.
    BitmapFont::BitmapFont()
+      : mWidth(0),
+        mHeight(0),
+        mPages(0),
+        mLineHeight(0),
+        mBaseline(0),
+        mSize(0)
    {
+   }
 
+   void BitmapFont::clear()
+   {
+      mChar.clear();
+      mKerning.clear();
+      mPageName.clear();
+      mTexture.clear();
+
+      mWidth = 0;
+      mHeight = 0;
+      mPages = 0;
+      mLineHeight = 0;
+      mBaseline = 0;
+      mSize = 0;
    }
 
    bool BitmapFont::parseFont(Stream& io_rStream)

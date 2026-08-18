@@ -565,6 +565,7 @@ SafeCreateNamedObject("GuiTextEditProfile", new GuiControlProfile()
 {
     fillColor = "232 240 248 255";
     fillColorHL = "242 250 255 255";
+    fillColorSL = "242 250 255 255";
     fillColorNA = "127 127 127 52";
 	fillColorTextSL = "251 170 0 255";
     fontColor = "27 59 95 255";

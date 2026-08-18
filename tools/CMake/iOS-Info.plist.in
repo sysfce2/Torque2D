@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Info.plist template for the Torque2D iOS app (configured by CMake via
+     MACOSX_BUNDLE_INFO_PLIST). The @...@-style placeholders are filled from the
+     MACOSX_BUNDLE_* target properties set in the root CMakeLists. The keys here
+     reproduce what the legacy engine/compilers/Xcode_iOS bundle relied on to
+     actually show a window:
+       * UIMainStoryboardFile -> the GLKit storyboard that creates the window +
+         T2DViewController/T2DView (the GL view the engine renders into). The app
+         delegate does NOT create a window programmatically, so without this the
+         screen stays black.
+       * UILaunchStoryboardName -> a plain static launch screen, required on
+         modern iOS for a full-screen drawable (no custom classes allowed there,
+         hence a separate storyboard from the main one).
+     CFBundleExecutable is filled per-config so Debug (Torque2D_DEBUG) and
+     Release (Torque2D) both resolve to the right binary. -->
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>${MACOSX_BUNDLE_EXECUTABLE_NAME}</string>
+	<key>CFBundleIdentifier</key>
+	<string>${MACOSX_BUNDLE_GUI_IDENTIFIER}</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>${MACOSX_BUNDLE_BUNDLE_NAME}</string>
+	<key>CFBundleDisplayName</key>
+	<string>${MACOSX_BUNDLE_BUNDLE_NAME}</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>${MACOSX_BUNDLE_SHORT_VERSION_STRING}</string>
+	<key>CFBundleVersion</key>
+	<string>${MACOSX_BUNDLE_BUNDLE_VERSION}</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIMainStoryboardFile</key>
+	<string>iPhoneStoryboard</string>
+	<key>UIMainStoryboardFile~ipad</key>
+	<string>iPadStoryboard</string>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIRequiresFullScreen</key>
+	<true/>
+	<key>UIStatusBarHidden</key>
+	<true/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<!-- Device family (iPhone+iPad) is set via the TARGETED_DEVICE_FAMILY build
+	     setting in CMakeLists, not here: Xcode overwrites a plist UIDeviceFamily
+	     key and warns about it. -->
+</dict>
+</plist>

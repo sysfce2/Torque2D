@@ -157,6 +157,12 @@ namespace Sim
    void init();
    void shutdown();
 
+   /// True once Sim::shutdown() has begun tearing the root group down.
+   /// At that point every object is being destroyed in an arbitrary order, so
+   /// "X was deleted while Y still referenced it" is expected rather than a
+   /// mistake - diagnostics that would otherwise flag it should stay quiet.
+   bool isShuttingDown();
+
    SimDataBlockGroup *getDataBlockGroup();
    SimGroup* getRootGroup();
 

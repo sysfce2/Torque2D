@@ -25,6 +25,10 @@
 #ifndef _PLATFORMGL_H_
 #define _PLATFORMGL_H_
 
+// The gluProject/gluUnProject prototypes below use the engine's F64 type; pull in
+// the engine typedefs so this header is self-contained regardless of include order.
+#include "platform/types.h"
+
 //#define DUMMY_GL
 
 #ifdef DUMMY_GL

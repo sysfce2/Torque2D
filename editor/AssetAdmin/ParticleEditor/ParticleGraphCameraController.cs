@@ -60,6 +60,28 @@ function ParticleGraphCameraController::onAdd(%this)
 	{
 		%this.setupDegreeValue();
 	}
+
+	// A field that never leaves 0-1 got exactly one zoom level out of the chain
+	// above, which left all four buttons dead on every color channel and on alpha.
+	if(%this.max <= 1)
+	{
+		%this.setupUnitValue();
+	}
+}
+
+// The zoom levels are window WIDTHS, so index 1 is the tightest view and the last
+// is the whole field. That is what makes zooming out unable to go past 0-1: there
+// is no wider window to ask for.
+function ParticleGraphCameraController::setupUnitValue(%this)
+{
+	%this.currentPosition = %this.min;
+
+	%this.zoomLevel[1] = 0.1;
+	%this.zoomLevel[2] = 0.25;
+	%this.zoomLevel[3] = 0.5;
+	%this.zoomLevel[4] = 1;
+	%this.zoomCount = 4;
+	%this.currentZoomLevel = 4;
 }
 
 function ParticleGraphCameraController::setupDegreeValue(%this)

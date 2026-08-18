@@ -102,9 +102,9 @@ function AssetImageFrameEditRow::onAdd(%this)
 	};
 	ThemeManager.setProfile(%this.buttonBar, "emptyProfile");
 	%this.add(%this.buttonBar);
-	%this.buttonBar.addButton("MoveCellUp", 2, "Move Cell Up", "getMoveCellUpEnabled");
-	%this.buttonBar.addButton("MoveCellDown", 6, "Move Cell Down", "getMoveCellDownEnabled");
-	%this.buttonBar.addButton("RemoveCell", 23, "Remove Cell", "getRemoveCellEnabled");
+	%this.buttonBar.addButton("MoveCellUp", $EditorIcon::arrow_top, "Move Cell Up", "getMoveCellUpEnabled");
+	%this.buttonBar.addButton("MoveCellDown", $EditorIcon::arrow_bottom, "Move Cell Down", "getMoveCellDownEnabled");
+	%this.buttonBar.addButton("RemoveCell", $EditorIcon::round_delete, "Remove Cell", "getRemoveCellEnabled");
 }
 
 function AssetImageFrameEditRow::CellNameChange(%this)

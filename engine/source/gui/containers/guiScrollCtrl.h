@@ -34,6 +34,7 @@ private:
    bool mEventBubbled;
    bool mCalcGuard;
    bool mResizeGuard;
+   bool mNotifyGuard;
 
 protected:
 
@@ -137,6 +138,50 @@ public:
    virtual void scrollByRegion(Region reg);
 
    virtual void computeSizes();
+
+   /// @name The size a child is given
+   ///
+   /// A scroll control is the one container that does not always have a size to
+   /// offer a child. In an axis it can scroll, the content is as long as it
+   /// wants to be and the control merely shows a window onto it -- there is no
+   /// fixed size to hand down. In an axis whose bar is alwaysOff there is no
+   /// scrolling, so the space IS bounded, and a child may be sized to it.
+   ///
+   /// These say which case an axis is in, and what is left over once whatever
+   /// bars are showing have taken their share.
+   /// @{
+
+   /// True when this axis scrolls, and so has no fixed size to offer a child.
+   bool canScrollHorizontally() const { return mForceHScrollBar != ScrollBarAlwaysOff; }
+   bool canScrollVertically() const   { return mForceVScrollBar != ScrollBarAlwaysOff; }
+
+   /// What is left of an extent once the showing bars have taken their space.
+   /// Pure, and the single definition of that arithmetic: the visible rect, the
+   /// rect children are rendered into and the rect fill resolves against are all
+   /// this same subtraction, and used to be three separate ones.
+   static Point2I subtractScrollBars(const Point2I &extent, const bool hasHBar, const bool hasVBar, const S32 barThickness);
+
+   /// Which bars a scroller of this configuration shows.
+   ///
+   /// Pure, so that the one genuinely circular part of the layout is testable on
+   /// its own: a vertical bar narrows the content, which can be what pushes the
+   /// content wide enough to need a horizontal one.
+   static void calcBarPresence(const S32 forceHBar, const S32 forceVBar, const Point2I &childExtent,
+      const Point2I &contentExtent, const S32 barThickness, bool &outHasHBar, bool &outHasVBar);
+
+   /// The visible content rect: the inner rect less the bars that are showing.
+   virtual RectI getInnerRect(Point2I &offset, Point2I &extent, GuiControlState currentState, GuiControlProfile *profile);
+
+   /// Strips the sizing modes a child may not use in an axis that scrolls.
+   void preventUnsizedModes(GuiControl *child);
+
+   /// Tells the children that the bars took, or gave back, their share.
+   ///
+   /// Only the bars' share: an outer resize has already been passed down by
+   /// GuiControl::resize, and counting it twice would move every child that
+   /// sizes on a delta.
+   void notifyChildrenOfBarChange(const Point2I &barFreeExtent, const bool hadHBar, const bool hadVBar);
+   /// @}
 
    virtual void addObject(SimObject *obj);
    virtual void resize(const Point2I &newPosition, const Point2I &newExtent);

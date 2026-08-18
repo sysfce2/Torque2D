@@ -60,6 +60,10 @@ AssetDatabase.IgnoreAutoUnload = true;
 //ModuleDatabase.scanModules( "./toybox" );
 //ModuleDatabase.LoadExplicit( "AppCore" );
 
+// ...or to boot straight into the PlanetX demo game:
+//ModuleDatabase.scanModules( "./PlanetX" );
+//ModuleDatabase.LoadExplicit( "AppCore" );
+
 // Starts the editor.
 exec("./editor/main.cs");
 
@@ -67,11 +71,9 @@ exec("./editor/main.cs");
 
 function onExit()
 {
-    // Unload the AppCore or EditorCore modules.
-	if(isObject(EditorManager))
-	{
-	    EditorManager.unloadGroup( "EditorGroup" );
-	}
+	// The editor unloads itself in onPreExit (editor/main.cs) -- it is loaded
+	// module-by-module rather than as a group, so there was never an "EditorGroup"
+	// for this to unload.
 	if(isObject(AppCore))
 	{
     	ModuleDatabase.unloadExplicit( "AppCore" );

@@ -2,7 +2,7 @@
     AssetName="editorIcons16"
     ImageFile="editorIcons16.png"
     CellCountX="32"
-    CellCountY="2"
+    CellCountY="10"
     CellWidth="16"
     CellHeight="16"
 	AssetInternal="1" />

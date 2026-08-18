@@ -38,6 +38,59 @@
 #include "zlib.h"
 #include "ctype.h"  // Needed for isupper and tolower
 
+//-----------------------------------------------------------------------------
+// Bakeable cache misses.
+//
+// A miss is a face+size that had no .fnt/.uft in its font directory and so had
+// to be synthesized from the platform font. Those are exactly the caches a tool
+// wants to write: the face is installed HERE, so it can be baked, but a machine
+// without it would have nothing to fall back on.
+//
+// Recorded rather than derived because the sizes actually asked for are not the
+// sizes any field declares -- a control's fontSizeAdjust multiplies its
+// profile's fontSize (see GuiControlProfile::getFontSize), so a profile that
+// says 16 can be asked for 19.
+//
+// Nothing is recorded when the platform font is missing too: there would be
+// nothing to bake from, and on a platform with no font backend at all (the web
+// build) every single request misses.
+//-----------------------------------------------------------------------------
+
+struct UncachedFont
+{
+    StringTableEntry faceName;
+    U32              size;
+    StringTableEntry directory;
+};
+
+static Vector<UncachedFont> smUncachedFonts(__FILE__, __LINE__);
+
+// A session's worth of distinct face/size pairs is a handful; the cap is only
+// here so a script loop asking for thousands of sizes can't grow this forever.
+static const U32 smUncachedFontsMax = 256;
+
+static void recordUncachedFont(const char *faceName, U32 size, const char *directory)
+{
+    StringTableEntry face = StringTable->insert(faceName ? faceName : "");
+    StringTableEntry dir  = StringTable->insert(directory ? directory : "");
+
+    for (U32 i = 0; i < (U32)smUncachedFonts.size(); i++)
+    {
+        const UncachedFont &entry = smUncachedFonts[i];
+        if (entry.faceName == face && entry.size == size && entry.directory == dir)
+            return;
+    }
+
+    if ((U32)smUncachedFonts.size() >= smUncachedFontsMax)
+        return;
+
+    UncachedFont entry;
+    entry.faceName = face;
+    entry.size = size;
+    entry.directory = dir;
+    smUncachedFonts.push_back(entry);
+}
+
 #include "gFont_ScriptBinding.h"
 
 S32 GFont::smSheetIdCount = 0;
@@ -123,9 +176,25 @@ Resource<GFont> GFont::create(const char *faceName, U32 size, const char *cacheD
    }
 
    PlatformFont *platFont = createSafePlatformFont(faceName, size, charset);
-   
-   AssertFatal(platFont, "platFont is null");
-    
+
+   if (platFont == NULL)
+   {
+      // No cached .fnt/.uft for this face+size AND the platform can't synthesize a
+      // font at runtime (e.g. the Emscripten/web build has no system font backend
+      // yet — createPlatformFont() is stubbed). Return a null Resource instead of
+      // dereferencing platFont below: that deref traps the wasm runtime ("memory
+      // access out of bounds") and crashes hard on every platform. The sole caller,
+      // GuiControlProfile::addFont(), already tolerates a null return and logs it,
+      // so failing gracefully here lets the GUI keep rendering (just without this
+      // font's text) rather than aborting the engine.
+      Con::warnf("GFont::create - no cached font for '%s' %d and no platform font backend; "
+                 "text in this font will not render. (looked for: '%s')", faceName, size, buf);
+      return ret;  // empty Resource<GFont> -> converts to a null GFont*
+   }
+
+   // Nothing on disk, but the platform can rasterize it: a cache worth baking.
+   recordUncachedFont(faceName, size, cacheDirectory);
+
    GFont *resFont = new GFont;
    resFont->mPlatformFont = platFont;
    resFont->addSheet();

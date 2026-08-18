@@ -129,9 +129,16 @@ void Platform::init()
     CGRect screenBounds = [[UIScreen mainScreen] bounds];
     CGFloat screenScale = [[UIScreen mainScreen] scale];
     
-    // Set the screen size to a variable
-    Con::setFloatVariable("$pref::iOS::Width", screenBounds.size.width * screenScale);
-    Con::setFloatVariable("$pref::iOS::Height", screenBounds.size.height * screenScale);
+    // Set the screen size to a variable. Use POINT resolution (NOT pixels): a
+    // Retina display packs 2-3x the pixels into the same physical area, so a GUI
+    // laid out in raw pixels renders at half/third size. Working in points keeps
+    // GUI elements physically the right size and matches the touch coordinates
+    // (locationInView is in points). The GL backing is built at point scale too
+    // (T2DViewController sets contentScaleFactor = 1) so logical res, backing, and
+    // input all share one coordinate space. ($pref::iOS::RetinaScale below still
+    // records the device scale for any code that wants the physical density.)
+    Con::setFloatVariable("$pref::iOS::Width", screenBounds.size.width);
+    Con::setFloatVariable("$pref::iOS::Height", screenBounds.size.height);
     
     // Set RetinaEnabled and the Scale
     // NOTE: I think we could get rid of RetinaEnabled through out and just multiply directly by the scale or use RetinaScale > 1 when needed because with iPhone 6 Plus the screenScale is 3.
@@ -247,10 +254,15 @@ void Platform::initWindow(const Point2I &initialSize, const char *name)
     rect.size.height = platState.windowSize.y;
 
     glView = (T2DView *) platState.Window;
-    
-    if ([[UIScreen mainScreen] respondsToSelector:@selector(scale)] && [[UIScreen mainScreen] scale] == 2)
-        glView.contentScaleFactor = [[UIScreen mainScreen] scale];
-    
+
+    // Point-based rendering: keep the GL backing at point scale (contentScaleFactor
+    // 1) so it matches the point-resolution logical size set in Platform::init and
+    // the point-space touch coordinates. (The old code set this to the screen scale
+    // for scale==2 only, which made the backing pixel-sized while the engine ran in
+    // points -> half-size GUI and mismatched scene picking. It's set here AND in
+    // T2DViewController, which must set it BEFORE createFramebuffer to take effect.)
+    glView.contentScaleFactor = 1.0f;
+
     platState.ctx = glView;
     
     //get status bar pref // 0 Hidden , 1 BlackOpaque , 2 BlackTranslucent

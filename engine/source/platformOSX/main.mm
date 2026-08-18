@@ -20,7 +20,33 @@
 // IN THE SOFTWARE.
 //-----------------------------------------------------------------------------
 
+#import "platformOSX/AppDelegate.h"
+
 int main(int argc, char *argv[])
 {
-    return NSApplicationMain(argc, (const char **)argv);
+    @autoreleasepool
+    {
+        // The legacy Xcode build ships a .app bundle whose Info.plist names a
+        // MainMenu nib (NSMainNibFile); NSApplicationMain loads it, and the nib
+        // installs the AppDelegate and the menu bar. The CMake build is a bare
+        // executable (no bundle/nib), so NSApplicationMain would leave NSApp with
+        // no delegate — applicationDidFinishLaunching: never fires, runTorque2D is
+        // never called, and the app sits in an empty run loop with no window.
+        //
+        // If we were launched from such a bundle, keep the original path.
+        if ([[[NSBundle mainBundle] infoDictionary] objectForKey:@"NSMainNibFile"])
+            return NSApplicationMain(argc, (const char **)argv);
+
+        // Otherwise bootstrap AppKit by hand: become a regular (foreground) GUI
+        // app so a window can appear and we get a Dock icon, install the delegate
+        // that starts Torque, and run. The engine creates its own NSWindow in
+        // runTorque2D, so no nib is required.
+        NSApplication *application = [NSApplication sharedApplication];
+        [application setActivationPolicy:NSApplicationActivationPolicyRegular];
+        [application setDelegate:[[AppDelegate alloc] init]];
+        [application activateIgnoringOtherApps:YES];
+        [application run];
+    }
+
+    return 0;
 }

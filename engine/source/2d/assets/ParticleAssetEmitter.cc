@@ -330,40 +330,27 @@ void ParticleAssetEmitter::copyTo(SimObject* object)
    // Copy parent.
    Parent::copyTo( object );
 
-   // Copy fields.
-   pParticleAssetEmitter->setEmitterName( getEmitterName() );
-   pParticleAssetEmitter->setEmitterType( getEmitterType() );
-   pParticleAssetEmitter->setEmitterOffset( getEmitterOffset() );
-   pParticleAssetEmitter->setEmitterSize( getEmitterSize() );
-   pParticleAssetEmitter->setEmitterAngle( getEmitterAngle() );
-   pParticleAssetEmitter->setFixedAspect( getFixedAspect() );
-   pParticleAssetEmitter->setFixedForceAngle( getFixedForceAngle() );
-   pParticleAssetEmitter->setOrientationType( getOrientationType() );
-   pParticleAssetEmitter->setKeepAligned( getKeepAligned() );
-   pParticleAssetEmitter->setAlignedAngleOffset( getAlignedAngleOffset() );
-   pParticleAssetEmitter->setRandomAngleOffset( getRandomAngleOffset() );
-   pParticleAssetEmitter->setRandomArc( getRandomArc() );
-   pParticleAssetEmitter->setFixedAngleOffset( getFixedAngleOffset() );
-   pParticleAssetEmitter->setPivotPoint( getPivotPoint() );
-   pParticleAssetEmitter->setLinkEmissionRotation( getLinkEmissionRotation() );
-   pParticleAssetEmitter->setIntenseParticles( getIntenseParticles() );
-   pParticleAssetEmitter->setSingleParticle( getSingleParticle() );
-   pParticleAssetEmitter->setAttachPositionToEmitter( getAttachPositionToEmitter() );
-   pParticleAssetEmitter->setAttachRotationToEmitter( getAttachRotationToEmitter() );
-   pParticleAssetEmitter->setOldestInFront( getOldestInFront() );
+   // Copy every persist field off the field table rather than by hand. The hand
+   // written list this replaced had drifted, and would drift again every time a
+   // field was added.
+   pParticleAssetEmitter->copyFieldsFrom( this, SimObject::CopyFields_SkipName
+                                              | SimObject::CopyFields_SkipParentGroup
+                                              | SimObject::CopyFields_SkipScriptClass );
 
-   pParticleAssetEmitter->setBlendMode( getBlendMode() );
-   pParticleAssetEmitter->setSrcBlendFactor( getSrcBlendFactor() );
-   pParticleAssetEmitter->setDstBlendFactor( getDstBlendFactor() );
-   pParticleAssetEmitter->setAlphaTest( getAlphaTest() );
-
-   pParticleAssetEmitter->setRandomImageFrame( getRandomImageFrame() );
-
-   // Static provider?
-   if ( pParticleAssetEmitter->isStaticFrameProvider() )
+   // Image and Animation are mutually exclusive, and both are ordinary persist
+   // fields whose setters decide the mode: setImage sets static mode, setAnimation
+   // clears it and clears the image asset. So after the generic copy above the
+   // mode is whichever of the two the field table happens to list last -- which is
+   // Animation, meaning every static emitter would arrive animated and blank.
+   //
+   // Settle it here, from the SOURCE's mode. Reading the TARGET's is the bug this
+   // replaced: a fresh emitter defaults to static, so an animated emitter copied
+   // as a blank static one, silently, including through clone() and
+   // acquireAsset(id, true).
+   if ( isStaticFrameProvider() )
    {
         // Named image frame?
-        if ( pParticleAssetEmitter->isUsingNamedImageFrame() )
+        if ( isUsingNamedImageFrame() )
             pParticleAssetEmitter->setImage( getImage(), getNamedImageFrame() );
         else
             pParticleAssetEmitter->setImage( getImage(), getImageFrame() );
@@ -373,7 +360,8 @@ void ParticleAssetEmitter::copyTo(SimObject* object)
        pParticleAssetEmitter->setAnimation( getAnimation() );
    }
 
-   // Copy particle fields.
+   // Copy particle fields. These are data-key curves written as TAML custom
+   // nodes, so no persist field describes them.
    mParticleFields.copyTo( pParticleAssetEmitter->mParticleFields );
 }
 
@@ -572,6 +560,14 @@ bool ParticleAssetEmitter::setImageFrame( const U32 frame )
 
 bool ParticleAssetEmitter::setNamedImageFrame( const char* frameName )
 {
+    // No name is not a name, and asking for one is not an error worth warning
+    // about: copyFieldsFrom walks the whole field table, so the NamedFrame of
+    // every numeric-frame emitter arrives here empty on every copy and clone.
+    // Taking it would flip the emitter into named-frame mode, which is how a
+    // static emitter could copy as one addressing a frame called "".
+    if ( frameName == NULL || *frameName == 0 )
+        return false;
+
     // Check Existing Image.
     if ( mImageAsset.isNull() )
     {

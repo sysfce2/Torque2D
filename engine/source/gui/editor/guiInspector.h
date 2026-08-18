@@ -76,6 +76,8 @@ class GuiInspectorGroup;
 class GuiInspectorField;
 // Forward Declare GuiInspectorDatablockField
 class GuiInspectorDatablockField;
+// Forward Declare GuiProfileTheme
+class GuiProfileTheme;
 
 class GuiInspector : public GuiChainCtrl
 {
@@ -110,6 +112,7 @@ public:
    GuiControlProfile* mGroupPanelProfile;
    GuiControlProfile* mGroupGridProfile;
    GuiControlProfile* mLabelProfile;
+   GuiControlProfile* mOverrideLabelProfile;
    GuiControlProfile* mTextEditProfile;
    GuiControlProfile* mDropDownProfile;
    GuiControlProfile* mDropDownItemProfile;
@@ -152,10 +155,27 @@ public:
    // Constructed Field Edit Control
    GuiControl*                mEdit;
 
+   // Reset-to-theme button, built only when the target is a themed
+   // GuiControlProfile / GuiBorderProfile member.
+   GuiButtonCtrl*             mResetButton;
+
    GuiInspectorField( GuiInspectorGroup* parent, SimObjectPtr<SimObject> target, AbstractClassRep::Field* field );
    GuiInspectorField();
    ~GuiInspectorField();
    DECLARE_CONOBJECT(GuiInspectorField);
+
+   /// The theme of the inspected GuiControlProfile / GuiBorderProfile, or
+   /// NULL for every other target (which keeps its pre-theme behavior).
+   GuiProfileTheme* getTargetTheme();
+   /// Whether the inspected member has overridden this row's field away from
+   /// its theme. Array rows share the base field's override flag.
+   bool isThemeOverridden();
+   /// Restyle the label and show/hide the reset button to match the current
+   /// override state. No-op for non-themed targets.
+   void refreshOverrideDisplay();
+   /// Clear the override so the field re-derives from the theme, then update
+   /// the row and notify the inspector's onPostApply listener.
+   void resetToThemeDefault();
 
    virtual void setTarget( SimObjectPtr<SimObject> target ) { mTarget = target; };
    virtual void setInspectorGroup( GuiInspectorGroup* grp ) { mGroup = grp; };

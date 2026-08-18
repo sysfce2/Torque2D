@@ -109,6 +109,7 @@ static Resource<AudioBuffer>  mBuffer[MAX_AUDIOSOURCES];                   // ea
 static F32                    mScore[MAX_AUDIOSOURCES];                    // for figuring out which sources to cull/uncull
 static F32                    mSourceVolume[MAX_AUDIOSOURCES];             // the samples current un-attenuated gain (not scaled by master/channel gains)
 static U32                    mType[MAX_AUDIOSOURCES];                     // the channel which this source belongs
+static bool                   mPriority[MAX_AUDIOSOURCES];                 // priority sounds are culled only when every other source is also priority
 
 static AudioSampleEnvironment*        mSampleEnvironment[MAX_AUDIOSOURCES];           // currently playing sample environments
 static bool                           mEnvironmentEnabled = false;                    // environment enabled?
@@ -285,10 +286,24 @@ static bool cullSource(U32 *index, F32 volume)
 {
    alGetError();
 
+   // Priority sounds (e.g. music) are protected: one is only culled when EVERY
+   // source is also a priority sound. So while any non-priority source exists, skip
+   // the priority ones when choosing what to evict.
+   bool anyNonPriority = false;
+   for(U32 i = 0; i < mNumSources; i++)
+      if(mHandle[i] != NULL_AUDIOHANDLE && !mPriority[i])
+      {
+         anyNonPriority = true;
+         break;
+      }
+
    F32 minVolume = volume;
    S32 best = -1;
    for(U32 i = 0; i < mNumSources; i++)
    {
+      if(anyNonPriority && mPriority[i])
+         continue;
+
       if(mScore[i] < minVolume)
       {
          minVolume = mScore[i];
@@ -775,6 +790,7 @@ AUDIOHANDLE alxCreateSource(const Audio::Description& desc,
    // init the source (created inactive) and store needed values
    mHandle[index] = getNewHandle() | AUDIOHANDLE_INACTIVE_BIT;
    mType[index] = desc.mVolumeChannel;
+   mPriority[index] = desc.mIsPriority;
    if(!(desc.mIsStreaming)) {
     mBuffer[index] = buffer;
    }
@@ -983,6 +999,55 @@ AUDIOHANDLE alxPlay(const AudioAsset *profile, const MatrixF *transform, const P
    if(handle != NULL_AUDIOHANDLE)
       return(alxPlay(handle));
    return(handle);
+}
+
+//--------------------------------------------------------------------------
+// Audition an asset as authored, ignoring the running game's mix.
+//
+// An editor previewing an asset wants to hear the ASSET. Played through alxPlay
+// it hears the asset as this particular game happens to be mixing it right now,
+// and the failure is not a quiet sound but no sound at all: alxCreateSource
+// refuses to build a source on a muted channel (see the mAudioChannelVolumes
+// test there), so a game that has turned its music down to nothing makes every
+// music asset in the library unplayable in the editor, with nothing to say why.
+//
+// Three things are overridden and nothing else is. The file, the looping flag
+// and the streaming flag are the asset's own, because those change what the
+// sound IS rather than how loudly it is mixed.
+AUDIOHANDLE alxPlayPreview(const AudioAsset *profile)
+{
+   if(profile == NULL)
+      return NULL_AUDIOHANDLE;
+
+   Audio::Description desc = profile->getAudioDescription();
+   desc.mVolume = 1.f;
+   desc.mVolumeChannel = Audio::AudioPreviewChannel;
+
+   // The channel is reserved for this, but nothing enforces that, and a muted one
+   // would refuse to create the source at all.
+   mAudioChannelVolumes[Audio::AudioPreviewChannel] = 1.f;
+
+   AUDIOHANDLE handle = alxCreateSource(desc, profile->getAudioFile(), NULL, NULL);
+   if(handle == NULL_AUDIOHANDLE)
+      return NULL_AUDIOHANDLE;
+
+   handle = alxPlay(handle);
+   if(handle == NULL_AUDIOHANDLE)
+      return NULL_AUDIOHANDLE;
+
+   // Past the master volume too, which alxSourcePlay has just folded into the
+   // gain. Safe to write over the top: a 2D source is AL_SOURCE_RELATIVE, and
+   // that is exactly what alxUpdateMaxDistance skips, so nothing recomputes this
+   // every frame. Only alxUpdateTypeGain would, and that runs when somebody moves
+   // the mixer -- which, while a preview is playing, is a thing they meant to do.
+   const U32 index = alxFindIndex(handle);
+   if(index < mNumSources)
+   {
+      mSourceVolume[index] = 1.f;
+      alSourcef(mSource[index], AL_GAIN, Audio::linearToDB(1.f));
+   }
+
+   return handle;
 }
 
 bool alxPause( AUDIOHANDLE handle )
@@ -1817,6 +1882,7 @@ void alxLoopingUpdate()
          mScore[index] = (*itr)->mScore;
          mSourceVolume[index] = (*itr)->mDescription.mVolume;
          mType[index] = (*itr)->mDescription.mVolumeChannel;
+         mPriority[index] = (*itr)->mDescription.mIsPriority;
          mSampleEnvironment[index] = (*itr)->mEnvironment;
 
          ALuint source = mSource[index];
@@ -1917,6 +1983,7 @@ void alxStreamingUpdate()
          mScore[index] = (*itr)->mScore;
          mSourceVolume[index] = (*itr)->mDescription.mVolume;
          mType[index] = (*itr)->mDescription.mVolumeChannel;
+         mPriority[index] = (*itr)->mDescription.mIsPriority;
          mSampleEnvironment[index] = (*itr)->mEnvironment;
 
          ALuint source = mSource[index];
@@ -2455,6 +2522,12 @@ void shutdownContext()
    dMemset(mSource, 0, sizeof(mSource));
 }
 
+
+//--------------------------------------------------------------------------
+bool OpenALIsInitialized()
+{
+   return mContext != NULL;
+}
 
 //--------------------------------------------------------------------------
 bool OpenALInit()

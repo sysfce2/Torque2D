@@ -60,6 +60,11 @@ GuiTabBookCtrl::GuiTabBookCtrl()
    mBounds.extent.set( 400, 300 );
    mPageRect = RectI(0,0,0,0);
    mTabRect = RectI(0,0,0,0);
+
+   // Empty until a layout pass in edit mode fills it in, and read by
+   // getAddTabGlobalRect - which script can ask about a book that has never laid
+   // itself out at all.
+   mAddTabRect = RectI(0,0,0,0);
    mTabDownPosition = Point2I();
    mDepressed = false;
 
@@ -81,17 +86,6 @@ void GuiTabBookCtrl::initPersistFields()
    addField("MinTabWidth", TypeS32,    Offset(mMinTabWidth,GuiTabBookCtrl));
    addField("TabProfile", TypeGuiProfile, Offset(mTabProfile, GuiTabBookCtrl));
 }
-
-// Empty for now, will implement for handling design time context menu for manipulating pages
-ConsoleMethod( GuiTabBookCtrl, addPage, void, 2, 2, "() Empty")
-{
-   object->addNewPage();
-}
-
-//ConsoleMethod( GuiTabBookCtrl, removePage, void, 2, 2, "()")
-//{
-//}
-
 
 bool GuiTabBookCtrl::onAdd()
 {
@@ -125,6 +119,73 @@ void GuiTabBookCtrl::onChildRemoved( GuiControl* child )
    else if (mActivePage == NULL )
       mActivePage = static_cast<GuiTabPageCtrl*>(mPages[0].Page);
 
+   // The strip has one fewer tab in it, and nothing else re-runs the layout on a
+   // removal: solveDirty watches the tab position, the font height and the first
+   // tab's width, and a delete changes none of them. Without this the surviving
+   // tabs keep the rectangles they were given and leave a hole where the deleted
+   // one used to be.
+   calculatePageTabs();
+
+   // Whichever page was promoted above was hidden the moment some other tab was
+   // chosen, and nothing has told it otherwise.
+   syncPageVisibility();
+}
+
+void GuiTabBookCtrl::syncPageVisibility()
+{
+   for( S32 i = 0; i < mPages.size(); i++ )
+   {
+      GuiTabPageCtrl* page = mPages[i].Page;
+      if( page != NULL )
+         page->setVisible( page == mActivePage );
+   }
+}
+
+// The tab strip is drawn from mPages, which is filled in the order pages are
+// added and is otherwise independent of the child list. Anything that
+// rearranges the children - a drag in the Gui Editor's tree, or an undo putting
+// a deleted page back where it came from - therefore leaves a page sitting in
+// the middle of the children and at the end of the tab strip. The children are
+// the truth, so rebuild the order from them.
+void GuiTabBookCtrl::childrenReordered()
+{
+	Vector<TabHeaderInfo> ordered;
+
+	for (iterator i = begin(); i != end(); i++)
+	{
+		GuiTabPageCtrl* page = dynamic_cast<GuiTabPageCtrl*>(*i);
+		if (!page)
+			continue;
+
+		for (S32 p = 0; p < mPages.size(); p++)
+		{
+			if (mPages[p].Page == page)
+			{
+				ordered.push_back(mPages[p]);
+				break;
+			}
+		}
+	}
+
+	// Anything the children did not account for is a page the book believes in
+	// and the child list does not; dropping it here would leak it out of the
+	// strip, so only take the rebuild when the two agree on the count.
+	if (ordered.size() != mPages.size())
+		return;
+
+	mPages.clear();
+	for (S32 p = 0; p < ordered.size(); p++)
+		mPages.push_back(ordered[p]);
+
+	calculatePageTabs();
+
+	// Undo puts a deleted page back by moving it, and the recorder's layout fix
+	// restores position, extent and sizing - not visibility. A page that was
+	// showing when it was deleted comes back still showing, on top of whichever
+	// page took over from it.
+	syncPageVisibility();
+
+	Parent::childrenReordered();
 }
 
 void GuiTabBookCtrl::onChildAdded( GuiControl *child )
@@ -133,19 +194,26 @@ void GuiTabBookCtrl::onChildAdded( GuiControl *child )
    if( !page )
    {
       Con::warnf("GuiTabBookCtrl::onChildAdded - attempting to add NON GuiTabPageCtrl as child page");
-      SimObject *simObj = reinterpret_cast<SimObject*>(child);
-      removeObject( simObj );
-      if( mActivePage )
-      {
-         mActivePage->addObject( simObj );
-      }
-      else
+
+      // Work out where it is going BEFORE taking it out of the book. A book with
+      // no active page and no parent has nowhere to send it, and removing it
+      // first left it registered with no group at all - which a book emptied of
+      // its pages in the editor makes an ordinary thing to run into.
+      GuiControl *destination = mActivePage;
+      if( destination == NULL )
       {
          Con::warnf("GuiTabBookCtrl::onChildAdded - unable to find active page to reassign ownership of new child control to, placing on parent");
-         GuiControl *rent = getParent();
-         if( rent )
-            rent->addObject( simObj );
+         destination = getParent();
       }
+
+      if( destination == NULL )
+      {
+         Con::warnf("GuiTabBookCtrl::onChildAdded - no parent to place it on either; leaving it where it is");
+         return;
+      }
+
+      removeObject( child );
+      destination->addObject( child );
       return;
    }
 
@@ -158,8 +226,23 @@ void GuiTabBookCtrl::onChildAdded( GuiControl *child )
 
    mPages.push_back( newPage );
 
+   // A book with pages always has an active one. Without this a book holding a
+   // single page draws that page's tab unselected and shows nothing inside it,
+   // and onMouseDownEditor's "select the page behind the tab" has nothing to
+   // select.
+   //
+   // Deliberately not selectPage(), which ends in an onTabSelected script
+   // callback: this runs from inside addObject, and EditorCore adds one page per
+   // editor as each editor's module loads. Its handler opens the editor that
+   // page belongs to, so during load the first one would open before the rest of
+   // them exist.
+   if( mActivePage == NULL )
+      mActivePage = page;
+
    // Calculate Page Information
    calculatePageTabs();
+
+   syncPageVisibility();
 
    child->resize( Point2I(0, 0), mPageRect.extent );
 }
@@ -218,6 +301,19 @@ void GuiTabBookCtrl::addNewPage()
    this->addObject( page );
 }
 
+void GuiTabBookCtrl::requestNewPage()
+{
+   // The GuiEditCtrl wears the GuiEditorBrain namespace, so this arrives at
+   // GuiEditorBrain::onAddTabPage. A book being edited by anything that has no
+   // handler for it simply gets no page, which is the right way for this to
+   // fail.
+   GuiEditCtrl* edit = GuiControl::smEditorHandle;
+   if( edit != NULL && edit->isMethod("onAddTabPage") )
+   {
+      Con::executef( edit, 2, "onAddTabPage", getIdString() );
+   }
+}
+
 void GuiTabBookCtrl::resize(const Point2I &newPosition, const Point2I &newExtent)
 {
    Parent::resize( newPosition, newExtent );
@@ -255,6 +351,27 @@ Point2I GuiTabBookCtrl::getTabLocalCoord(const Point2I &src)
 	ret.y -= mTabRect.point.y;
 
 	return ret;
+}
+
+RectI GuiTabBookCtrl::getAddTabGlobalRect()
+{
+	// isEditMode as well as the rectangle, because closing the editor does not
+	// re-run the layout: the book would go on reporting the "+" it had until
+	// something else happened to resize it. Nothing DRAWS one - renderAddTab has
+	// no editor to ask for a colour - so this is the only place it could show.
+	if (!mAddTabRect.isValidRect() || !isEditMode())
+	{
+		return RectI(0, 0, 0, 0);
+	}
+
+	// The same walk onRender makes to reach the point it hands renderTabs, which
+	// is the origin mAddTabRect is measured from.
+	Point2I totalOffset = localToGlobalCoord(Point2I(0, 0)) + mTabRect.point;
+	RectI ctrlRect = applyMargins(totalOffset, mTabRect.extent, NormalState, mProfile);
+	RectI fillRect = applyBorders(ctrlRect.point, ctrlRect.extent, NormalState, mProfile);
+	RectI contentRect = applyPadding(fillRect.point, fillRect.extent, NormalState, mProfile);
+
+	return RectI(contentRect.point + mAddTabRect.point, mAddTabRect.extent);
 }
 
 void GuiTabBookCtrl::onTouchDown(const GuiEvent &event)
@@ -342,7 +459,25 @@ bool GuiTabBookCtrl::onMouseDownEditor(const GuiEvent &event, const Point2I& off
 
    if( mTabRect.pointInRect( localMouse ) )
    {
-      GuiTabPageCtrl *tab = findHitTab( localMouse );
+      // Tab rectangles are measured from the strip's CONTENT, not from the
+      // control. onTouchDown has always converted before asking and this has
+      // always not, which put every editor tab hit out by the book's margin,
+      // border and padding - and, for a bottom or right strip, by the whole
+      // width of the page area as well.
+      Point2I tabLocalMouse = getTabLocalCoord( localMouse );
+
+      // Before the real tabs: the "+" sits inside the strip, so a stale tab
+      // rectangle must not get first refusal on it.
+      if( mAddTabRect.isValidRect() && mAddTabRect.pointInRect( tabLocalMouse ) )
+      {
+         requestNewPage();
+
+         // Nothing else happens on this click. Selection follows the page the
+         // editor is about to make, not the page that happened to be showing.
+         return true;
+      }
+
+      GuiTabPageCtrl *tab = findHitTab( tabLocalMouse );
       if( tab != NULL )
       {
          selectPage( tab );
@@ -402,11 +537,6 @@ void GuiTabBookCtrl::onRender(Point2I offset, const RectI &updateRect)
 
 void GuiTabBookCtrl::renderTabs( const Point2I &offset )
 {
-   // If the tab size is zero, don't render tabs,
-   //  and assume it's a tab-less tab-book - JDD
-   if( mPages.empty())
-      return;
-
    for( S32 i = 0; i < mPages.size(); i++ )
    {
       RectI tabBounds = mPages[i].TabRect;
@@ -415,6 +545,42 @@ void GuiTabBookCtrl::renderTabs( const Point2I &offset )
       if( tab != NULL )
          renderTab( tabBounds, tab );
    }
+
+   // After the real tabs, so it always reads as the end of the strip. Empty
+   // unless calculatePageTabs found itself in edit mode, which is the whole test
+   // - a book with no pages still gets one, and that is the only thing standing
+   // between an emptied book and being unrecoverable.
+   if( mAddTabRect.isValidRect() )
+   {
+      RectI addBounds = mAddTabRect;
+      addBounds.point += offset;
+      renderAddTab( addBounds );
+   }
+}
+
+void GuiTabBookCtrl::renderAddTab( RectI tabRect )
+{
+   GuiEditCtrl* edit = GuiControl::smEditorHandle;
+   if( edit == NULL )
+      return;
+
+   // Ghosted, so it never passes for a page. Brighter under the cursor, so it
+   // reads as something to click rather than a gap the tabs did not fill - the
+   // same idea as the frame set's split handles.
+   ColorI fill = edit->getEditorColor();
+   fill.alpha = 100;
+
+   GuiCanvas* root = getRoot();
+   if( root != NULL && tabRect.pointInRect( root->getCursorPos() ) )
+      fill.alpha = 200;
+
+   dglDrawRectFill( tabRect, fill );
+
+   dglSetBitmapModulation( getFontColor( edit->mProfile, NormalState ) );
+   F32 tempAdjust = mFontSizeAdjust;
+   mFontSizeAdjust = 1.5f;
+   renderText( tabRect.point, tabRect.extent, "+", edit->mProfile );
+   mFontSizeAdjust = tempAdjust;
 }
 
 void GuiTabBookCtrl::renderTab( RectI tabRect, GuiTabPageCtrl *tab )
@@ -526,11 +692,26 @@ S32 GuiTabBookCtrl::calculatePageTabWidth( GuiTabPageCtrl *page )
 
 void GuiTabBookCtrl::calculatePageTabs()
 {
+   // Ahead of every return below: a book that leaves edit mode must not be left
+   // holding a "+" tab that is no longer drawn, or getAddPageTabRect reports a
+   // rectangle nothing will answer a click in.
+   mAddTabRect.set(Point2I(0, 0), Point2I(0, 0));
+
+   // The "+" tab is the only reason to lay out a book with no pages. Without it
+   // an empty book short-circuits here exactly as it always has: mTabRect keeps
+   // the zero it was constructed with, and onRender returns on the invalid rect
+   // before drawing anything at all.
+   //
+   // mTabProfile is the other half of what that short circuit has been quietly
+   // protecting - the font lookup below dereferences it, and it is only set from
+   // a profile the constructor names, which a bare engine need not have.
+   const bool wantAddTab = isEditMode() && mTabProfile != NULL;
+
    // Short Circuit.
    //
    // If the tab size is zero, don't render tabs,
    //  and assume it's a tab-less tab-book - JDD
-   if( mPages.empty())
+   if( mPages.empty() && !wantAddTab )
       return;
 
    S32 currRow    = 0;
@@ -622,20 +803,74 @@ void GuiTabBookCtrl::calculatePageTabs()
       };
    }
 
+   // The "+" tab goes after the last real one, laid out by the same rules but
+   // square, so it reads as an affordance rather than a page with no name.
+   //
+   // It wraps like a tab too. That grows mTabRect and shrinks mPageRect, which
+   // re-sizes every page - but only while the Gui is being authored, and not
+   // durably: the book sizes each page from mPageRect whenever one is added, so
+   // a Gui saved with the "+" on a row of its own loads back unchanged.
+   //
+   // Only the counter that survives the loop needs bumping. currRow feeds the
+   // strip's height for a top or bottom book, currColumn its width for a left or
+   // right one; the other is written and never read.
+   if( wantAddTab )
+   {
+      const S32 addSize = tabHeight;
+
+      switch( mTabPosition )
+      {
+      case AlignTop:
+      case AlignBottom:
+         // currX > 0 so a strip too narrow for even one square does not push the
+         // "+" onto an empty row it still cannot fit on.
+         if( currX + addSize > innerRect.extent.x && currX > 0 )
+         {
+            balanceRow( currRow, currX );
+            currRow++;
+            currX = 0;
+         }
+
+         mAddTabRect.point.x  = currX;
+         mAddTabRect.point.y  = currRow * tabHeight;
+         mAddTabRect.extent.x = addSize;
+         mAddTabRect.extent.y = tabHeight;
+         break;
+      case AlignLeft:
+      case AlignRight:
+         if( currY + addSize > innerRect.extent.y && currY > 0 )
+         {
+            balanceColumn( currColumn, currY );
+            currColumn++;
+            currY = 0;
+         }
+
+         mAddTabRect.point.x  = currColumn * tabHeight;
+         mAddTabRect.point.y  = currY;
+         mAddTabRect.extent.x = tabHeight;
+         mAddTabRect.extent.y = addSize;
+         break;
+      };
+   }
+
    currRow++;
    currColumn++;
 
    Point2I colExtent = Point2I(currColumn * tabHeight, currRow * tabHeight);
    Point2I outerExtent = getOuterExtent(colExtent, NormalState, mProfile);
 
-   // Calculate 
+   // Extent before point, in every case. A bottom or right strip places itself
+   // by measuring back from the far edge, so reading mTabRect.extent before this
+   // pass has written it takes the size the strip was LAST time - zero on the
+   // first pass after construction, which is the only pass a book gets when it
+   // has no pages to add and so nothing to trigger a second one.
    switch( mTabPosition )
    {
    case AlignTop:
-   	  mTabRect.point.x = 0;
-	  mTabRect.point.y = 0;
       mTabRect.extent.x = mBounds.extent.x;
       mTabRect.extent.y = outerExtent.y;
+      mTabRect.point.x = 0;
+      mTabRect.point.y = 0;
 
       mPageRect.point.x = 0;
       mPageRect.point.y = mTabRect.extent.y;
@@ -644,10 +879,10 @@ void GuiTabBookCtrl::calculatePageTabs()
 
       break;
    case AlignBottom:
-      mTabRect.point.x = 0;
-	  mTabRect.point.y = mBounds.extent.y - mTabRect.extent.y;
       mTabRect.extent.x = mBounds.extent.x;
       mTabRect.extent.y = outerExtent.y;
+      mTabRect.point.x = 0;
+      mTabRect.point.y = mBounds.extent.y - mTabRect.extent.y;
 
       mPageRect.point.x = 0;
       mPageRect.point.y = 0;
@@ -656,26 +891,26 @@ void GuiTabBookCtrl::calculatePageTabs()
 
       break;
    case AlignLeft:
-	  mTabRect.point.x = 0;
-      mTabRect.point.y = 0;
-	  mTabRect.extent.x = outerExtent.x;
+      mTabRect.extent.x = outerExtent.x;
       mTabRect.extent.y = mBounds.extent.y;
+      mTabRect.point.x = 0;
+      mTabRect.point.y = 0;
 
-	  mPageRect.point.x = mTabRect.extent.x;
+      mPageRect.point.x = mTabRect.extent.x;
       mPageRect.point.y = 0;
-	  mPageRect.extent.x = mBounds.extent.x - mTabRect.extent.x;
+      mPageRect.extent.x = mBounds.extent.x - mTabRect.extent.x;
       mPageRect.extent.y = mBounds.extent.y;
 
       break;
    case AlignRight:
-	  mTabRect.point.x = mBounds.extent.x - mTabRect.extent.x;
-      mTabRect.point.y = 0;
-	  mTabRect.extent.x = outerExtent.x;
+      mTabRect.extent.x = outerExtent.x;
       mTabRect.extent.y = mBounds.extent.y;
+      mTabRect.point.x = mBounds.extent.x - mTabRect.extent.x;
+      mTabRect.point.y = 0;
 
-	  mPageRect.point.x = 0;
+      mPageRect.point.x = 0;
       mPageRect.point.y = 0;
-	  mPageRect.extent.x = mBounds.extent.x - mTabRect.extent.x;
+      mPageRect.extent.x = mBounds.extent.x - mTabRect.extent.x;
       mPageRect.extent.y = mTabRect.extent.y;
 
       break;

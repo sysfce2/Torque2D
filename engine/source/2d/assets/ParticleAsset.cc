@@ -162,20 +162,17 @@ void ParticleAsset::initPersistFields()
 
 //------------------------------------------------------------------------------
 
-void ParticleAsset::copyTo(SimObject* object)
+// Lifetime and LifeMode are persist fields, so AssetBase::copyTo already carried
+// them. What is left is what no field describes: the particle fields, which are
+// data-key curves written as TAML custom nodes, and the emitters, which are Taml
+// children.
+void ParticleAsset::copyAssetStateTo( AssetBase* pTarget )
 {
     // Fetch particle asset object.
-   ParticleAsset* pParticleAsset = static_cast<ParticleAsset*>( object );
+   ParticleAsset* pParticleAsset = dynamic_cast<ParticleAsset*>( pTarget );
 
    // Sanity!
-   AssertFatal( pParticleAsset != NULL, "ParticleAsset::copyTo() - Object is not the correct type.");
-
-   // Copy parent.
-   Parent::copyTo( object );
-
-   // Copy fields.
-   pParticleAsset->setLifetime( getLifetime() );
-   pParticleAsset->setLifeMode( getLifeMode() );
+   AssertFatal( pParticleAsset != NULL, "ParticleAsset::copyAssetStateTo() - Object is not the correct type.");
 
    // Copy particle fields.
    mParticleFields.copyTo( pParticleAsset->mParticleFields );

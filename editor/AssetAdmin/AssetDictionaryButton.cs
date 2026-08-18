@@ -20,10 +20,139 @@
 // IN THE SOFTWARE.
 //-----------------------------------------------------------------------------
 
+// One asset in the library: a picture and the asset's name, arranged as a tile
+// or as a row depending on the library's view mode.
+//
+// The picture is whatever the asset can show of itself -- the image, the running
+// animation -- falling back to a flat icon for the kinds that have no likeness.
+// The name is drawn as well as being the tooltip, because the library can now be
+// searched and sorted by it and an order you cannot read is not an order.
+
+$AssetDictionaryButton::gridArt = 50;
+
+// The band at the bottom of a tile the caption is allowed to fill.
+$AssetDictionaryButton::gridCaption = 34;
+
+$AssetDictionaryButton::rowArt = 28;
+$AssetDictionaryButton::rowTextLeft = 36;
+
+// The square badge in the corner that says an asset has unsaved changes.
+$AssetDictionaryButton::dirtyMark = 16;
+
 function AssetDictionaryButton::onAdd(%this)
 {
+	%this.buildSearchKey();
+	%this.buildCaption();
+	%this.buildDirtyMark();
+
 	%this.call("load" @ %this.type, %this.assetID);
+
+	// The asset may already have unsaved changes -- a tile built by a duplicate,
+	// or the library being reopened on a project left mid-edit.
+	%this.refreshDirtyMark();
+
+	if(%this.viewMode $= "")
+	{
+		%this.viewMode = "grid";
+	}
+	%this.setViewMode(%this.viewMode);
 }
+
+// Everything the library asks about this asset, worked out once.
+//
+// The name, description and category all come off the AssetDefinition without
+// loading anything, and any of the three may be empty -- most assets carry no
+// description and no category at all. They are lowercased here rather than in
+// the filter because the filter walks every tile on every keystroke, and strstr
+// is case sensitive (unlike $=, which is not).
+function AssetDictionaryButton::buildSearchKey(%this)
+{
+	%name = AssetDatabase.getAssetName(%this.assetID);
+	%description = AssetDatabase.getAssetDescription(%this.assetID);
+	%category = AssetDatabase.getAssetCategory(%this.assetID);
+
+	%this.assetName = %name;
+	%this.assetCategory = %category;
+
+	%this.sortName = strlwr(%name);
+	%this.sortCategory = strlwr(%category);
+
+	// Trimmed, because two of the three are usually empty: without it an asset
+	// with neither a description nor a category ends up keyed "name  ", and one
+	// with nothing at all ends up keyed "  " -- which a needle of a single space
+	// would match. (The needle is trimmed too, so that case cannot arise today;
+	// the key should not depend on that staying true.)
+	%this.searchKey = trim(strlwr(%name SPC %description SPC %category));
+}
+
+// The three fields are editable in the inspector, so what was worked out once
+// has to be worked out again when they change. Everything the tile shows or is
+// found by comes from here.
+function AssetDictionaryButton::refreshKeys(%this)
+{
+	%this.buildSearchKey();
+
+	%this.caption.setText(%this.assetName);
+	%this.Tooltip = %this.assetName;
+}
+
+// The badge that says this asset has changes that have not been saved.
+//
+// A control of its own rather than an asterisk on the end of the caption, so that
+// the mark never becomes part of the name: the library is searched and sorted by
+// what the caption holds, and a name that grows a " *" is a name that sorts
+// somewhere else and stops matching a search for itself.
+//
+// UseInput is off so it cannot swallow the click that selects the tile it sits on.
+function AssetDictionaryButton::buildDirtyMark(%this)
+{
+	%size = $AssetDictionaryButton::dirtyMark;
+
+	%this.dirtyMark = new GuiControl()
+	{
+		HorizSizing = "anchorRight";
+		VertSizing = "anchorTop";
+		Position = "0 0";
+		Extent = %size SPC %size;
+		MinExtent = "0 0";
+		Text = "*";
+		UseInput = false;
+		Visible = false;
+	};
+	ThemeManager.setProfile(%this.dirtyMark, "impactProfile");
+	%this.add(%this.dirtyMark);
+}
+
+// The asset's unsaved state changed. Only the badge appears or goes; nothing
+// about the tile's placement, its caption or its keys depends on it.
+function AssetDictionaryButton::refreshDirtyMark(%this)
+{
+	if(isObject(%this.dirtyMark))
+	{
+		%this.dirtyMark.setVisible(AssetDatabase.isAssetDirty(%this.assetID));
+	}
+}
+
+function AssetDictionaryButton::buildCaption(%this)
+{
+	%this.caption = new GuiControl()
+	{
+		Position = "0 0";
+		Extent = "60 20";
+		MinExtent = "0 0";
+		Text = %this.assetName;
+		align = "center";
+		vAlign = "bottom";
+		textWrap = true;
+		UseInput = false;
+	};
+	ThemeManager.setProfile(%this.caption, "labelProfile");
+	%this.add(%this.caption);
+}
+
+//-----------------------------------------------------------------------------
+// The picture, one loader per asset kind.
+//-----------------------------------------------------------------------------
 
 function AssetDictionaryButton::loadImageAsset(%this, %assetID)
 {
@@ -111,23 +240,109 @@ function AssetDictionaryButton::loadSpineAsset(%this, %assetID)
 	%this.add(%texture);
 }
 
+// MinExtent is deliberately tiny: setViewMode drives this down to the row art
+// size, and a minimum of the tile size would silently refuse.
 function AssetDictionaryButton::buildIcon(%this)
 {
-	%texture = new GuiSpriteCtrl()
+	%this.icon = new GuiSpriteCtrl()
 	{
 		class = "AssetDictionarySprite";
-		HorizSizing="center";
-		VertSizing="center";
-		Extent = "50 50";
-		minExtent = "50 50";
+		HorizSizing = "center";
+		VertSizing = "center";
+		Extent = $AssetDictionaryButton::gridArt SPC $AssetDictionaryButton::gridArt;
+		minExtent = "8 8";
 		Position = "0 0";
 		constrainProportions = "1";
 		fullSize = "1";
 		UseInput = false;
 	};
-	ThemeManager.setProfile(%texture, "spriteProfile");
-	return %texture;
+	ThemeManager.setProfile(%this.icon, "spriteProfile");
+	return %this.icon;
 }
+
+//-----------------------------------------------------------------------------
+// View mode.
+//-----------------------------------------------------------------------------
+
+// The picture and the caption swap places rather than the tile being rebuilt.
+// The sprite scales itself (constrainProportions and fullSize), so only its
+// extent and position change -- the image it holds, and an animation part way
+// through, are untouched.
+function AssetDictionaryButton::setViewMode(%this, %mode)
+{
+	%this.viewMode = %mode;
+
+	if(!isObject(%this.icon) || !isObject(%this.caption) || !isObject(%this.dirtyMark))
+	{
+		return;
+	}
+
+	%w = getWord(%this.getExtent(), 0);
+	%h = getWord(%this.getExtent(), 1);
+	%mark = $AssetDictionaryButton::dirtyMark;
+
+	if(%mode $= "rows")
+	{
+		%art = $AssetDictionaryButton::rowArt;
+		%left = $AssetDictionaryButton::rowTextLeft;
+
+		%this.icon.HorizSizing = "anchorLeft";
+		%this.icon.VertSizing = "center";
+		%this.icon.setExtent(%art, %art);
+		%this.icon.setPosition(4, (%h - %art) / 2);
+
+		// The caption stops short of the badge rather than running under it: a row
+		// is one line of text with nothing above it to move the mark out of.
+		%this.caption.HorizSizing = "width";
+		%this.caption.VertSizing = "center";
+		%this.caption.setExtent(%w - %left - 8 - %mark, %art);
+		%this.caption.setPosition(%left, (%h - %art) / 2);
+		%this.caption.align = "left";
+		%this.caption.vAlign = "middle";
+		%this.caption.textWrap = false;
+
+		%this.dirtyMark.VertSizing = "center";
+		%this.dirtyMark.setExtent(%mark, %mark);
+		%this.dirtyMark.setPosition(%w - %mark - 4, (%h - %mark) / 2);
+	}
+	else
+	{
+		%art = $AssetDictionaryButton::gridArt;
+		%band = $AssetDictionaryButton::gridCaption;
+
+		%this.caption.HorizSizing = "fill";
+		%this.caption.VertSizing = "fill";
+		%this.caption.align = "center";
+		%this.caption.vAlign = "bottom";
+		%this.caption.textWrap = true;
+		%this.caption.applySizing();
+
+		// And that fill is how the button's own border inset gets measured: what
+		// the caption reports back after filling IS the content rect, and where it
+		// sits IS that rect's origin.
+		%innerW = getWord(%this.caption.getExtent(), 0);
+		%innerH = getWord(%this.caption.getExtent(), 1);
+		%innerX = getWord(%this.caption.getPosition(), 0);
+		%innerY = getWord(%this.caption.getPosition(), 1);
+
+		%this.icon.HorizSizing = "center";
+		%this.icon.VertSizing = "anchorTop";
+		%this.icon.setExtent(%art, %art);
+		%this.icon.setPosition(0, (%innerH - %band - %art) / 2);
+		%this.icon.applySizing();
+
+		// Hard into the top right of the content rect, over the corner of the
+		// picture. Measured from the caption rather than from the button's own
+		// extent so the badge lands inside the border rather than under it.
+		%this.dirtyMark.VertSizing = "anchorTop";
+		%this.dirtyMark.setExtent(%mark, %mark);
+		%this.dirtyMark.setPosition(%innerX + %innerW - %mark, %innerY);
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Selection.
+//-----------------------------------------------------------------------------
 
 function AssetDictionaryButton::onClick(%this)
 {
@@ -146,9 +361,23 @@ function AssetDictionaryButton::onClick(%this)
 	AssetAdmin.audioPlayButtonContainer.setVisible(false);
 	AssetAdmin.AssetWindow.setVisible(true);
 
+	// One line, above the whole chain, and every branch below is untouched. The
+	// stage keeps the animation split up if this asset is the one it is already
+	// showing and takes it down otherwise, which is the entire answer for the
+	// five asset kinds that have never heard of it.
+	AssetAdmin.animationStage.retainFor(%this.AnimationAssetID);
+
+	// Same idea for the particle transport: the particle branch below puts it back
+	// up with the player it just built, so the only thing that has to happen here
+	// is that it is not left over the preview of something that has no transport.
+	AssetAdmin.hideParticleTransport();
+
+	// The animation branch has to stay first: an animation tile caches its image
+	// asset too, so the image branch would swallow it.
 	if(isObject(%this.AnimationAsset) && %this.AnimationAssetID !$= "")
 	{
 		AssetAdmin.AssetWindow.displayAnimationAsset(%this.imageAsset, %this.AnimationAsset, %this.AnimationAssetID);
+		AssetAdmin.animationStage.select(%this.imageAsset, %this.AnimationAsset, %this.AnimationAssetID);
 		if(%firstLoad)
 		{
 			AssetAdmin.inspector.loadAnimationAsset(%this.AnimationAsset, %this.AnimationAssetID);

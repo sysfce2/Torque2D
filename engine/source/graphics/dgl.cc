@@ -1185,7 +1185,14 @@ void dglDrawCircle(const Point2I &center, const F32 radius, const ColorI &color,
 	}
 
 	F32 adjustedRadius = radius - (lineWidth/2);
+	// See dglDrawCircleFill: a non-positive radius yields <= 0 segments, which
+	// would leave verts empty and make the verts[0]/verts[1] reads below run past
+	// the end of the vector. Bail rather than crash.
+	if (!(adjustedRadius > 0.0f))
+		return;
 	const S32 num_segments = (const S32)round(10 * sqrtf(adjustedRadius));
+	if (num_segments <= 0)
+		return;
 	F32 theta = 2 * 3.1415926f / F32(num_segments);
 	F32 c = cosf(theta);//precalculate the sine and cosine
 	F32 s = sinf(theta);
@@ -1224,7 +1231,16 @@ void dglDrawCircle(const Point2I &center, const F32 radius, const ColorI &color,
 
 void dglDrawCircleFill(const Point2I &center, const F32 radius, const ColorI &color)
 {
+	// A non-positive radius (e.g. a control squeezed to nothing by a padded
+	// border) makes sqrtf() return 0 or NaN, so num_segments is <= 0. The vertex
+	// loop below is then skipped, leaving verts holding only the center point --
+	// and the verts[2]/verts[3] reads that follow run off the end of the vector.
+	// Bail instead of crashing so no caller can be brought down by a bad radius.
+	if (!(radius > 0.0f))
+		return;
 	const S32 num_segments = (const S32)round(10 * sqrtf(radius));
+	if (num_segments <= 0)
+		return;
 	F32 theta = 2 * 3.1415926f / F32(num_segments);
 	F32 c = cosf(theta);//precalculate the sine and cosine
 	F32 s = sinf(theta);
@@ -1630,6 +1646,10 @@ void dglDrawBlendBox(const RectI& bounds, ColorF& c1, ColorF& c2, ColorF& c3, Co
 	glEnableClientState(GL_COLOR_ARRAY);
 
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+	// squareColors is a local. Leaving the color array enabled and pointed at it
+	// hands every later vertex-array draw a pointer into a dead stack frame.
+	glDisableClientState(GL_COLOR_ARRAY);
 }
 
 //--------------------------------------------------------------------------

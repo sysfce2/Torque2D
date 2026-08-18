@@ -68,7 +68,14 @@ public:
         class PixelArea
         {
         public:
-            PixelArea() {}
+            // mRegionName is read by dStrcmp in four places (containsNamedRegion,
+            // getExplicitCellIndex, getCellByName, removeExplicitCell), and only a
+            // NAMED cell ever went through the overload that sets it -- so every
+            // frame of an ordinary cell-mode image carried an indeterminate
+            // pointer, and asking such an image whether it contains a named frame
+            // dereferenced it. An empty name is the honest answer for a frame that
+            // has none.
+            PixelArea() : mPixelWidth( 0 ), mPixelHeight( 0 ), mRegionName( StringTable->EmptyString ) {}
             PixelArea( const S32 pixelFrameOffsetX, const S32 pixelFrameOffsetY, const U32 pixelFrameWidth, const U32 pixelFrameHeight )
             {
                 setArea( pixelFrameOffsetX, pixelFrameOffsetY, pixelFrameWidth, pixelFrameHeight );
@@ -82,13 +89,14 @@ public:
                 mPixelOffset.set( pixelFrameOffsetX, pixelFrameOffsetY );
                 mPixelWidth = pixelFrameWidth;
                 mPixelHeight = pixelFrameHeight;
+                mRegionName = StringTable->EmptyString;
             };
             inline void setArea( const S32 pixelFrameOffsetX, const S32 pixelFrameOffsetY, const U32 pixelFrameWidth, const U32 pixelFrameHeight, const char* regionName )
             {
                 mPixelOffset.set( pixelFrameOffsetX, pixelFrameOffsetY );
                 mPixelWidth = pixelFrameWidth;
                 mPixelHeight = pixelFrameHeight;
-                mRegionName = StringTable->insert(regionName);
+                mRegionName = ( regionName == NULL ) ? StringTable->EmptyString : StringTable->insert(regionName);
             };
 			inline RectI toRectI(void) const { return RectI(mPixelOffset, Point2I(mPixelWidth, mPixelHeight)); }
 
@@ -190,6 +198,13 @@ private:
     bool                        mForce16Bit;
     TextureFilterMode           mLocalFilterMode;
     bool                        mExplicitMode;
+
+    /// Whether anything has set ExplicitMode on this object, as opposed to it
+    /// merely still holding its default. Read once, by the TAML load, to tell a
+    /// file that says "explicit mode is off" from an older one that says nothing
+    /// -- the first must be believed, the second has to be inferred from the cells.
+    bool                        mExplicitModeStated;
+
     bool                        mCellRowOrder;
     S32                         mCellOffsetX;
     S32                         mCellOffsetY;
@@ -215,7 +230,7 @@ public:
     static void initPersistFields();
     virtual bool onAdd();
     virtual void onRemove();
-    virtual void copyTo(SimObject* object);
+    virtual void copyAssetStateTo(AssetBase* pTarget);
 
     void                    setImageFile( const char* pImageFile );
     inline StringTableEntry getImageFile( void ) const                      { return mImageFile; };
@@ -287,7 +302,13 @@ public:
     bool                    removeExplicitCell( const char* regionName );
     bool                    setExplicitCell( const S32 cellIndex, const S32 cellOffsetX, const S32 cellOffsetY, const S32 cellWidth, const S32 cellHeight, const char* regionName );
     inline S32              getExplicitCellCount( void ) const              { return mExplicitFrames.size(); }
-    
+
+    /// The first "Frame<N>" at or after seedIndex that nobody in used is already
+    /// called. Static, and takes its whole world, because naming is arithmetic
+    /// over a set of strings and needs no texture -- which is the only way it can
+    /// be unit tested, since a test has no GL context to load a bitmap into.
+    static StringTableEntry nextAvailableCellName( const Vector<StringTableEntry>& used, const S32 seedIndex );
+
     static TextureFilterMode getFilterModeEnum(const char* label);
     static const char* getFilterModeDescription( TextureFilterMode filterMode );
     
@@ -321,6 +342,14 @@ private:
     void calculateImage( void );
     void calculateImplicitMode( void );
     void calculateExplicitMode( void );
+
+    /// Give every unnamed explicit cell a name, so an animation can address it.
+    ///
+    /// Called from calculateExplicitMode, which is the one funnel every path that
+    /// changes cells ends in -- the TAML read pushes straight into mExplicitFrames
+    /// and never goes near addExplicitCell, so naming in the mutators would miss
+    /// every cell that arrived from a file.
+    void assignMissingExplicitCellNames( void );
     void setTextureFilter( const TextureFilterMode filterMode );
 
     void completeLayerChange(const bool doRedraw);
@@ -353,8 +382,15 @@ protected:
     static bool setFilterMode( void* obj, const char* data );
     static bool writeFilterMode( void* obj, StringTableEntry pFieldName )   { return static_cast<ImageAsset*>(obj)->getFilterMode() != FILTER_INVALID; }
 
-    static bool setExplicitMode( void* obj, const char* data )              { static_cast<ImageAsset*>(obj)->setExplicitMode(dAtob(data)); return false; }
-    static bool writeExplicitMode(void* obj, StringTableEntry pFieldName) { ImageAsset* pImageAsset = static_cast<ImageAsset*>(obj); return pImageAsset->getExplicitMode(); }
+    static bool setExplicitMode( void* obj, const char* data )              { ImageAsset* pImageAsset = static_cast<ImageAsset*>(obj); pImageAsset->mExplicitModeStated = true; pImageAsset->setExplicitMode(dAtob(data)); return false; }
+
+    // Written whenever there are cells, not only while the mode is on.
+    //
+    // The cells are now saved even with the mode off, and the read turns the mode
+    // on for any file it finds cells in -- an inference that has to stay, because
+    // files written before this said nothing else. So a file with cells and the
+    // mode off has to say so out loud, or it comes back on.
+    static bool writeExplicitMode(void* obj, StringTableEntry pFieldName) { ImageAsset* pImageAsset = static_cast<ImageAsset*>(obj); return pImageAsset->getExplicitMode() || pImageAsset->getExplicitCellCount() > 0; }
 
     static bool setCellRowOrder( void* obj, const char* data )              { static_cast<ImageAsset*>(obj)->setCellRowOrder(dAtob(data)); return false; }
     static bool writeCellRowOrder( void* obj, StringTableEntry pFieldName ) { ImageAsset* pImageAsset = static_cast<ImageAsset*>(obj); return !pImageAsset->getExplicitMode() && !pImageAsset->getCellRowOrder(); }

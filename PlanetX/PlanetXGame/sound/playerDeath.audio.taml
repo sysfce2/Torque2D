@@ -1,0 +1,4 @@
+<AudioAsset
+    AssetName="playerDeathBurst"
+    AudioFile="playerDeath.wav"
+    VolumeChannel="1" />

@@ -1,23 +1,33 @@
 
 function AssetParticleGraphUnit::onAdd(%this)
 {
-	%this.graph = new GuiParticleGraphInspector()
-	{
-		HorizSizing="width";
-		VertSizing="height";
-		Position="30 18";
-		Extent= (getWord(%this.extent, 0) - 40) SPC (getWord(%this.extent, 1) - 60);
-	};
+	// Everything here is placed against the left inset rather than a literal 30,
+	// so a subclass wanting another column of its own down the left side moves the
+	// whole arrangement by overriding one number.
+	%inset = %this.getLeftInset();
+
+	%this.graph = %this.createGraph();
+	%this.graph.HorizSizing = "width";
+	%this.graph.VertSizing = "height";
+	%this.graph.Position = %inset SPC 18;
+	%this.graph.Extent = (getWord(%this.extent, 0) - %inset - 10) SPC (getWord(%this.extent, 1) - 60);
 	ThemeManager.setProfile(%this.graph, "graphProfile");
 	%this.add(%this.graph);
 
-	//Value zoom buttons
+	// The value buttons sit in the column immediately left of the graph, whatever
+	// the inset is.
+	%valueX = %inset - 28;
+
+	// Value zoom buttons. A plus and minus in a square rather than the magnifier
+	// pair these used to wear: the icon set has a magnifier but no +/- variants
+	// of it, and the squared pair stays distinct from the round plus and minus,
+	// which mean add and remove everywhere else in the editor.
 	%center = 6 + mRound(getWord(%this.graph.extent, 1) / 2);
 	%this.valueZoomInButton = new GuiButtonCtrl()
 	{
 		Class = "EditorIconButton";
-		Frame = 0;
-		Position = "2" SPC (%center + 13);
+		Frame = $EditorIcon::sq_plus;
+		Position = %valueX SPC (%center + 13);
 		Command = %this.getId() @ ".valueZoomIn();";
 		Tooltip = "Zoom In";
 	};
@@ -27,8 +37,8 @@ function AssetParticleGraphUnit::onAdd(%this)
 	%this.valueZoomOutButton = new GuiButtonCtrl()
 	{
 		Class = "EditorIconButton";
-		Frame = 1;
-		Position = "2" SPC (%center - 13);
+		Frame = $EditorIcon::sq_minus;
+		Position = %valueX SPC (%center - 13);
 		Command = %this.getId() @ ".valueZoomOut();";
 		Tooltip = "Zoom Out";
 	};
@@ -39,8 +49,8 @@ function AssetParticleGraphUnit::onAdd(%this)
 	%this.valueMoveUpButton = new GuiButtonCtrl()
 	{
 		Class = "EditorIconButton";
-		Frame = 2;
-		Position = "2 18";
+		Frame = $EditorIcon::arrow_top;
+		Position = %valueX SPC 18;
 		Command = %this.getId() @ ".valueMoveUp();";
 		Tooltip = "Move Graph Up";
 	};
@@ -50,8 +60,8 @@ function AssetParticleGraphUnit::onAdd(%this)
 	%this.valueMoveDownButton = new GuiButtonCtrl()
 	{
 		Class = "EditorIconButton";
-		Frame = 6;
-		Position = "2" SPC (getWord(%this.extent, 1) - 66);
+		Frame = $EditorIcon::arrow_bottom;
+		Position = %valueX SPC (getWord(%this.extent, 1) - 66);
 		Command = %this.getId() @ ".valueMoveDown();";
 		Tooltip = "Move Graph Down";
 	};
@@ -59,7 +69,6 @@ function AssetParticleGraphUnit::onAdd(%this)
 	%this.add(%this.valueMoveDownButton);
 
 	//time zoom buttons
-	%center = 18 + mRound(getWord(%this.graph.extent, 0));
 	%bottom = getWord(%this.extent, 1) - 38;
 	%this.timeZoomContainer = new GuiControl()
 	{
@@ -73,7 +82,7 @@ function AssetParticleGraphUnit::onAdd(%this)
 	%this.timeZoomInButton = new GuiButtonCtrl()
 	{
 		Class = "EditorIconButton";
-		Frame = 0;
+		Frame = $EditorIcon::sq_plus;
 		Position = "0 0";
 		Command = %this.getId() @ ".timeZoomIn();";
 		Tooltip = "Zoom In";
@@ -84,7 +93,7 @@ function AssetParticleGraphUnit::onAdd(%this)
 	%this.timeZoomOutButton = new GuiButtonCtrl()
 	{
 		Class = "EditorIconButton";
-		Frame = 1;
+		Frame = $EditorIcon::sq_minus;
 		Position = "26 0";
 		Command = %this.getId() @ ".timeZoomOut();";
 		Tooltip = "Zoom Out";
@@ -96,9 +105,9 @@ function AssetParticleGraphUnit::onAdd(%this)
 	%this.timeMoveBackButton = new GuiButtonCtrl()
 	{
 		Class = "EditorIconButton";
-		Frame = 8;
+		Frame = $EditorIcon::arrow_left;
 		HorizSizing = "right";
-		Position = "30" SPC %bottom;
+		Position = %inset SPC %bottom;
 		Command = %this.getId() @ ".timeMoveBack();";
 		Tooltip = "Move Graph Back";
 	};
@@ -108,7 +117,7 @@ function AssetParticleGraphUnit::onAdd(%this)
 	%this.timeMoveForwardButton = new GuiButtonCtrl()
 	{
 		Class = "EditorIconButton";
-		Frame = 4;
+		Frame = $EditorIcon::arrow_right;
 		HorizSizing = "left";
 		Position = (getWord(%this.graph.extent, 0) + 6) SPC %bottom;
 		Command = %this.getId() @ ".timeMoveForward();";
@@ -116,6 +125,44 @@ function AssetParticleGraphUnit::onAdd(%this)
 	};
 	ThemeManager.setProfile(%this.timeMoveForwardButton, "iconButtonProfile");
 	%this.add(%this.timeMoveForwardButton);
+
+	%this.addExtraControls();
+}
+
+// The graph this unit wraps. A subclass showing something other than one curve
+// answers with its own control and inherits every button above unchanged.
+function AssetParticleGraphUnit::createGraph(%this)
+{
+	return new GuiParticleGraphInspector();
+}
+
+// How much of the unit's left edge belongs to buttons rather than to the graph.
+function AssetParticleGraphUnit::getLeftInset(%this)
+{
+	return 30;
+}
+
+// Anything a subclass wants in the room its inset bought. Nothing, here.
+function AssetParticleGraphUnit::addExtraControls(%this)
+{
+}
+
+// A unit that has nothing to show is taken out of the grid rather than emptied,
+// so the cells that remain close up over it.
+function AssetParticleGraphUnit::attach(%this)
+{
+	if(!%this.Tool.isMember(%this))
+	{
+		%this.Tool.add(%this);
+	}
+}
+
+function AssetParticleGraphUnit::detach(%this)
+{
+	if(%this.Tool.isMember(%this))
+	{
+		%this.Tool.remove(%this);
+	}
 }
 
 function AssetParticleGraphUnit::setToScale(%this, %scaleName)
@@ -134,17 +181,11 @@ function AssetParticleGraphUnit::setToVari(%this, %variName, %emitterID)
 {
 	if(%variName $= "")
 	{
-		if(%this.Tool.isMember(%this))
-		{
-			%this.Tool.remove(%this);
-		}
+		%this.detach();
 		return;
 	}
 
-	if(!%this.Tool.isMember(%this))
-	{
-		%this.Tool.add(%this);
-	}
+	%this.attach();
 	%this.graph.setDisplayLabels("Time", "Variation");
 	%this.graph.setDisplayField(%variName, %emitterID);
 }
@@ -153,17 +194,11 @@ function AssetParticleGraphUnit::setToLife(%this, %lifeName, %emitterID)
 {
 	if(%lifeName $= "")
 	{
-		if(%this.Tool.isMember(%this))
-		{
-			%this.Tool.remove(%this);
-		}
+		%this.detach();
 		return;
 	}
 
-	if(!%this.Tool.isMember(%this))
-	{
-		%this.Tool.add(%this);
-	}
+	%this.attach();
 	%this.graph.setDisplayLabels("Time", "Scale");
 	%this.graph.setDisplayField(%lifeName, %emitterID);
 }

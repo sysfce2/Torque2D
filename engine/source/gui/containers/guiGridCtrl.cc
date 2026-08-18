@@ -140,12 +140,24 @@ void GuiGridCtrl::resize(const Point2I &newPosition, const Point2I &newExtent)
 		mChainNumber = 0;
 		mRunningChainHeight = 0;
 		mCurrentChainHeight = 0;
-		for (i = begin(); i != end(); i++, cellNumber++)
+		for (i = begin(); i != end(); i++)
 		{
 			GuiControl *ctrl = static_cast<GuiControl *>(*i);
+
+			// A hidden child takes no cell, so the cells after it close up
+			// instead of flowing around a hole. GuiChainCtrl skips its hidden
+			// children the same way. The exception is the gui being authored in
+			// the Gui Editor, where a hidden control still has to be placed so
+			// it can be selected -- isEditMode() is per-control and true only
+			// inside the edit root, unlike the global smDesignTime, which is set
+			// for the whole canvas while the editor is merely open.
+			if (!ctrl->isVisible() && !isEditMode())
+				continue;
+
 			Point2I cellPos = getCellPosition(cellNumber, innerRect.extent, ctrl);
 			Point2I cellExt = getCellExtent(ctrl);
 			ctrl->resize(cellPos, cellExt);
+			cellNumber++;
 		}
 		mRunningChainHeight += mCurrentChainHeight;
 
@@ -188,7 +200,6 @@ Point2I GuiGridCtrl::getCellPosition(const U16 cellNumber, const Point2I &innerE
 	Point2I result(0,0);
 	U16 y = (U16)mFloor(cellNumber / mCalcChainLength);
 	U16 x = (U16)(cellNumber % mCalcChainLength);
-	F32 ChainCount = mCeil((F32)size() / (F32)mCalcChainLength);
 
 	if (y != mChainNumber)
 	{

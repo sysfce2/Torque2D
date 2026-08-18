@@ -389,7 +389,17 @@ U32 File::getSize() const
     if ( Ok == currentStatus || EOS == currentStatus )
     {
         struct stat statData;
-        
+
+        // The handle is buffered stdio, so bytes just written may still be in
+        // that buffer and not yet in the inode fstat reports. Windows and Linux
+        // both hold an unbuffered handle and so never see a stale size; push the
+        // buffer out first so this answers with the same authority they do. A
+        // read-only file has nothing to push, and the one hot caller
+        // (setPosition) has already flushed by way of its own fseek, so this
+        // costs nothing on the paths that ask most often.
+        if ( hasCapability(FileWrite) )
+            fflush((FILE*)handle);
+
         if(fstat(fileno((FILE*)handle), &statData) != 0)
             return 0;
         
@@ -687,6 +697,12 @@ bool Platform::createPath(const char *file)
         return false;
     }
     char* pFinalSlash = dStrrchr(pathBuffer, '/');
+    if ( pFinalSlash == NULL )
+    {
+        // A bare file name in the working directory names no directory, so
+        // there is nothing to create. Windows and Linux both no-op here.
+        return true;
+    }
     if ( pFinalSlash != pathBuffer+pathLength-1 )
     {
         pFinalSlash[1] = 0;

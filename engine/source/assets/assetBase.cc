@@ -90,9 +90,22 @@ void AssetBase::initPersistFields()
 
 //------------------------------------------------------------------------------
 
+// Every asset type used to list its own fields here, by hand, and every one of
+// those lists had drifted from the fields it was meant to carry: ImageAsset
+// copied its cell COUNT into its cell OFFSET and never copied image layers at
+// all, and AnimationAsset and ParticleAssetEmitter both branched on the TARGET's
+// mode -- still the default at that point -- to decide what to copy, so an
+// animated emitter copied as a blank static one.
+//
+// So do not list fields. copyFieldsFrom walks the field table, which is the same
+// list TAML persists, reading through the source's getDataFn and writing through
+// the target's setDataFn. A field added tomorrow is copied the day it is added.
+// What is left over is the state no field describes -- custom nodes and Taml
+// children -- and that is what copyAssetStateTo is for.
 void AssetBase::copyTo(SimObject* object)
 {
-    // Call to parent.
+    // Call to parent. This sets the script class and links the namespaces, and
+    // must run before anything that could look for a script callback.
     Parent::copyTo(object);
 
     // Cast to asset.
@@ -101,12 +114,16 @@ void AssetBase::copyTo(SimObject* object)
     // Sanity!
     AssertFatal(pAsset != NULL, "AssetBase::copyTo() - Object is not the correct type.");
 
-    // Copy state.
-    pAsset->setAssetName( getAssetName() );
-    pAsset->setAssetDescription( getAssetDescription() );
-    pAsset->setAssetCategory( getAssetCategory() );
-    pAsset->setAssetAutoUnload( getAssetAutoUnload() );
-    pAsset->setAssetInternal( getAssetInternal() );
+    // The SimObject name is not the AssetName, and neither is wanted here: the
+    // name because two objects answering to one name is a bug, the parent group
+    // because writing the field would MOVE the copy into the original's group,
+    // and class/superclass because Parent::copyTo just set them.
+    pAsset->copyFieldsFrom( this, SimObject::CopyFields_SkipName
+                                | SimObject::CopyFields_SkipParentGroup
+                                | SimObject::CopyFields_SkipScriptClass );
+
+    // Whatever the field table could not describe.
+    copyAssetStateTo( pAsset );
 }
 
 //-----------------------------------------------------------------------------
@@ -265,6 +282,16 @@ StringTableEntry AssetBase::collapseAssetFilePath( const char* pAssetFilePath ) 
 
 //-----------------------------------------------------------------------------
 
+// The asset changed. This marks it unsaved and announces it; it does not write
+// the file. See AssetManager::refreshAsset.
+//
+// The early-out is what makes an unowned asset inert, which is what
+// createStateSnapshot relies on: a copy runs every setter on the copy, and none
+// of them should mean anything.
+//
+// The onRefresh script callback used to fire from here. It now fires from
+// AssetManager::notifyAssetRefresh instead, so that it also reaches the assets
+// that depend on this one -- which is what the editor always assumed it did.
 void AssetBase::refreshAsset( void )
 {
     // Debug Profiling.
@@ -276,12 +303,86 @@ void AssetBase::refreshAsset( void )
 
     // Yes, so refresh the asset via the asset manager.
     mpOwningAssetManager->refreshAsset( getAssetId() );
+}
 
-	//Inform those who want to know
-	if (isMethod("onRefresh"))
-	{
-		Con::executef(this, 1, "onRefresh");
-	}
+//-----------------------------------------------------------------------------
+
+bool AssetBase::saveAsset( void )
+{
+    if ( mpOwningAssetManager == NULL )
+        return false;
+
+    return mpOwningAssetManager->saveAsset( getAssetId() );
+}
+
+//-----------------------------------------------------------------------------
+
+bool AssetBase::revertAsset( void )
+{
+    if ( mpOwningAssetManager == NULL )
+        return false;
+
+    return mpOwningAssetManager->revertAsset( getAssetId() );
+}
+
+//-----------------------------------------------------------------------------
+
+AssetBase* AssetBase::createStateSnapshot( void )
+{
+    // Debug Profiling.
+    PROFILE_SCOPE(AssetBase_CreateStateSnapshot);
+
+    // Create an empty asset of this asset's type.
+    AssetBase* pSnapshot = dynamic_cast<AssetBase*>( ConsoleObject::create( getClassName() ) );
+
+    if ( pSnapshot == NULL )
+    {
+        // Warn.
+        Con::warnf( "AssetBase::createStateSnapshot() - Could not create an asset of type '%s'.", getClassName() );
+        return NULL;
+    }
+
+    if ( !pSnapshot->registerObject() )
+    {
+        // Warn.
+        Con::warnf( "AssetBase::createStateSnapshot() - Could not register the snapshot asset." );
+        delete pSnapshot;
+        return NULL;
+    }
+
+    // The snapshot is unowned, so every setter this runs is inert.
+    copyTo( pSnapshot );
+
+    return pSnapshot;
+}
+
+//-----------------------------------------------------------------------------
+
+bool AssetBase::restoreStateSnapshot( AssetBase* pSnapshot )
+{
+    // Debug Profiling.
+    PROFILE_SCOPE(AssetBase_RestoreStateSnapshot);
+
+    if ( pSnapshot == NULL )
+        return false;
+
+    // Copying between two different kinds of asset would be nonsense, and
+    // copyFieldsFrom would silently do nothing at all.
+    if ( pSnapshot->getClassRep() != getClassRep() )
+    {
+        // Warn.
+        Con::warnf( "AssetBase::restoreStateSnapshot() - Cannot restore a '%s' snapshot onto a '%s'.",
+            pSnapshot->getClassName(), getClassName() );
+        return false;
+    }
+
+    // One announcement for the whole restore, and replaying an edit is not
+    // making one.
+    AssetManager::ScopedAssetUpdate scopedUpdate( mpOwningAssetManager, true );
+
+    pSnapshot->copyTo( this );
+
+    return true;
 }
 
 //-----------------------------------------------------------------------------

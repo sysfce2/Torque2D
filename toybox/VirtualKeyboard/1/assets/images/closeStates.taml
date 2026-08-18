@@ -1,0 +1,7 @@
+<ImageAsset
+    AssetName="closeStates"
+    ImageFile="closeStates.png"
+    CellCountX="4"
+    CellCountY="1"
+    CellWidth="54"
+    CellHeight="54"/>

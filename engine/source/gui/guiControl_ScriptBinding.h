@@ -75,6 +75,56 @@ ConsoleMethodWithDocs(GuiControl, reorderChild, ConsoleVoid, 4,4,  (child1, chil
    }
 }
 
+/*! Tell this control that the order of its children has changed, so that one
+    which lays its children out - a chain, a grid, a frame set - places them
+    again.
+
+    reorderChild and the SimSet ordering methods change the list and announce
+    nothing, so anything that rearranges children from script has to say so
+    afterwards. Adding and removing a child already notify on their own; this is
+    for the case where the same children are simply in a different order.
+    @return No return value
+*/
+ConsoleMethodWithDocs(GuiControl, childrenReordered, ConsoleVoid, 2, 2, ())
+{
+   object->childrenReordered();
+}
+
+/*! Whether this control is allowed to become a child of the given container.
+
+    The Gui Editor asks before every reparent it performs - a drag in the Explorer
+    tree, a drag across the canvas, a paste - and leaves the control where it is
+    when the answer is false. Almost everything answers true; a GuiTabPageCtrl
+    answers true only for a GuiTabBookCtrl.
+
+    Nothing enforces this below the editor: add() will still put a control
+    anywhere. This is the question, not the gate.
+    @param parent The container being proposed.
+    @return True when the control would be at home there.
+*/
+ConsoleMethodWithDocs(GuiControl, canBeChildOf, ConsoleBool, 3, 3, (GuiControl parent))
+{
+   GuiControl* pParent = dynamic_cast<GuiControl*>(Sim::findObject(argv[2]));
+
+   return object->canBeChildOf(pParent);
+}
+
+/*! Whether the Gui Editor may move or resize this control.
+
+    False where the PARENT dictates the geometry and the control's own Position
+    and Extent are written over the moment anything re-lays it out - a tab page,
+    a menu item. The editor draws such a control the way it draws a locked one:
+    an outline rather than eight sizing handles.
+
+    This is the control's own nature, not the user's padlock; isLocked is that,
+    and the editor honours both.
+    @return True when the editor may change this control's geometry.
+*/
+ConsoleMethodWithDocs(GuiControl, isGeometryEditable, ConsoleBool, 2, 2, ())
+{
+   return object->isGeometryEditable();
+}
+
 /*! @return Returns the Id of the parent control
 */
 ConsoleMethodWithDocs( GuiControl, getParent, ConsoleInt, 2, 2, ())
@@ -371,6 +421,66 @@ ConsoleMethodWithDocs(GuiControl, setTextExtend, ConsoleVoid, 3, 3, (setting))
 ConsoleMethodWithDocs(GuiControl, getTextExtend, ConsoleBool, 2, 2, ())
 {
     return object->getTextExtend();
+}
+
+/*! Re-applies this control's sizing flags against its parent's current size.
+
+    HorizSizing and VertSizing are only ever consulted from parentResized, so
+    setting one leaves the control exactly where it was until something else
+    resizes the parent. That is fine for the modes that describe what happens to
+    a size CHANGE, but "center" and "fill" describe a position the control
+    should always be in, and those look broken until the next layout pass.
+
+    Calling this runs the layout with a zero delta, so the modes that need a
+    delta do nothing -- which is correct, they have nothing to respond to -- and
+    center and fill take effect at once.
+
+    Does nothing if the control has no parent.
+    @return No return value
+*/
+ConsoleMethodWithDocs(GuiControl, applySizing, ConsoleVoid, 2, 2, ())
+{
+    GuiControl* parent = object->getParent();
+    if( parent == NULL )
+        return;
+
+    // Both extents the same: parentResized derives the inner rect itself for
+    // the two modes that need it, so the outer extent is all it wants here.
+    const Point2I extent = parent->getExtent();
+    object->parentResized( extent, extent );
+}
+
+/*! Moves this control back inside its parent if a move has left it entirely
+    outside.
+
+    Reparenting in the Explorer tree is a gesture with no pointer in it, so
+    nothing supplies a position and the control keeps the local one it held in
+    its old parent. Dropped into something smaller that can put it entirely
+    outside: not clipped, not partly visible, gone.
+
+    An axis on which nothing of the control is visible is set to 0. The other axis
+    is left alone -- a control that was 20 pixels down and 400 across is still 20
+    pixels down -- and so is a control that merely overhangs an edge, because one
+    the user can see is one the user can drag.
+
+    Does nothing to a control with no parent, so a whole selection can be offered
+    without checking each member.
+    @return True if the control had to be moved.
+*/
+ConsoleMethodWithDocs(GuiControl, pullIntoView, ConsoleBool, 2, 2, ())
+{
+    return object->pullIntoView();
+}
+
+/*! Returns true if this control draws its children.
+    A control that does not render children can never be a container: the
+    isContainer field is forced to false for it and editing that field is
+    meaningless. This is fixed by the class and cannot be changed.
+    @return Returns true if the control renders its children.
+*/
+ConsoleMethodWithDocs(GuiControl, rendersChildren, ConsoleBool, 2, 2, ())
+{
+    return object->rendersChildren();
 }
 
 ConsoleMethodGroupEndWithDocs(GuiControl)

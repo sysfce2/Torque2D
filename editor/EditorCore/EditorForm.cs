@@ -42,6 +42,22 @@ function EditorForm::addFormItem(%this, %text, %size)
 	return %label;
 }
 
+// Explains a row on hover. The tip goes on the caption as well as on the input,
+// because the caption is the bigger target and it is what someone is looking at
+// when the question comes up -- and the caption is the input's parent, so
+// without both, half the row says nothing.
+function EditorForm::setItemTip(%this, %label, %control, %tip)
+{
+	%label.Tooltip = %tip;
+	ThemeManager.setProfile(%label, "tipProfile", "TooltipProfile");
+
+	if(isObject(%control))
+	{
+		%control.Tooltip = %tip;
+		ThemeManager.setProfile(%control, "tipProfile", "TooltipProfile");
+	}
+}
+
 function EditorForm::createTextEditItem(%this, %label)
 {
 	%textEdit = new GuiTextEditCtrl()
@@ -168,6 +184,70 @@ function EditorForm::createDropDownItem(%this, %label)
 	return %dropDown;
 }
 
+// A color row matching the native inspector's ColorI editor (see
+// guiInspectorTypes.cc GuiInspectorTypeColor): a color-popup swatch plus four
+// numeric R/G/B/A edit boxes with labels, using the same color sub-profiles the
+// Profile Editor feeds its inspector. Returns the swatch; the four boxes are
+// hung on it as .redBox/.greenBox/.blueBox/.alphaBox. The caller wires the
+// swatch's Command and the boxes' AltCommand to its own apply logic and never
+// parses the color string itself (the swatch launders named<->numeric colors).
+//
+// %class is optional: pass a script class to give the popup extra behavior of
+// your own (the Profile Editor uses it to fill the popup's swatch row with the
+// selected theme's colors). Leave it out for a plain popup.
+function EditorForm::createColorItem(%this, %label, %class)
+{
+	// The row's name label (from addFormItem) sits along the top; the swatch and
+	// R/G/B/A boxes sit on the row below it.
+	%swatch = new GuiColorPopupCtrl()
+	{
+		class = %class;
+		Position = "10 24";
+		Extent = "30 30";
+	};
+	ThemeManager.setProfile(%swatch, "colorPickerProfile");
+	ThemeManager.setProfile(%swatch, "emptyProfile", "backgroundProfile");
+	ThemeManager.setProfile(%swatch, "colorPopupProfile", "popupProfile");
+	ThemeManager.setProfile(%swatch, "emptyProfile", "pickerProfile");
+	ThemeManager.setProfile(%swatch, "colorPickerSelectorProfile", "selectorProfile");
+	ThemeManager.setProfile(%swatch, "textEditProfile", "valueProfile");
+	ThemeManager.setProfile(%swatch, "tipProfile", "TooltipProfile");
+	%label.add(%swatch);
+
+	%swatch.redBox   = %this.addColorChannel(%label, 48, 24, 48, "R");
+	%swatch.greenBox = %this.addColorChannel(%label, 100, 24, 48, "G");
+	%swatch.blueBox  = %this.addColorChannel(%label, 152, 24, 48, "B");
+	%swatch.alphaBox = %this.addColorChannel(%label, 204, 24, 48, "A");
+
+	return %swatch;
+}
+
+// One R/G/B/A channel: a numeric edit box at (%x,%y) with a small label beneath.
+function EditorForm::addColorChannel(%this, %label, %x, %y, %width, %text)
+{
+	%box = new GuiTextEditCtrl()
+	{
+		Position = %x SPC %y;
+		Extent = %width SPC 28;
+		inputMode = "Number";
+		align = "center";
+	};
+	ThemeManager.setProfile(%box, "textEditProfile");
+	%label.add(%box);
+
+	%tag = new GuiControl()
+	{
+		Position = %x SPC (%y + 30);
+		Extent = %width SPC 16;
+		Text = %text;
+		align = "center";
+	};
+	ThemeManager.setProfile(%tag, "labelProfile");
+	%label.add(%tag);
+
+	return %box;
+}
+
 function EditorForm::createCheckboxItem(%this, %label)
 {
 	%box = new GuiCheckBoxCtrl()
@@ -192,3 +272,4 @@ function EditorFormDropDown::onSelect(%this)
 {
 	%this.form.postEvent("DropDownSelect", %this);
 }
+

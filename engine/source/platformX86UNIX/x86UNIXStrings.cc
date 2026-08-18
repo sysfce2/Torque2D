@@ -133,9 +133,14 @@ char* dStrcatl(char *dst, size_t dstSize, ...)
    AssertFatal(dstSize > 0, "dStrcatl: destination size is set zero");
    dstSize--;  // leave room for string termination
 
-   // find end of dst
-   while (dstSize && *p++)                    
-      dstSize--;   
+   // find end of dst. Testing *p and stepping separately, because *p++ walks
+   // past the terminator on the iteration that ends the loop -- which left a
+   // gap, so "Garage" and "Games" concatenated to "Garage\0Games".
+   while (dstSize && *p)
+   {
+      p++;
+      dstSize--;
+   }
    
    va_list args;
    va_start(args, dstSize);
@@ -386,7 +391,11 @@ S32 dStrrev(char *str)
    // Get string length
    S32 l = dStrlen(str) - 1;
    
-   for (int x = 0; x < 1; x++,l--)
+   // Walking in from both ends until they meet. This read "x < 1", which runs
+   // a single iteration: "GarageGames" came back as "sarageGameG". Stopping at
+   // x < l also keeps the XOR swap off the middle character of an odd-length
+   // string, which it would otherwise zero.
+   for (int x = 0; x < l; x++,l--)
    {
       // triple XOR trick
       str[x]^=str[l];
@@ -400,18 +409,23 @@ S32 dStrrev(char *str)
 
 S32 dItoa(S32 n, char s[])
 {
-   S32 i, sign;
+   S32 i = 0;
+   const bool negative = (n < 0);
 
-   if ((sign = n) < 0)
-	n = -n;
+   // Digits are taken off an unsigned copy: negating S32_MIN does not fit back
+   // into an S32, and unsigned negation is the one form of it that is defined.
+   U32 value = negative ? (U32)0 - (U32)n : (U32)n;
 
-   i = 0;
    do {
-      s[i++] = n % 10 + '0';
-   } while((n /= 10) > 0);
+      s[i++] = (char)(value % 10 + '0');
+   } while((value /= 10) > 0);
 
-   if (sign < 0)
+   if (negative)
       s[i++] = '-';
+
+   // Terminate BEFORE reversing: dStrrev measures with dStrlen, which without
+   // this ran off the digits into whatever the caller's buffer happened to hold.
+   s[i] = '\0';
 
    dStrrev(s);
 

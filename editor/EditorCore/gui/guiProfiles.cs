@@ -35,7 +35,13 @@ function EditorCore::SetProfileFont(%this)
 	if ($platform $= "windows")
 		%this.platformFontType = "share tech mono";
 	else if ($platform $= "Android")
-		%this.platformFontType = "Droid";
+		// "Droid" is gone from modern Android (Roboto since ~2014); request "Roboto",
+		// which is the system face AND the bundled assets/fonts/Roboto-Regular.ttf.
+		%this.platformFontType = "Roboto";
+	else if ($platformUnixType $= "emscripten")
+		// Web build: no system fonts; use a face that ships a pre-baked .uft cache.
+		// ($platform is "x86UNIX" on web, same as Linux, so key off $platformUnixType.)
+		%this.platformFontType = "share tech mono";
 	else
 		%this.platformFontType = "monaco";
 	if ($platform $= "ios")
@@ -44,6 +50,19 @@ function EditorCore::SetProfileFont(%this)
 		%this.platformFontSize = 14;
 	else
 		%this.platformFontSize = 12;
+
+	// Where GuiDefaultProfile looks for its pre-baked .uft glyph cache. The legacy
+	// default "^EditorCore/gui/fonts" does NOT exist on disk — desktop survives only
+	// because createPlatformFont() synthesizes the font from a system face. The web
+	// build has no font backend, so the cache lookup must point at a real, resolvable
+	// dir that actually ships the requested .uft. Use an EXPANDED path (the resource
+	// manager does not resolve the ^Module expando for cache lookups), under the
+	// ^EditorCore module (the only expando registered at editor boot — ^AppCore is
+	// not loaded), to the LabCoat theme's fonts, which bundle "share tech mono".
+	if ($platformUnixType $= "emscripten")
+		%this.platformFontDirectory = expandPath("^EditorCore/Themes/LabCoat/fonts");
+	else
+		%this.platformFontDirectory = "^EditorCore/gui/fonts";
 }
 
 function EditorCore::AdjustColorValue(%this, %color, %percent)
@@ -102,52 +121,20 @@ function EditorCore::createGuiProfiles(%this)
 	%this.SetProfileColors();
 	%this.SetProfileFont();
 
-	//Changing the default gui profile and border profile might cause engine instability! Consider making a new child profile instead.
-	%this.SafeCreateNamedObject("GuiDefaultBorderProfile", new GuiBorderProfile()
-	{
-		// Default margin
-		margin = 0;
-		marginHL = 0;
-		marginSL = 0;
-		marginNA = 0;
-		//Default Border
-		border = 0;
-		borderHL = 0;
-		borderSL = 0;
-		borderNA = 0;
-		//Default border color
-		borderColor   = %this.color1;
-	    borderColorHL = %this.AdjustColorValue(%this.color1, 10);
-	    borderColorSL = %this.AdjustColorValue(%this.color1, 10);
-	    borderColorNA = %this.SetColorAlpha(%this.color1, 100);
-		//Default Padding
-		padding = 0;
-		paddingHL = 0;
-		paddingSL = 0;
-		paddingNA = 0;
-		//Default underfill
-		underfill = true;
-	});
+	// GuiDefaultProfile and GuiDefaultBorderProfile are not created here - the
+	// engine makes them at start-up (GuiControlProfile::createDefaultProfile), so
+	// the name every control falls back to can never be missing. What is left is
+	// tuning them for the editor, and that still matters: a new profile copies its
+	// unset fields from these two, and 28 of BaseTheme's profiles name no font of
+	// their own, so this is where the editor's face and border colors come from.
+	GuiDefaultBorderProfile.borderColor   = %this.color1;
+	GuiDefaultBorderProfile.borderColorHL = %this.AdjustColorValue(%this.color1, 10);
+	GuiDefaultBorderProfile.borderColorSL = %this.AdjustColorValue(%this.color1, 10);
+	GuiDefaultBorderProfile.borderColorNA = %this.SetColorAlpha(%this.color1, 100);
 
-	//See the warning above! You should avoid changing this.
-	%this.SafeCreateNamedObject("GuiDefaultProfile", new GuiControlProfile()
-	{
-	    // fill color
-	    fillColor = "0 0 0 0";
-
-	    // font
-	    fontType = %this.platformFontType;
-		fontDirectory = "^EditorCore/gui/fonts";
-	    fontSize = %this.platformFontSize;
-	    fontColor = "255 255 255 255";
-		align = center;
-		vAlign = middle;
-
-		cursorColor = "0 0 0 255";
-
-		borderDefault = GuiDefaultBorderProfile;
-		category = "default";
-	});
+	GuiDefaultProfile.fontType = %this.platformFontType;
+	GuiDefaultProfile.fontDirectory = %this.platformFontDirectory;
+	GuiDefaultProfile.fontSize = %this.platformFontSize;
 
 	%this.SafeCreateNamedObject("GuiBrightBorderProfile", new GuiBorderProfile()
 	{

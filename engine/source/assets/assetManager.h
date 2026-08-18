@@ -99,6 +99,23 @@ private:
     /// Asset pointer refresh notifications.
     typeAssetPtrRefreshHash             mAssetPtrRefreshNotifications;
 
+    /// One queued announcement.
+    ///
+    /// mDirect separates "this asset was changed" from "something this asset
+    /// reads from was changed". Both have to be announced -- a dependent needs to
+    /// re-derive what it caches -- but only the first is an edit to the asset,
+    /// and an editor recording undo steps has no other way to tell them apart.
+    struct PendingRefresh
+    {
+        typeAssetId mAssetId;
+        bool        mDirect;
+    };
+
+    /// Refresh batching. See ScopedAssetUpdate.
+    U32                                 mAssetBatchDepth;
+    U32                                 mDirtySuppressDepth;
+    Vector<PendingRefresh>              mPendingRefreshNotifications;
+
     /// Miscellaneous.
     bool                                mEchoInfo;
     bool                                mIgnoreAutoUnload;
@@ -326,10 +343,51 @@ public:
     bool deleteAsset( const char* pAssetId, const bool deleteLooseFiles, const bool deleteDependencies );
 
     // Asset refresh notification.
+    //
+    // NOTE: refreshAsset does NOT write the asset's file. It marks the asset
+    // dirty and tells everything that cares that the asset changed. Writing is
+    // saveAsset, and only ever saveAsset. That split is what lets the editors
+    // let a user try something and then put it back -- and it stops a running
+    // game rewriting its own content files as a side effect of a setter.
     bool refreshAsset( const char* pAssetId );
     void refreshAllAssets( const bool includeUnloaded = false );
     void registerAssetPtrRefreshNotify( AssetPtrBase* pAssetPtrBase, AssetPtrCallback* pCallback );
     void unregisterAssetPtrRefreshNotify( AssetPtrBase* pAssetPtrBase );
+
+    /// Unsaved changes.
+    bool isAssetDirty( const char* pAssetId );
+    bool setAssetDirty( const char* pAssetId, const bool assetDirty );
+    U32 getDirtyAssetCount( void ) const;
+    bool saveAsset( const char* pAssetId );
+    U32 saveAllDirtyAssets( void );
+    bool revertAsset( const char* pAssetId );
+    bool duplicateAsset( const char* pAssetId, const char* pTargetFilePath, const char* pTargetAssetName );
+
+    /// Collapses a run of asset changes into a single notification, and
+    /// optionally stops them marking anything dirty.
+    ///
+    /// Two things need this. A restore replays every setter on an asset, each of
+    /// which calls refreshAsset, and one undo step should read as one change and
+    /// should not itself count as an edit. And the notification loop can come
+    /// back round: ParticleAssetEmitter::onAssetRefreshed calls refreshAsset on
+    /// its owner, so an image change reaches the owning particle asset once per
+    /// emitter pointed at it.
+    ///
+    /// Notifications raised inside the scope are queued, deduplicated, and
+    /// drained when the outermost scope closes. The drain holds the depth, so a
+    /// notification raised by a callback joins the same drain rather than
+    /// starting a new one -- which also bounds what used to be an unguarded
+    /// recursion through mutually dependent assets.
+    class ScopedAssetUpdate
+    {
+    public:
+        ScopedAssetUpdate( AssetManager* pAssetManager, const bool suppressDirty = false );
+        ~ScopedAssetUpdate();
+
+    private:
+        AssetManager*   mpAssetManager;
+        bool            mSuppressDirty;
+    };
 
     /// Asset tags.
     bool loadAssetTags( ModuleDefinition* pModuleDefinition );
@@ -360,6 +418,7 @@ public:
     S32 findAssetAutoUnload( AssetQuery* pAssetQuery, const bool assetAutoUnload, const bool assetQueryAsSource = false );
     S32 findAssetInternal( AssetQuery* pAssetQuery, const bool assetInternal, const bool assetQueryAsSource = false );
     S32 findAssetPrivate( AssetQuery* pAssetQuery, const bool assetPrivate, const bool assetQueryAsSource = false );
+    S32 findAssetDirty( AssetQuery* pAssetQuery, const bool assetDirty, const bool assetQueryAsSource = false );
     S32 findAssetType( AssetQuery* pAssetQuery, const char* pAssetType, const bool assetQueryAsSource = false );
     S32 findAssetDependsOn( AssetQuery* pAssetQuery, const char* pAssetId );
     S32 findAssetIsDependedOn( AssetQuery* pAssetQuery, const char* pAssetId );
@@ -381,6 +440,15 @@ private:
     void removeAssetDependencies( const char* pAssetId );
     void removeAssetLooseFiles( const char* pAssetId );
     void unloadAsset( AssetDefinition* pAssetDefinition );
+
+    /// The pieces refreshAsset and saveAsset are built from.
+    void markAssetDirty( AssetDefinition* pAssetDefinition );
+    void notifyAssetRefresh( AssetDefinition* pAssetDefinition, const bool direct );
+    void dispatchAssetRefresh( AssetDefinition* pAssetDefinition, const bool direct );
+    bool writeAssetDefinitionFile( AssetDefinition* pAssetDefinition );
+    void updateAssetDependencies( AssetDefinition* pAssetDefinition );
+    ModuleDefinition* findModuleForPath( const char* pFilePath );
+    void drainRefreshNotifications( void );
 
     /// Module callbacks.
     virtual void onModulePreLoad( ModuleDefinition* pModuleDefinition );

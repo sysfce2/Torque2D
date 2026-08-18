@@ -69,11 +69,14 @@ public:
 
 	  static bool sIncreasing;
 
-	  // Compare Functions
+	  // Compare Functions. These are std::sort predicates, so they MUST be a
+	  // strict weak ordering: equal elements compare false, and reversing the
+	  // order swaps the operands rather than negating the result (negating makes
+	  // equal elements compare true in the descending case). Getting this wrong
+	  // is undefined behaviour and aborts under libc++'s hardened sort.
 	  static bool compByID(const LBItem *a, const LBItem *b)
 	  {
-		  bool res = a->ID < b->ID;
-		  return (sIncreasing ? res : !res);
+		  return sIncreasing ? (a->ID < b->ID) : (b->ID < a->ID);
 	  }
 	  static bool compByText(const LBItem *a, const LBItem *b)
 	  {
@@ -84,8 +87,7 @@ public:
 		  dSprintf(bufB, 512, "%s", b->itemText);
 
 		  S32 res = dStricmp(buf, bufB);
-		  bool result = res <= 0;
-		  return (sIncreasing ? result : !result);
+		  return sIncreasing ? (res < 0) : (res > 0);
 	  }
    };
 
@@ -99,7 +101,32 @@ public:
    
 
    // Persistence
-   static void       initPersistFields();   
+   static void       initPersistFields();
+
+   /// @name Static rows
+   ///
+   /// The rows a list is authored with, as opposed to the ones a script fills in
+   /// at runtime. An item is neither a field nor a child object, so it is
+   /// written as TAML custom nodes - the arrangement GuiFrameSetCtrl already
+   /// uses for its frame tree, with the same two consequences: the legacy .gui
+   /// script writer cannot carry them, and a deep clone has to copy them itself.
+   /// @{
+
+   virtual void      onTamlCustomWrite( TamlCustomNodes& customNodes );
+   virtual void      onTamlCustomRead( const TamlCustomNodes& customNodes );
+
+   /// The whole list as one opaque string: one record per item, TAB-separated
+   /// fields in a fixed order. Not the file format - it is what the Gui Editor
+   /// reads and writes in a single call, and what its undo stack records, in the
+   /// same way getFrameLayout/setFrameLayout serve a frame set.
+   const char*       getItemList();
+   void              setItemList( const char* itemList );
+
+   /// Whether the rows this control holds are its own to save. A GuiTreeViewCtrl
+   /// generates its items from a root object, so a written-out set of them would
+   /// be stale the moment the tree next builds itself.
+   virtual bool      writesItems() { return true; }
+   /// @}
 
    // Item Accessors
    S32               getItemCount();
@@ -147,7 +174,7 @@ public:
    inline bool       getMultipleSelection() { return mMultipleSelections; };
 
    // Sizing
-   void              updateSize();
+   virtual void      updateSize();
    virtual void      parentResized(const Point2I &oldParentExtent, const Point2I &newParentExtent);
    virtual bool      onWake();
    virtual void		 addObject(SimObject *obj);
@@ -173,6 +200,15 @@ public:
 
 protected:
 	GuiControl		*caller;
+
+	/// Items are not children and not fields, so a deep clone would otherwise
+	/// come back with an empty list. This is the phase GuiFrameSetCtrl uses for
+	/// the same reason.
+	virtual void	 deepCloneChildren(SimObject* clone);
+
+	/// Add an item without any of the noise addSelection/insertItem make: no
+	/// onSelect callback, no scroll, no resize per row. For loading a list in.
+	LBItem*			 appendItemInternal(StringTableEntry text);
 };
 
 #endif

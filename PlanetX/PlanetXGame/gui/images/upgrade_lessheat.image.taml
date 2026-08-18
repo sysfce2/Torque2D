@@ -1,0 +1,4 @@
+<ImageAsset
+    AssetName="upgrade_lessheat"
+    AssetCategory="card"
+    ImageFile="@assetFile=upgrade_lessheat.png" />

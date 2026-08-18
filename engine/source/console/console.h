@@ -620,6 +620,11 @@ namespace Con
    void unlockLog(void);
    void setLogMode(S32 mode);
 
+   /// Redirects the console log. Pass NULL or an empty string to put it back to
+   /// console.log. Safe to call at any time: mode 2 holds the file open, so the
+   /// old one is closed and the new one opened in its place.
+   void setLogFileName(const char *name);
+
    /// @}
 
    /// @name Dynamic Type System

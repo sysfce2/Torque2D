@@ -196,7 +196,15 @@ S32 GuiChainCtrl::positionChildren(RectI &innerRect)
 	for (i = begin(); i != end(); i++)
 	{
 		GuiControl *ctrl = static_cast<GuiControl *>(*i);
-		if (ctrl->isVisible() || smDesignTime)
+
+		// Hidden children take no space, except in the gui being authored in the
+		// Gui Editor, where they still have to be placed so they can be
+		// selected. That test is isEditMode(), which walks up to the edit root,
+		// rather than the global smDesignTime: the editor sets smDesignTime for
+		// the whole canvas the moment it opens, which would leave every hidden
+		// child of every tool window -- not just the edited gui -- holding its
+		// place. The rest of this class already uses isEditMode().
+		if (ctrl->isVisible() || isEditMode())
 		{
 			if (length != 0)
 			{

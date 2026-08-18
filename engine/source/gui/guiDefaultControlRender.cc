@@ -179,9 +179,14 @@ void renderBorderedCircle(Point2I& center, S32 radius, GuiControlProfile* profil
 	//Draw the border
 	renderRing(center, (F32)radius, borderColor, (F32)borderSize);
 
-	if (state > 3 && radius >= 8)
+	// The "on" indicator (e.g. a selected radio's dot): a filled circle centered
+	// in the control, sized as a fraction of the radius so it stays a visible dot
+	// at any size. (A fixed radius-6 shrank to a 2px speck on a standard ~8px-radius
+	// radio, and vanished entirely below radius 8.) dglDrawCircleFill guards a
+	// non-positive radius.
+	if (state > 3)
 	{
-		dglDrawCircleFill(center, radius - 6, profile->getFillColor(GuiControlState::SelectedState));
+		dglDrawCircleFill(center, (F32)((radius * 3) / 5), profile->getFillColor(GuiControlState::SelectedState));
 	}
 }
 
@@ -396,6 +401,20 @@ void renderStretchedImageAsset(RectI &bounds, U8 frame, GuiControlProfile *profi
 		// Render image.
 		dglDrawBitmapStretchSR(imageAsset->getImageTexture(), bounds, srcRect);
 	}
+}
+
+// Renders one frame of a sheet, keeping the caller's bitmap modulation.
+void renderImageAssetFrame(const RectI &bounds, ImageAsset *imageAsset, U32 frame)
+{
+	if (imageAsset == NULL || !imageAsset->isAssetValid() || frame >= imageAsset->getFrameCount())
+	{
+		return;
+	}
+
+	const ImageAsset::FrameArea::PixelArea& pixelArea = imageAsset->getImageFrameArea(frame).mPixelArea;
+	RectI srcRect(pixelArea.mPixelOffset, Point2I(pixelArea.mPixelWidth, pixelArea.mPixelHeight));
+
+	dglDrawBitmapStretchSR(imageAsset->getImageTexture(), bounds, srcRect);
 }
 
 //Renders a color bullet at or one pixel smaller than maxSize.

@@ -20,6 +20,12 @@
 // IN THE SOFTWARE.
 //-----------------------------------------------------------------------------
 
+// Somewhere other than the console.log at the repo root, which every copy of the
+// engine started from this folder writes to -- and mode 2 below holds it open,
+// so a run alongside a hand-started editor leaves a log neither can read. Before
+// setLogMode, or the opening lines land in the old file.
+setLogFileName("tests/logs/unit.log");
+
 // Set log mode.
 setLogMode(2);
 

@@ -1,0 +1,4 @@
+<ImageAsset
+    AssetName="gun"
+    ImageFile="gun.png"
+    FilterMode="NEAREST" />

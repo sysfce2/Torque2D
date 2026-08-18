@@ -1,0 +1,4 @@
+<ImageAsset
+    AssetName="rocket"
+    ImageFile="rocket.png"
+    FilterMode="NEAREST" />

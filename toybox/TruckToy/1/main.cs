@@ -22,6 +22,9 @@
 
 function TruckToy::create( %this )
 {
+    // Load the parallax background system (createBackground, layers, per-tick update).
+    exec("./scripts/background.cs");
+
     TruckToy.ObstacleFriction = 1.5;
     TruckToy.CameraWidth = 20;
     TruckToy.CameraHeight = 15;
@@ -37,7 +40,7 @@ function TruckToy::create( %this )
     TruckToy.ProjectileDomain = 16;
     TruckToy.ForegroundDomain = 10;
 
-    TruckToy.WheelSpeed = 400;
+    TruckToy.WheelSpeed = 500;
     TruckToy.WheelFriction = 1;
     TruckToy.FrontWheelDensity = 6;
     TruckToy.RearWheelDensity = 3;
@@ -46,7 +49,7 @@ function TruckToy::create( %this )
     TruckToy.ProjectileRate = 3000;
     TruckToy.ExplosionScale = 1;
 
-    TruckToy.RotateCamera = true;
+    TruckToy.RotateCamera = false;
 
     // Add the custom controls.
     addNumericOption( "Wheel Speed", 100, 1000, 50, "setWheelSpeed", TruckToy.WheelSpeed, false, "Sets the rotational speed of the wheel when it is put into drive." );
@@ -70,6 +73,9 @@ function TruckToy::create( %this )
 
 function TruckToy::destroy( %this )
 {
+    // Stop the per-frame parallax update.
+    SandboxScene.RenderCallback = false;
+
     // Deactivate the package.
     deactivatePackage( TruckToyPackage );
 }
@@ -109,7 +115,7 @@ function TruckToy::reset( %this )
     %this.createBonfire( -91.5, TruckToy.FloorLevel + 0.5, 1, TruckToy.BackgroundDomain-1 );
 
     // Building with chains.
-    %this.createForegroundWall( 2, -99, -5 );
+    %this.createForegroundWall( 2, -97, -5 );
     %this.createForegroundWall( 1, -75.5, -6.5 );
     %this.createBrokenCementWall( -78, -1.5 );
     %this.createWreckedBuilding( -71.5, -1 );
@@ -137,7 +143,7 @@ function TruckToy::reset( %this )
     %this.createPlank( 1, -20.5, TruckToy.FloorLevel + 1.5, -90, true );
     %this.createPlank( 3, -19, TruckToy.FloorLevel + 4, 0, true );
     %this.createPlank( 1, -16.5, TruckToy.FloorLevel + 1.5, -90, true );
-    %this.createForegroundBrickWall( 2, -19, -6 );
+    %this.createForegroundBrickWall( 2, -15, -6 );
     %this.createBonfire( -46.5, TruckToy.FloorLevel, 3, TruckToy.BackgroundDomain-1 );
     %this.createBonfire( -18.7, TruckToy.FloorLevel + 1, 2, TruckToy.BackgroundDomain-1 );
 
@@ -154,7 +160,7 @@ function TruckToy::reset( %this )
     %this.createPyramid( 2, TruckToy.FloorLevel + 0.25, 19, true );
     %this.createForegroundWall( 1, 9, -6 );
     %this.createPyramid( 2+21, TruckToy.FloorLevel + 0.25, 13, true );
-    %this.createForegroundBrickWall( 1, 9, -7 );
+    %this.createForegroundBrickWall( 1, 23, -6.5 );
     %this.createBonfire( 21, TruckToy.FloorLevel, 3, TruckToy.BackgroundDomain-1 );
 
 
@@ -178,61 +184,50 @@ function TruckToy::reset( %this )
     %truckStartY = 3;
     %this.createTruck( %truckStartX, %truckStartY );
 
+    // Pre-build the projectile and explosion pools so none are allocated mid-play.
+    %this.createProjectilePool();
+    %this.createExplosionPool();
+
     // Start the timer.
     TruckToy.startTimer( "createProjectile", TruckToy.ProjectileRate );
 }
 
 // -----------------------------------------------------------------------------
-
-function TruckToy::createBackground(%this)
-{
-    // Atmosphere
-    %obj = new Sprite();
-    %obj.setBodyType( "static" );
-    %obj.setImage( "ToyAssets:highlightBackground" );
-    %obj.BlendColor = DarkGray;
-    %obj.setSize( TruckToy.WorldWidth * (TruckToy.CameraWidth*2), 75 );
-    %obj.setSceneLayer( TruckToy.BackdropDomain );
-    %obj.setSceneGroup( TruckToy.BackdropDomain );
-    %obj.setCollisionSuppress();
-    %obj.setAwake( false );
-    %obj.setActive( false );
-    SandboxScene.add( %obj );
-
-
-    // Industrial Background
-    %obj = new Scroller();
-    %obj.setBodyType( "static" );
-    %obj.setImage( "TruckToy:industrial_02" );
-    %obj.setPosition( 0, -1 );
-    %obj.setSize( TruckToy.WorldWidth, 8 );
-    %obj.setRepeatX( TruckToy.WorldWidth / 8 );
-    %obj.setSceneLayer( TruckToy.BackgroundDomain);
-    %obj.setSceneGroup( TruckToy.BackgroundDomain);
-    %obj.setCollisionSuppress();
-    %obj.setAwake( false );
-    %obj.setActive( false );
-    SandboxScene.add( %obj );
-}
-
+// createBackground and the parallax layer system live in scripts/background.cs.
 // -----------------------------------------------------------------------------
 
 function TruckToy::createFloor(%this)
 {
-    // Ground
+    // Ground.
+    // planetFloor.png is 1233x163, but only the bottom 148px is solid ground;
+    // the top 15px is empty. We size/position the image and the collision edge
+    // so the *solid* surface sits exactly on FloorLevel (the empty strip just
+    // hangs transparently above it).
+    %imageW = 1233;
+    %imageH = 163;
+    %solidH = 148;
+
+    // Make the solid band ~3 world-units thick (matching the old floor), then
+    // derive the full image height and where the solid surface falls locally.
+    %solidThickness = 3;
+    %floorHeight = %solidThickness * (%imageH / %solidH);            // full image height (~3.30)
+    %emptyTop    = %floorHeight * ((%imageH - %solidH) / %imageH);   // empty strip height (~0.30)
+    %solidTop    = (%floorHeight / 2) - %emptyTop;                   // local Y of solid surface (~1.35)
+    %tileWidth   = %floorHeight * (%imageW / %imageH);               // unstretched tile width (~25)
+
     %obj = new Scroller();
     %obj.setBodyType( "static" );
-    %obj.setImage( "ToyAssets:woodGround" );
-    %obj.setSize( TruckToy.WorldWidth, 3 );
-    %obj.setPosition( 0, TruckToy.FloorLevel - (%obj.getSizeY()/2) );
-    %obj.setRepeatX( TruckToy.WorldWidth / 12 );
+    %obj.setImage( "TruckToy:planetFloor" );
+    %obj.setSize( TruckToy.WorldWidth, %floorHeight );
+    %obj.setPosition( 0, TruckToy.FloorLevel - %solidTop );
+    %obj.setRepeatX( TruckToy.WorldWidth / %tileWidth );
     %obj.setSceneLayer( TruckToy.ObstacleDomain );
     %obj.setSceneGroup( TruckToy.GroundDomain );
     %obj.setDefaultFriction( TruckToy.ObstacleFriction );
     %obj.setCollisionGroups( none );
-    %obj.createEdgeCollisionShape( TruckToy.WorldWidth/-2, 1.5, TruckToy.WorldWidth/2, 1.5 );
-    %obj.createEdgeCollisionShape( TruckToy.WorldWidth/-2, 3, TruckToy.WorldWidth/-2, 50 );
-    %obj.createEdgeCollisionShape( TruckToy.WorldWidth/2, 3, TruckToy.WorldWidth/2, 50 );
+    %obj.createEdgeCollisionShape( TruckToy.WorldWidth/-2, %solidTop, TruckToy.WorldWidth/2, %solidTop );
+    %obj.createEdgeCollisionShape( TruckToy.WorldWidth/-2, %solidTop, TruckToy.WorldWidth/-2, 50 );
+    %obj.createEdgeCollisionShape( TruckToy.WorldWidth/2, %solidTop, TruckToy.WorldWidth/2, 50 );
     %obj.CollisionCallback = true;
     %obj.setAwake( false );
     SandboxScene.add( %obj );
@@ -282,7 +277,7 @@ function TruckToy::createBrickStack( %this, %posX, %posY, %brickCount, %static )
 {
     for ( %n = 0; %n < %brickCount; %n++ )
     {
-        %this.createBrick( getRandom(1,5), %posX, %posY + (%n*0.5), %static );
+        %this.createBrick( getRandom(0,15), %posX, %posY + (%n*0.5), %static );
     }
 }
 
@@ -303,7 +298,7 @@ function TruckToy::createPyramid( %this, %posX, %posY, %brickBaseCount, %static 
         %stackY = %posY + ( %stack * 0.5 );
         for ( %stackIndex = 0; %stackIndex < %stackIndexCount; %stackIndex++ )
         {
-            %this.createBrick( getRandom(1, 5), %stackX + %stackIndex, %stackY, %static );
+            %this.createBrick( getRandom(0, 15), %stackX + %stackIndex, %stackY, %static );
         }
     }
 }
@@ -319,7 +314,7 @@ function TruckToy::createBridge( %this, %posX, %posY, %linkCount )
 
    %rootObj = new Sprite();
    %rootObj.setBodyType( "static" );
-   %rootObj.setImage( "ToyAssets:cable" );
+   %rootObj.setImage( "TruckToy:torqueBridge" );
    %rootObj.setPosition( %posX, %posY );
    %rootObj.setSize( %linkWidth, %linkHeight );
    %rootObj.setSceneLayer( TruckToy.BackgroundDomain-3 );
@@ -333,7 +328,7 @@ function TruckToy::createBridge( %this, %posX, %posY, %linkCount )
    {
       %obj = new Sprite();
 
-      %obj.setImage( "ToyAssets:cable" );
+      %obj.setImage( "TruckToy:torqueBridge" );
       %obj.setPosition( %posX + (%n*%linkWidth), %posY );
       %obj.setSize( %linkWidth, %linkHeight );
       %obj.setSceneLayer( TruckToy.BackgroundDomain-3 );
@@ -471,6 +466,8 @@ function TruckToy::createForegroundBrickWall( %this, %wallNumber, %posX, %posY )
     %obj.setActive( false );
     SandboxScene.add( %obj );
 
+    TruckToy.registerParallaxObject( %obj, 1.35 );
+
 
     return %obj;
 }
@@ -500,6 +497,9 @@ function TruckToy::createForegroundWall( %this, %wallNumber, %posX, %posY )
     %obj.setActive( false );
     SandboxScene.add( %obj );
 
+    // Foreground depth: scroll a bit faster than the world so they read as close.
+    TruckToy.registerParallaxObject( %obj, 1.22 );
+
     return %obj;
 }
 
@@ -507,17 +507,18 @@ function TruckToy::createForegroundWall( %this, %wallNumber, %posX, %posY )
 
 function TruckToy::createBrick( %this, %brickNumber, %posX, %posY, %static )
 {
-    if ( %brickNumber < 1 || %brickNumber > 5 )
+    if ( %brickNumber < 0 || %brickNumber > 15 )
     {
         echo( "Invalid brick no of" SPC %brickNumber );
         return;
     }
 
-    %image = "ToyAssets:brick_0" @ %brickNumber;
+    %image = "TruckToy:torqueBrick";
 
     %obj = new Sprite();
     if ( %static ) %obj.setBodyType( "static" );
     %obj.setImage( %image );
+    %obj.setImageFrame(%brickNumber);
     %obj.setPosition( %posX, %posY );
     %obj.setSize( 1, 0.5 );
     %obj.setSceneLayer( TruckToy.ObstacleDomain );
@@ -539,7 +540,7 @@ function TruckToy::createBrickPile( %this, %posX, %posY )
     %obj.setBodyType( "static" );
     %obj.setImage( "TruckToy:brickPile" );
     %obj.setPosition( %posX, %posY );
-    %obj.setSize( 4, 1 );
+    %obj.setSize( 2, 1 );
     %obj.setSceneLayer( TruckToy.BackgroundDomain-3 );
     %obj.setSceneGroup( TruckToy.BackgroundDomain);
     %obj.setCollisionSuppress();
@@ -637,7 +638,7 @@ function TruckToy::createBonfire(%this, %x, %y, %scale, %layer)
     %particlePlayer.SetPosition( %x, %y );
     %particlePlayer.SceneLayer = %layer;
     %particlePlayer.ParticleInterpolation = true;
-    %particlePlayer.Particle = "ToyAssets:bonfire";
+    %particlePlayer.Particle = "TruckToy:bonfire";
     %particlePlayer.SizeScale = %scale;
     %particlePlayer.CameraIdleDistance = TruckToy.CameraWidth * 0.8;
     SandboxScene.add( %particlePlayer );
@@ -647,45 +648,140 @@ function TruckToy::createBonfire(%this, %x, %y, %scale, %layer)
 
 // -----------------------------------------------------------------------------
 
+function TruckToy::createProjectilePool(%this)
+{
+    // Pre-build a fixed pool of projectiles so none are created mid-play
+    // (a 'new Sprite()' during play causes a visible hitch). Each one is fully
+    // configured once here, then parked invisible + inactive until needed.
+    //
+    // Worst case airborne = ceil(Lifetime 2.5s / fastest spawn 0.1s) = 25,
+    // plus headroom -> 32. The fastest spawn (100ms) is the Projectile Rate
+    // slider minimum registered in create().
+    TruckToy.ProjectileLifetime = 2.5;
+    TruckToy.ProjectilePoolSize = 32;
+    TruckToy.ProjectilePoolIndex = 0;
+
+    for ( %i = 0; %i < TruckToy.ProjectilePoolSize; %i++ )
+    {
+        %projectile = new Sprite() { class = "TruckProjectile"; };
+        %projectile.Animation = "TruckToy:Projectile_FireballAnim";
+        %projectile.setSceneLayer( TruckToy.BackgroundDomain-2 );
+        %projectile.setSceneGroup( TruckToy.ProjectileDomain );
+        %projectile.FlipY = true;
+        %projectile.createCircleCollisionShape( 0.2 );
+        %projectile.setCollisionGroups( TruckToy.GroundDomain );
+        %projectile.CollisionCallback = true;
+
+        // Park it: no render, no physics, won't fall.
+        %projectile.setVisible( false );
+        %projectile.setActive( false );
+
+        SandboxScene.add( %projectile );
+        TruckToy.ProjectilePool[%i] = %projectile;
+    }
+}
+
+// -----------------------------------------------------------------------------
+
+function TruckToy::createExplosionPool(%this)
+{
+    // Pre-build a fixed pool of impact explosions. A ParticlePlayer is heavier
+    // to spin up than a Sprite (it binds the asset and builds emitter/particle
+    // pools), so creating one per impact is the main remaining hitch. We build
+    // them once and replay them instead.
+    //
+    // Uses TruckToy:explosion, a local copy of ToyAssets:ImpactExplosion with
+    // LifeMode="STOP" instead of "KILL" -- KILL would make each player
+    // safeDelete() itself after firing, which would empty the pool.
+    //
+    // Worst case airborne = ceil(Lifetime 1s / fastest spawn 0.1s) = 10,
+    // plus headroom -> 16.
+    TruckToy.ExplosionPoolSize = 16;
+    TruckToy.ExplosionPoolIndex = 0;
+
+    for ( %i = 0; %i < TruckToy.ExplosionPoolSize; %i++ )
+    {
+        %explosion = new ParticlePlayer();
+        %explosion.BodyType = static;
+        %explosion.Size = 10;
+        %explosion.SceneLayer = TruckToy.BackgroundDomain-1;
+        %explosion.ParticleInterpolation = true;
+        %explosion.Particle = "TruckToy:explosion";
+        SandboxScene.add( %explosion );
+
+        // Adding to the scene auto-plays the player, so stop it immediately
+        // (no wait, no kill) to park it ready for reuse.
+        %explosion.stop( false, false );
+
+        TruckToy.ExplosionPool[%i] = %explosion;
+    }
+}
+
+// -----------------------------------------------------------------------------
+
 function TruckToy::createProjectile(%this)
 {
     // Fetch the truck position.
     %truckPositionX = TruckToy.TruckBody.Position.x;
 
-    %projectile = new Sprite() { class = "TruckProjectile"; };
-    %projectile.Animation = "ToyAssets:Projectile_FireballAnim";
+    // Take the next projectile from the pool (ring buffer).
+    %projectile = TruckToy.ProjectilePool[TruckToy.ProjectilePoolIndex];
+    TruckToy.ProjectilePoolIndex = (TruckToy.ProjectilePoolIndex + 1) % TruckToy.ProjectilePoolSize;
+
+    // Cancel any pending recycle left over from this sprite's previous use.
+    if ( isEventPending( %projectile.RecycleEvent ) )
+        cancel( %projectile.RecycleEvent );
+
+    // Reset physics state and reposition.
     %projectile.setPosition( getRandom( %truckPositionX - (TruckToy.CameraWidth * 0.2), %truckPositionX + (TruckToy.CameraWidth * 0.5) ), 12 );
-    %projectile.setSceneLayer( TruckToy.BackgroundDomain-2 );
-    %projectile.setSceneGroup( TruckToy.ProjectileDomain );
-    %projectile.FlipY = true;
+    %projectile.setLinearVelocity( 0, 0 );
+    %projectile.setAngularVelocity( 0 );
+    %projectile.setAngle( 0 );
     %projectile.Size = getRandom(0.5, 2);
-    %projectile.Lifetime = 2.5;
-    %projectile.createCircleCollisionShape( 0.2 );
-    %projectile.setCollisionGroups( TruckToy.GroundDomain );
-    %projectile.CollisionCallback = true;
-    SandboxScene.add( %projectile );
+
+    // Wake it up and (re)start the fireball animation.
+    %projectile.setActive( true );
+    %projectile.setVisible( true );
+    %projectile.setAwake( true );
+    %projectile.playAnimation( "TruckToy:Projectile_FireballAnim" );
+
+    // Recycle it if it misses everything (mirrors the old 2.5s Lifetime).
+    %projectile.RecycleEvent = %projectile.schedule( TruckToy.ProjectileLifetime * 1000, "recycle" );
+}
+
+// -----------------------------------------------------------------------------
+
+function TruckProjectile::recycle(%this)
+{
+    // Return the projectile to the pool: stop its pending recycle timer (if
+    // any), kill its momentum, then park it invisible + inactive for reuse.
+    if ( isEventPending( %this.RecycleEvent ) )
+        cancel( %this.RecycleEvent );
+    %this.RecycleEvent = "";
+
+    %this.setLinearVelocity( 0, 0 );
+    %this.setAngularVelocity( 0 );
+    %this.setActive( false );
+    %this.setVisible( false );
 }
 
 // -----------------------------------------------------------------------------
 
 function TruckProjectile::onCollision(%this, %object, %collisionDetails)
 {
-    // Create an impact explosion at the projectiles position.
-    %particlePlayer = new ParticlePlayer();
-    %particlePlayer.BodyType = Static;
-    %particlePlayer.Position = %this.Position;
-    %particlePlayer.Size = 10;
-    %particlePlayer.SceneLayer = TruckToy.BackgroundDomain-1;
-    %particlePlayer.ParticleInterpolation = true;
-    %particlePlayer.Particle = "ToyAssets:ImpactExplosion";
-    %particlePlayer.SizeScale = getRandom(TruckToy.ExplosionScale, TruckToy.ExplosionScale * 1.5);
-    SandboxScene.add( %particlePlayer );
+    // Replay an impact explosion from the pool at the projectile's position
+    // (ring buffer) -- no allocation during play.
+    %explosion = TruckToy.ExplosionPool[TruckToy.ExplosionPoolIndex];
+    TruckToy.ExplosionPoolIndex = (TruckToy.ExplosionPoolIndex + 1) % TruckToy.ExplosionPoolSize;
+    %explosion.setPosition( %this.Position );
+    %explosion.SizeScale = getRandom(TruckToy.ExplosionScale, TruckToy.ExplosionScale * 1.5);
+    %explosion.play( true );
 
     // Start the camera shaking.
     SandboxWindow.startCameraShake( 10 + (3 * TruckToy.ExplosionScale), 1 );
 
-    // Delete the projectile.
-    %this.safeDelete();
+    // Return the projectile to the pool (instead of deleting it).
+    %this.recycle();
 }
 
 // -----------------------------------------------------------------------------
@@ -729,7 +825,7 @@ function TruckToy::createTruck( %this, %posX, %posY )
     // Rear tire.
     %tireRear = new Sprite();
     %tireRear.setPosition( %posX-1.4, %posY-1.0 );
-    %tireRear.setImage( "ToyAssets:tires" );
+    %tireRear.setImage( "TruckToy:truckTire" );
     %tireRear.setSize( 1.7, 1.7 );
     %tireRear.setSceneLayer( TruckToy.TruckDomain-1 );
     %tireRear.setSceneGroup( TruckToy.ObstacleDomain );
@@ -743,7 +839,7 @@ function TruckToy::createTruck( %this, %posX, %posY )
     // Front tire.
     %tireFront = new Sprite();
     %tireFront.setPosition( %posX+1.7, %posY-1.0 );
-    %tireFront.setImage( "ToyAssets:tires" );
+    %tireFront.setImage( "TruckToy:truckTire" );
     %tireFront.setSize( 1.7, 1.7 );
     %tireFront.setSceneLayer( TruckToy.TruckDomain-1 );
     %tireFront.setSceneGroup( TruckToy.ObstacleDomain );

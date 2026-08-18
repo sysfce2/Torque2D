@@ -52,6 +52,7 @@ AndroidFont::AndroidFont()
 	fontFileBuffer = NULL;
 	fontFileBufferSize = 0;
 	fontFaceCreated = false;
+	face = NULL;   // so a never-created face is a clean NULL (guarded in getCharInfo; safe for ~AndroidFont's FT_Done_Face)
 	int error = FT_Init_FreeType( &library );
 	if ( error )
 	{
@@ -117,7 +118,12 @@ bool AndroidFont::create( const char* name, U32 size, U32 charset )
     	mBaseline = 0;
     }
 
-    return true;
+    // Propagate failure: the old code returned true even when FT_New_Face failed,
+    // so createPlatformFont() handed back a font whose FT_Face is invalid, and the
+    // first getCharInfo() dereferenced it (face->glyph) -> SIGSEGV. Returning the
+    // real result lets createPlatformFont() return NULL, which GFont::create and
+    // GuiControlProfile::getFont now handle gracefully (no text, no crash).
+    return fontFaceCreated;
 }
 
 //------------------------------------------------------------------------------
@@ -155,11 +161,17 @@ PlatformFont::CharInfo& AndroidFont::getCharInfo(const UTF16 character) const
     // Declare and clear out the CharInfo that will be returned.
     static PlatformFont::CharInfo characterInfo;
     dMemset(&characterInfo, 0, sizeof(characterInfo));
-    
+
     // prep values for GFont::addBitmap()
     characterInfo.bitmapIndex = 0;
     characterInfo.xOffset = 0;
     characterInfo.yOffset = 0;
+
+    // Guard: if the FT_Face never created (FT_New_Face failed in create()), bail
+    // with the zeroed CharInfo rather than dereferencing an invalid face below.
+    if (!fontFaceCreated || face == NULL)
+        return characterInfo;
+
     FT_GlyphSlot slot = face->glyph;
 
     int error = FT_Load_Char( face, character, FT_LOAD_RENDER );

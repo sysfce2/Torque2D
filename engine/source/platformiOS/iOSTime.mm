@@ -80,19 +80,20 @@ mach_timebase_info_data_t InitTimebaseInfo()
 /// Storing milisec in a U32 overflows every 49.71 days
 U32 Platform::getRealMilliseconds()
 {
-   // Duration is a S32 value.
-   // if negative, it is in microseconds.
-   // if positive, it is in milliseconds.
-	
-	Duration durTime = mach_absolute_time() * absolute_to_millis;
-   U32 ret;
-   if( durTime < 0 )
-      ret = durTime / -1000;
-   else 
-      ret = durTime;
-
-   return ret;
-}   
+   // millis since system start. mach_absolute_time() (U64 ticks) * absolute_to_millis
+   // (double) is the elapsed milliseconds as a double — far larger than U32_MAX on
+   // any machine with real uptime. The old code stored it in a Carbon `Duration`
+   // (an SInt32), and casting an out-of-range double to a 32-bit int is UB: on
+   // arm64 fcvtzs/fcvtzu SATURATE (to INT_MAX/0xFFFFFFFF) rather than wrapping as
+   // x86 did, so getRealMilliseconds() returned a constant — every time delta was
+   // 0 and the simulation clock never advanced (schedule()/animations/fades froze,
+   // leaving the editor's fade-in curtain stuck opaque -> black screen). This is
+   // the same arm64 trap fixed in osxTime.mm / mFluid.h. Go through U64 first: a
+   // well-defined truncation that wraps mod 2^32 (~49 days, which the engine's
+   // unsigned-delta math already handles), matching the old x86 behaviour.
+   U64 millis = (U64)(mach_absolute_time() * absolute_to_millis);
+   return (U32)millis;
+}
 
 U32 Platform::getVirtualMilliseconds()
 {

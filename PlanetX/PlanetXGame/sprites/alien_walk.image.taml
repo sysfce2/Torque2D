@@ -1,0 +1,9 @@
+<ImageAsset
+    AssetName="alienWalk"
+    AssetCategory="badguy"
+    ImageFile="@assetFile=alien_walk.png"
+    FilterMode="NEAREST"
+    CellWidth="32"
+    CellCountX="4"
+    CellHeight="32"
+    CellCountY="1" />

@@ -161,11 +161,6 @@ ConsoleMethodWithDocs(AnimationAsset, getNamedAnimationFrames, ConsoleString, 2,
         return StringTable->EmptyString;
     }
 
-    // Fetch a return buffer.
-    S32 bufferSize = 4096;
-    char* pBuffer = Con::getReturnBuffer( bufferSize );
-    char* pReturnBuffer = pBuffer;    
-
     // Fetch validated frames flag.
     const bool validatedFrames = argc >= 3 ? dAtob( argv[2] ) : false;
 
@@ -175,10 +170,33 @@ ConsoleMethodWithDocs(AnimationAsset, getNamedAnimationFrames, ConsoleString, 2,
     // Fetch frame count.
     const U32 frameCount = (U32)frames.size();
 
-    // Format frames.
+    // Measured rather than assumed, unlike the numbered sibling above.
+    //
+    // A cell name comes from a TAML attribute and has no length limit, so the
+    // fixed 4096 that serves a list of integers can genuinely be too small here
+    // -- and dSprintf truncates in silence, which would have shortened a long
+    // animation to whatever fitted and told nobody.
+    U32 bufferLength = 1;
     for ( U32 frameIndex = 0; frameIndex < frameCount; ++frameIndex )
     {
-        const S32 offset = dSprintf( pBuffer, bufferSize, "%d ", frames[frameIndex] );
+        bufferLength += dStrlen( frames[frameIndex] ) + 1;
+    }
+
+    S32 bufferSize = (S32)bufferLength;
+    char* pBuffer = Con::getReturnBuffer( bufferSize );
+    char* pReturnBuffer = pBuffer;
+    *pBuffer = 0;
+
+    // Format frames.
+    //
+    // As "%s". These are StringTableEntry -- const char* -- and formatting one
+    // through "%d" printed the pointer, so every named animation read back as a
+    // list of addresses. That single character is why the Asset Manager could
+    // not edit a named animation at all: nothing downstream could recover the
+    // names it had just asked for.
+    for ( U32 frameIndex = 0; frameIndex < frameCount; ++frameIndex )
+    {
+        const S32 offset = dSprintf( pBuffer, bufferSize, "%s ", frames[frameIndex] );
         pBuffer += offset;
         bufferSize -= offset;
     }
@@ -257,23 +275,73 @@ ConsoleMethodWithDocs(AnimationAsset, getAnimationCycle, ConsoleBool, 2, 2, ())
 
 //-----------------------------------------------------------------------------
 
-/*! Sets whether the animation uses names for cells, instead of numerical index.
-    @param namedCellsMode True if it should be using named cells.
-    @return No return value.
-*/
-ConsoleMethodWithDocs(AnimationAsset, setNamedCellsMode, ConsoleVoid, 3, 3, ())
-{
-    object->setNamedCellsMode( dAtob(argv[2] ) );
-}
-
-//-----------------------------------------------------------------------------
-
 /*! Gets whether the animation is using names for its cells.
+
+    This is not a setting.  It is read from the image asset: an image in explicit
+    mode cuts itself into named cells, so an animation on it addresses them by
+    name, and an image cut into a grid has no names to address.  Change the image,
+    or change that image's explicit mode, to change this.
     @return True if the animation is using named cells.
 */
 ConsoleMethodWithDocs(AnimationAsset, getNamedCellsMode, ConsoleBool, 2, 2, ())
 {
     return object->getNamedCellsMode();
+}
+
+//-----------------------------------------------------------------------------
+
+/*! Gets the count of frames that compose the animation, whether it is using named
+    cells or numbered ones.
+    @param validatedFrames - Whether to count only the validated frames or not.  Optional: Default is false.
+    @return The number of frames that compose the animation.
+*/
+ConsoleMethodWithDocs(AnimationAsset, getFrameCount, ConsoleInt, 2, 3, ([bool validatedFrames]))
+{
+    // Fetch validated frames flag.
+    const bool validatedFrames = argc >= 3 ? dAtob( argv[2] ) : false;
+
+    return object->getFrameCount( validatedFrames );
+}
+
+//-----------------------------------------------------------------------------
+
+/*! Gets the named frames that no cell of the image answers to.
+
+    Empty when every frame resolves, and empty for an animation using numbered
+    frames, which cannot have this problem -- an out-of-range number is clamped.
+    @return The space separated names of the frames that cannot be found.
+*/
+ConsoleMethodWithDocs(AnimationAsset, getMissingFrames, ConsoleString, 2, 2, ())
+{
+    Vector<StringTableEntry> missingFrames;
+    object->getMissingFrames( missingFrames );
+
+    // Fetch frame count.
+    const U32 frameCount = (U32)missingFrames.size();
+
+    if ( frameCount == 0 )
+        return StringTable->EmptyString;
+
+    // Measured, because a cell name has no length limit.
+    U32 bufferLength = 1;
+    for ( U32 frameIndex = 0; frameIndex < frameCount; ++frameIndex )
+    {
+        bufferLength += dStrlen( missingFrames[frameIndex] ) + 1;
+    }
+
+    S32 bufferSize = (S32)bufferLength;
+    char* pBuffer = Con::getReturnBuffer( bufferSize );
+    char* pReturnBuffer = pBuffer;
+    *pBuffer = 0;
+
+    for ( U32 frameIndex = 0; frameIndex < frameCount; ++frameIndex )
+    {
+        const S32 offset = dSprintf( pBuffer, bufferSize, "%s ", missingFrames[frameIndex] );
+        pBuffer += offset;
+        bufferSize -= offset;
+    }
+
+    return pReturnBuffer;
 }
 
 ConsoleMethodGroupEndWithDocs(AnimationAsset)

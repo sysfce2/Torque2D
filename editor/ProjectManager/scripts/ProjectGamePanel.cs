@@ -3,8 +3,8 @@ function ProjectGamePanel::onAdd(%this)
 {
 	%this.init("Project");
 
-	%this.buttonBar.addButton("createNewModule", 11, "Create Module", "");
-	%this.buttonBar.addButton("editModule", 49, "Edit Module", "editModuleAvailable");
+	%this.buttonBar.addButton("createNewModule", $EditorIcon::doc_plus, "Create Module", "");
+	%this.buttonBar.addButton("editModule", $EditorIcon::doc_edit, "Edit Module", "editModuleAvailable");
 }
 
 function ProjectGamePanel::onOpen(%this, %allModules)
@@ -98,10 +98,23 @@ function ProjectGamePanel::onModuleCreated(%this, %data)
 		if(isDirectory(%templatePath))
 		{
 			pathCopy(%templatePath, %data.path);
+
+			// The id is in the template's script and asset ids too, not just in
+			// its module.taml, and the engine calls <ModuleId>::<CreateFunction>.
+			// Rewriting only the definition leaves a module that loads and then
+			// does nothing.
+			ModuleStamper.renameInPlace(%data.path, %data.template, %data.moduleName);
+
 			%obj = TamlRead(pathConcat(%data.path, "module.taml"));
 			%obj.ModuleID = %data.moduleName;
+
+			// A copy of a template is a module of its own: it is not something to
+			// stamp out again, and it is not a Game Core or an Art Pack either.
+			ModuleStamper.clearTemplateMarkers(%obj);
 			%obj.Type = "";
+
 			TamlWrite(%obj, pathConcat(%data.path, "module.taml"));
+			%obj.delete();
 		}
 	}
 	else
@@ -117,6 +130,7 @@ function ProjectGamePanel::onModuleCreated(%this, %data)
 		};
 		createPath(%data.path);
 		TamlWrite(%obj, pathConcat(%data.path, "module.taml"));
+		%obj.delete();
 	}
 	ModuleDatabase.scanModules(%data.path);
 	%this.onOpen(ModuleDatabase.findModules(false));
@@ -177,6 +191,12 @@ function ProjectGamePanel::onModuleEdited(%this, %data)
 			{
 				directoryDelete(%modulePath);
 				%modulePath = %newModulePath;
+
+				// The old id is written through the module's own scripts and asset
+				// ids as well, and the engine calls <ModuleId>::<CreateFunction>.
+				// Renaming the folder and the definition alone would leave a module
+				// that loads and then does nothing.
+				ModuleStamper.renameInPlace(%modulePath, %moduleID, %data.moduleID);
 			}
 		}
 		echo("Editing Module at " @ %modulePath);
@@ -188,6 +208,7 @@ function ProjectGamePanel::onModuleEdited(%this, %data)
 		%file.type = %data.type;
 		%file.author = %data.author;
 		TamlWrite(%file, pathConcat(%modulePath, "module.taml"));
+		%file.delete();
 		ModuleDatabase.scanModules(%modulePath, true);
 		%this.card.moduleID = %data.moduleID;
 		%this.card.versionID = %data.versionID;

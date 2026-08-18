@@ -76,6 +76,15 @@ public:
     static void initPersistFields();
     virtual void copyTo(SimObject* object);
 
+    /// The state a copy has to carry that no persist field describes.
+    ///
+    /// copyTo copies every persist field generically, off the field table, so an
+    /// asset only overrides this if it keeps state somewhere else -- which in
+    /// practice means the state it writes as TAML custom nodes, or its Taml
+    /// children. ImageAsset's explicit cells and image layers and ParticleAsset's
+    /// emitters are the whole list; the other asset types need nothing here.
+    virtual void copyAssetStateTo( AssetBase* pTarget ) {}
+
     /// Asset configuration.
     inline void             setAssetName( const char* pAssetName )              { if ( mpOwningAssetManager == NULL ) mpAssetDefinition->mAssetName = StringTable->insert(pAssetName); }
     inline StringTableEntry getAssetName( void ) const                          { return mpAssetDefinition->mAssetName; }
@@ -102,7 +111,36 @@ public:
 
     virtual bool            isAssetValid( void ) const                          { return true; }
 
+    /// Whether the asset has changes that have not been saved.
+    inline bool             getAssetDirty( void ) const                         { return mpAssetDefinition->mAssetDirty; }
+
+    /// Mark the asset changed: unsaved, and announced to everything watching it.
+    ///
+    /// NOTE: this does NOT write the asset's file. Saving is saveAsset.
     void                    refreshAsset( void );
+
+    /// Save the asset's file, and revert it to what that file already holds.
+    bool                    saveAsset( void );
+    bool                    revertAsset( void );
+
+    /// A detached copy of everything this asset currently holds.
+    ///
+    /// The copy is registered but unowned, and that is the point: with no owning
+    /// asset manager every setter's refreshAsset returns immediately, so taking a
+    /// snapshot marks nothing dirty, notifies nobody, and -- for an ImageAsset --
+    /// loads no bitmap and touches no texture.
+    ///
+    /// The caller owns the returned object and must deleteObject() it.
+    AssetBase*              createStateSnapshot( void );
+
+    /// Put a snapshot back onto this asset.
+    ///
+    /// The snapshot is copied ONTO this object rather than replacing it, because
+    /// every AssetPtr in the scene holds a raw pointer to this object. The whole
+    /// restore counts as one change, and does not itself mark the asset dirty --
+    /// the caller decides what the dirty state should be afterwards, since undoing
+    /// back to the last saved state is clean and undoing to anywhere else is not.
+    bool                    restoreStateSnapshot( AssetBase* pSnapshot );
 
     /// Declare Console Object.
     DECLARE_CONOBJECT( AssetBase );

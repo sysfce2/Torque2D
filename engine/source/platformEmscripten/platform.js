@@ -22,28 +22,34 @@
 
 mergeInto(LibraryManager.library, {
 
+// NOTE: the message/title args arrive as C (UTF8) POINTERS into the wasm heap, not
+// JS strings, so they must be decoded with UTF8ToString() — the old code passed the
+// raw pointer straight to alert(), which showed the integer ADDRESS (e.g. "363333").
+//
+// AlertOK is informational; route it to console.error instead of a blocking native
+// alert() — a web game must not freeze the browser tab, and an engine that calls
+// AlertOK every frame (e.g. a recurring assert) would otherwise wedge the page with
+// an un-dismissable dialog storm. The decision dialogs keep a real (blocking) prompt
+// because the engine needs their boolean answer.
 js_AlertOK: function(title, message) {
-	alert(message);
+	console.error('[Torque] ' + UTF8ToString(message));
 	return 1;
 },
 
 js_AlertOKCancel: function(title, message) {
-	alert(message);
-	return 1;
+	return confirm(UTF8ToString(message)) ? 1 : 0;
 },
 
 js_AlertRetry: function(title, message) {
-	alert(message);
-	return 1;
+	return confirm(UTF8ToString(message)) ? 1 : 0;
 },
 
 js_AlertYesNo: function(title, message) {
-	alert(message);
-	return 1;
+	return confirm(UTF8ToString(message)) ? 1 : 0;
 },
 
 js_AlertOk: function(title, message) {
-	alert(message);
+	console.error('[Torque] ' + UTF8ToString(message));
 	return 1;
 },
 
@@ -56,6 +62,7 @@ js_ConsoleDisabled: function() {
 },
 
 js_ConsoleLine: function(message) {
+	if (message) console.log(UTF8ToString(message));
 },
 
 step_warn: function() {

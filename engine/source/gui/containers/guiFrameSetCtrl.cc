@@ -513,6 +513,253 @@ void GuiFrameSetCtrl::loadFrame(GuiFrameSetCtrl::Frame* frame, const U32 frameID
 	}
 }
 
+//-----------------------------------------------------------------------------
+// The frame tree as text.
+//
+// A frame set keeps its layout in a tree beside the child list, and destroys a
+// frame outright when the control in it is removed (onChildRemoved below), so
+// deleting a control collapses the split it was in. Nothing could put that
+// back: the tree is built once in onAdd from dynamic fields, which are then
+// cleared, and there was no way to read it or write it afterwards. That made a
+// frame set the one container the Gui Editor's undo could not fully restore.
+//
+// One record per frame, a parent always before its children, eight numbers
+// each:
+//
+//   id  child1  child2  isVertical  extentX  extentY  isAnchored  controlID
+//
+// The control is named by object id rather than by its index among the
+// children, so that restoring a tree recorded before a delete - one naming a
+// control that is now sitting in the editor's trash - simply leaves that frame
+// empty rather than putting the wrong control in it.
+//-----------------------------------------------------------------------------
+
+const char* GuiFrameSetCtrl::getFrameLayout()
+{
+	char* buffer = Con::getReturnBuffer(4096);
+	buffer[0] = '\0';
+
+	appendFrameLayout(&mRootFrame, buffer, 4096);
+
+	return buffer;
+}
+
+void GuiFrameSetCtrl::appendFrameLayout(GuiFrameSetCtrl::Frame* frame, char* buffer, const U32 size)
+{
+	char record[128];
+	dSprintf(record, sizeof(record), "%d %d %d %d %d %d %d %d ",
+		frame->id,
+		frame->child1 ? frame->child1->id : 0,
+		frame->child2 ? frame->child2->id : 0,
+		frame->isVertical ? 1 : 0,
+		frame->extent.x,
+		frame->extent.y,
+		frame->isAnchored ? 1 : 0,
+		frame->control ? frame->control->getId() : 0);
+
+	if ((dStrlen(buffer) + dStrlen(record)) >= size)
+	{
+		Con::warnf("GuiFrameSetCtrl::getFrameLayout - frame tree is too large to write out");
+		return;
+	}
+	dStrcat(buffer, record);
+
+	if (frame->child1)
+	{
+		appendFrameLayout(frame->child1, buffer, size);
+	}
+	if (frame->child2)
+	{
+		appendFrameLayout(frame->child2, buffer, size);
+	}
+}
+
+void GuiFrameSetCtrl::setFrameLayout(const char* layout)
+{
+	Vector<U32> values;
+	for (const char* at = layout; *at; )
+	{
+		while (*at == ' ' || *at == '\t')
+			at++;
+		if (!*at)
+			break;
+
+		values.push_back((U32)dAtoi(at));
+
+		while (*at && *at != ' ' && *at != '\t')
+			at++;
+	}
+
+	if (values.size() < 8 || (values.size() % 8) != 0)
+	{
+		Con::warnf("GuiFrameSetCtrl::setFrameLayout - expected a multiple of eight values, got %d", values.size());
+		return;
+	}
+
+	// Back to a single frame. deleteChildren frees the subtree but leaves the
+	// pointers as they were, so they have to be cleared here or the rebuild
+	// would walk into freed frames.
+	mRootFrame.deleteChildren();
+	mRootFrame.child1 = nullptr;
+	mRootFrame.child2 = nullptr;
+	mRootFrame.control = nullptr;
+
+	buildFrameLayout(&mRootFrame, values[0], values);
+
+	// Frames created from here on must not reuse an id the tree already holds.
+	for (U32 i = 0; i < (U32)values.size(); i += 8)
+	{
+		if (values[i] > mNextFrameID)
+		{
+			mNextFrameID = values[i];
+		}
+	}
+
+	resize(getPosition(), getExtent());
+}
+
+//-----------------------------------------------------------------------------
+// Copying. A frame set is the one control in the engine that keeps a layout of
+// its own beside the child list, and none of it is a persist field - it is
+// written as TAML custom nodes and nothing else. So a copy of a frame set that
+// only copied fields and children would come back with four children and no
+// frames to put them in.
+//
+// This runs after the children have been copied, because a frame only takes a
+// control that is already a child (onChildAdded/assignChildToFrame fills empty
+// frames, it never makes one).
+//-----------------------------------------------------------------------------
+
+void GuiFrameSetCtrl::deepCloneChildren(SimObject* clone)
+{
+	Parent::deepCloneChildren(clone);
+
+	GuiFrameSetCtrl* pCloneFrameSet = dynamic_cast<GuiFrameSetCtrl*>(clone);
+	if (pCloneFrameSet)
+	{
+		pCloneFrameSet->copyFrameTreeFrom(this);
+	}
+}
+
+void GuiFrameSetCtrl::copyFrameTreeFrom(GuiFrameSetCtrl* source)
+{
+	if (!source)
+	{
+		return;
+	}
+
+	// Back to a single frame first, exactly as setFrameLayout does: the children
+	// arriving have already been handed whichever frames were free, and those
+	// assignments are about to be made again properly.
+	mRootFrame.deleteChildren();
+	mRootFrame.child1 = nullptr;
+	mRootFrame.child2 = nullptr;
+	mRootFrame.control = nullptr;
+
+	copyFrame(&mRootFrame, &source->mRootFrame, source);
+
+	resize(getPosition(), getExtent());
+}
+
+// The tree is copied structurally rather than through getFrameLayout, because
+// the layout text names each frame's control by id - and the copy's children are
+// new objects with new ids. What pairs them instead is position in the child
+// list: deepCloneChildren copies children in order, so the source's nth child
+// and this control's nth child are the same control.
+void GuiFrameSetCtrl::copyFrame(GuiFrameSetCtrl::Frame* frame, const GuiFrameSetCtrl::Frame* sourceFrame, GuiFrameSetCtrl* source)
+{
+	frame->id = sourceFrame->id;
+	frame->isVertical = sourceFrame->isVertical;
+	frame->extent = sourceFrame->extent;
+	frame->isAnchored = sourceFrame->isAnchored;
+	frame->control = nullptr;
+
+	// Frames split from here on must not reuse an id the copied tree holds.
+	if (sourceFrame->id > mNextFrameID)
+	{
+		mNextFrameID = sourceFrame->id;
+	}
+
+	if (sourceFrame->child1 && sourceFrame->child2)
+	{
+		// The same call buildFrameLayout makes, and for the same reason: it is
+		// what builds a pair of frames under this one. The ids it assigns are
+		// overwritten by the recursion below with the source's own.
+		splitFrame(frame, frame->isVertical ? GuiDirection::Up : GuiDirection::Left);
+
+		copyFrame(frame->child1, sourceFrame->child1, source);
+		copyFrame(frame->child2, sourceFrame->child2, source);
+		return;
+	}
+
+	if (!sourceFrame->control)
+	{
+		return;
+	}
+
+	for (U32 i = 0; i < (U32)source->size(); i++)
+	{
+		if ((*source)[i] == sourceFrame->control)
+		{
+			if (i < (U32)size())
+			{
+				frame->control = dynamic_cast<GuiControl*>((*this)[i]);
+			}
+			break;
+		}
+	}
+}
+
+void GuiFrameSetCtrl::buildFrameLayout(GuiFrameSetCtrl::Frame* frame, const U32 frameID, const Vector<U32>& values)
+{
+	S32 at = -1;
+	for (U32 i = 0; i < (U32)values.size(); i += 8)
+	{
+		if (values[i] == frameID)
+		{
+			at = (S32)i;
+			break;
+		}
+	}
+
+	if (at < 0)
+	{
+		return;
+	}
+
+	frame->id = frameID;
+	frame->isVertical = values[at + 3] != 0;
+	frame->extent.set(values[at + 4], values[at + 5]);
+	frame->isAnchored = values[at + 6] != 0;
+	frame->control = nullptr;
+
+	const U32 child1ID = values[at + 1];
+	const U32 child2ID = values[at + 2];
+
+	if (child1ID && child2ID)
+	{
+		// The same call loadFrame makes, and for the same reason: it is what
+		// builds a pair of frames under this one.
+		splitFrame(frame, frame->isVertical ? GuiDirection::Up : GuiDirection::Left);
+
+		buildFrameLayout(frame->child1, child1ID, values);
+		buildFrameLayout(frame->child2, child2ID, values);
+		return;
+	}
+
+	// A leaf, so it may hold a control - but only one that is still a child of
+	// this frame set.
+	const U32 controlID = values[at + 7];
+	if (controlID)
+	{
+		GuiControl* ctrl;
+		if (Sim::findObject(controlID, ctrl) && ctrl->getGroup() == this)
+		{
+			frame->control = ctrl;
+		}
+	}
+}
+
 void GuiFrameSetCtrl::onChildAdded(GuiControl* child)
 {
 	//Ensure the child isn't positioned to the center
@@ -1343,16 +1590,30 @@ const char* GuiFrameSetCtrl::getDataField(const char* tag, const U32 id)
 	return SimObject::getDataField(tagFieldName, idBuffer);
 }
 
-static StringTableEntry frameNodeSectionName		= StringTable->insert("Frames", true);
-static StringTableEntry frameNodeName				= StringTable->insert("Frame", true);
-static StringTableEntry frameIDName					= StringTable->insert("ID", true);
-static StringTableEntry frameChild1Name				= StringTable->insert("Child1ID", true);
-static StringTableEntry frameChild2Name				= StringTable->insert("Child2ID", true);
-static StringTableEntry frameIsVerticalName			= StringTable->insert("IsVertical", true);
-static StringTableEntry frameExtentXName			= StringTable->insert("ExtentX", true);
-static StringTableEntry frameExtentYName			= StringTable->insert("ExtentY", true);
-static StringTableEntry frameIsAnchoredName			= StringTable->insert("IsAnchored", true);
-static StringTableEntry frameChildMapName			= StringTable->insert("ChildMap", true);
+// Interned case-INSENSITIVELY, which is what all of these are compared against:
+// TamlCustomNodes::findNode and the XML parser both intern with the default, so
+// a name interned the case-sensitive way is a different pointer and matches
+// nothing.
+//
+// It is not theoretical. StringTable hands back the first spelling of a name it
+// was ever given, so a case-sensitive "ID" here could write itself out as "Id" -
+// whichever spelling reached the table first, from anywhere in the engine - and
+// then fail to recognise its own output on the way back in, dropping the field
+// with nothing but a warnf. Which spelling wins depends on static-initialisation
+// order across translation units, so it can change from one build to the next.
+// GuiListBoxCtrl's Items nodes had exactly that happen to them.
+//
+// It also means a hand-edited Gui may spell these however it likes.
+static StringTableEntry frameNodeSectionName		= StringTable->insert("Frames");
+static StringTableEntry frameNodeName				= StringTable->insert("Frame");
+static StringTableEntry frameIDName					= StringTable->insert("ID");
+static StringTableEntry frameChild1Name				= StringTable->insert("Child1ID");
+static StringTableEntry frameChild2Name				= StringTable->insert("Child2ID");
+static StringTableEntry frameIsVerticalName			= StringTable->insert("IsVertical");
+static StringTableEntry frameExtentXName			= StringTable->insert("ExtentX");
+static StringTableEntry frameExtentYName			= StringTable->insert("ExtentY");
+static StringTableEntry frameIsAnchoredName			= StringTable->insert("IsAnchored");
+static StringTableEntry frameChildMapName			= StringTable->insert("ChildMap");
 
 void GuiFrameSetCtrl::onTamlCustomWrite(TamlCustomNodes& customNodes)
 {

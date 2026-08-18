@@ -1,0 +1,5 @@
+<ImageAsset
+    AssetName="spacemanIdle"
+    AssetCategory="unit"
+    ImageFile="@assetFile=spaceman_idle.png"
+    FilterMode="NEAREST" />

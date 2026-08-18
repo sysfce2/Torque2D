@@ -427,8 +427,16 @@ void init()
    gRootGroup->addObject(gDataBlockGroup);
 }
 
+static bool gShuttingDown = false;
+
+bool isShuttingDown()
+{
+   return gShuttingDown;
+}
+
 void shutdown()
 {
+   gShuttingDown = true;
    shutdownRoot();
    shutdownEventQueue();
 }

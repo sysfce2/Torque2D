@@ -43,8 +43,13 @@ GuiSliderCtrl::GuiSliderCtrl(void)
     mDisplayValue = false;
     mMouseOver = false;
     mDepressed = false;
+    mThumbProfile = NULL;
 	mRendersChildren = false;
 	mIsContainer = false;
+
+    // Default the thumb to the shared scroll-thumb profile so un-themed sliders
+    // still get a sensible raised thumb; a theme assigns its <Name>SliderThumbProfile.
+    setField("thumbProfile", "GuiScrollThumbProfile");
 }
 
 //----------------------------------------------------------------------------
@@ -56,6 +61,7 @@ void GuiSliderCtrl::initPersistFields()
     addField("range", TypePoint2F, Offset(mRange, GuiSliderCtrl));
     addField("ticks", TypeS32, Offset(mTicks, GuiSliderCtrl));
     addField("value", TypeF32, Offset(mValue, GuiSliderCtrl));
+    addField("thumbProfile", TypeGuiProfile, Offset(mThumbProfile, GuiSliderCtrl));
     endGroup("Slider");
 }
 
@@ -78,6 +84,9 @@ bool GuiSliderCtrl::onWake()
     if (!Parent::onWake())
         return false;
 
+    if (mThumbProfile != NULL)
+        mThumbProfile->incRefCount();
+
     if (mThumbSize.y + mProfile->getFont(mFontSizeAdjust)->getHeight() - 4 <= (U32) mBounds.extent.y)
         mDisplayValue = true;
     else
@@ -90,6 +99,15 @@ bool GuiSliderCtrl::onWake()
         mBitmapBounds = mProfile->mBitmapArrayRects.address();
 
     return true;
+}
+
+//----------------------------------------------------------------------------
+void GuiSliderCtrl::onSleep()
+{
+    Parent::onSleep();
+
+    if (mThumbProfile != NULL)
+        mThumbProfile->decRefCount();
 }
 
 //----------------------------------------------------------------------------
@@ -224,6 +242,13 @@ void GuiSliderCtrl::updateThumb(F32 _value, bool snap, bool onWake)
         mThumb.point.y = my - (mThumbSize.x / 2);
         mThumb.extent.x = mThumbSize.y;
         mThumb.extent.y = mThumbSize.x;
+        // Keep the thumb inside the control at the travel extremes so it isn't
+        // half-clipped by the control's clip rect. The value mapping is
+        // unchanged; only the drawn rect is nudged in at the very ends.
+        if (mThumb.point.y < 0)
+            mThumb.point.y = 0;
+        if (mThumb.point.y + mThumb.extent.y > mBounds.extent.y)
+            mThumb.point.y = mBounds.extent.y - mThumb.extent.y;
     }
     setFloatVariable(mValue);
     setUpdate();
@@ -343,6 +368,16 @@ void GuiSliderCtrl::onRender(Point2I offset, const RectI &updateRect)
     else
     {
         // we're not usina a bitmap, draw procedurally.
+        // Draw a themed groove/track from the main (Slider) profile beneath the
+        // rule and tick marks; the thumb below uses the dedicated thumb profile.
+        const S32 grooveThickness = 4;
+        // renderUniversalRect takes RectI& by (non-const) reference, so the rect
+        // must be a named lvalue -- a temporary won't bind on clang/gcc.
+        RectI grooveRect = (mBounds.extent.x >= mBounds.extent.y)
+            ? RectI(Point2I(pos.x, pos.y + (ext.y / 2) - (grooveThickness / 2)), Point2I(ext.x, grooveThickness))
+            : RectI(Point2I(pos.x + (ext.x / 2) - (grooveThickness / 2), pos.y), Point2I(grooveThickness, ext.y));
+        renderUniversalRect(grooveRect, mProfile, NormalState);
+
         if (mBounds.extent.x >= mBounds.extent.y)
         {
             Point2I mid(ext.x, ext.y / 2);
@@ -434,9 +469,12 @@ void GuiSliderCtrl::onRender(Point2I offset, const RectI &updateRect)
             mDisplayValue = false;
         }
 
-        // draw the thumb
+        // draw the thumb using its dedicated profile (falls back to the main
+        // profile if none is set).
         thumb.point += pos;
-		renderUniversalRect(thumb, mProfile, NormalState);
+        GuiControlProfile* thumbProfile = mThumbProfile ? mThumbProfile : mProfile;
+        GuiControlState thumbState = mDepressed ? SelectedState : (mMouseOver ? HighlightState : NormalState);
+        renderUniversalRect(thumb, thumbProfile, thumbState);
     }
 
     if (mDisplayValue)

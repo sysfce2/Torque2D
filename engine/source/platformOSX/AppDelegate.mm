@@ -36,6 +36,16 @@
 
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification
 {
+    // Boot Torque exactly once. We run as a bare executable (not a .app bundle),
+    // and macOS's LaunchServices/AppleEvent check-in can deliver the launch
+    // ("open application") event more than once, firing this notification
+    // multiple times — each extra one would re-run the whole engine init and
+    // spawn another window (the intermittent "3 windows" on launch). Guard it.
+    static BOOL sDidLaunch = NO;
+    if (sDidLaunch)
+        return;
+    sDidLaunch = YES;
+
     // Parse command line arguments
     const int kMaxCmdlineArgs = 32; // arbitrary
     const char* newArgv[kMaxCmdlineArgs];

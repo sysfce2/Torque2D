@@ -169,8 +169,10 @@ function NewFontAssetDialog::onCreate(%this)
 		%moduleDef = ModuleDatabase.findModule(%moduleName, %moduleVersion);
 		AssetDatabase.addDeclaredAsset(%moduleDef, %assetPath);
 
-		//Refresh the asset so that the loose file will be a path relative to the asset file.
-		AssetDatabase.refreshAsset(%assetID);
+		//Save the asset so that the loose file will be a path relative to the asset
+		//file. That collapse happens in onTamlPreWrite, so it only happens on a
+		//write -- and refreshAsset no longer writes.
+		AssetDatabase.saveAsset(%assetID);
 
 		//Do we already have this button?
 		%button = AssetAdmin.Dictionary["FontAsset"].getButton(%assetID);

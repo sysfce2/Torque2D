@@ -1,0 +1,6 @@
+<AudioAsset
+    AssetName="enemyChase"
+    AssetCategory="badguy"
+    AssetAutoUnload="false"
+    AudioFile="@assetFile=enemyChase.wav"
+    VolumeChannel="1" />

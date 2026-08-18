@@ -200,9 +200,15 @@ void LightObject::sceneRender(const SceneRenderState * sceneRenderState, const S
    glColor4f(mLightColor.red - (mLightColor.red * bList[0].l), mLightColor.green - (mLightColor.green * bList[0].l), mLightColor.blue - (mLightColor.blue * bList[0].l), mLightColor.alpha - (mLightColor.alpha * bList[0].l));
    glVertex2f(bList[0].x, bList[0].y);
 
-   glDisable(GL_BLEND);
-
    glEnd();
+
+   // Disable blending only AFTER glEnd(). On desktop GL, a glDisable() between
+   // glBegin/glEnd raises GL_INVALID_OPERATION and is ignored, so the fan is
+   // still drawn with blending on. Emscripten's LEGACY_GL_EMULATION buffers the
+   // immediate-mode geometry and defers the real draw until glEnd(), so a
+   // glDisable(GL_BLEND) before glEnd() actually takes effect and the fan would
+   // render opaque (fading to black instead of fading out).
+   glDisable(GL_BLEND);
 
    glPopMatrix();
 }

@@ -5,4 +5,9 @@
 	Description="Allows for the creation and editing of GUI files."
 	ScriptFile="GuiEditor.cs"
 	CreateFunction="create"
-	DestroyFunction="destroy" />
+	DestroyFunction="destroy">
+		<DeclaredAssets
+			Path="images"
+			Extension="asset.taml"
+			Recurse="true"/>
+</ModuleDefinition>

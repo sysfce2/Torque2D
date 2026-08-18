@@ -1,0 +1,4 @@
+<ImageAsset
+    AssetName="upgrade_autorepair"
+    AssetCategory="card"
+    ImageFile="@assetFile=upgrade_autorepair.png" />

@@ -1,0 +1,4 @@
+<ImageAsset
+    AssetName="upgrade_split"
+    AssetCategory="card"
+    ImageFile="@assetFile=upgrade_split.png" />

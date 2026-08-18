@@ -1,0 +1,8 @@
+<ImageAsset
+    AssetName="editorIcons32"
+    ImageFile="editorIcons32.png"
+    CellCountX="32"
+    CellCountY="10"
+    CellWidth="32"
+    CellHeight="32"
+	AssetInternal="1" />

@@ -234,25 +234,33 @@ ConsoleMethodWithDocs(ParticleAssetEmitter, getEmitterSize, ConsoleString, 2, 2,
 
 //------------------------------------------------------------------------------
 
-/*! Sets the emitter angle.
-    @param angle The angle of the emitter.
+/*! Sets the emitter angle in degrees.
+    @param angle The angle of the emitter, in degrees.
     @return No return value.
 */
 ConsoleMethodWithDocs(ParticleAssetEmitter, setEmitterAngle, ConsoleVoid, 3, 3, (angle))
 {
     // Set Rotation.
-    object->setEmitterAngle( mDegToRad( dAtof(argv[2]) ) );
+    //
+    // Degrees, stored as degrees. This used to store mDegToRad(angle) and hand
+    // back mRadToDeg(stored), which disagreed with both of the other two ways in
+    // to the same value: the EmitterAngle persist field writes what it is given,
+    // and ParticlePlayer::configureParticle does mDegToRad(getEmitterAngle()) when
+    // it places the particle. So TAML and the renderer both read the member as
+    // degrees, and only this pair of methods thought otherwise -- a value set
+    // through script came out of the renderer 57 times too small.
+    object->setEmitterAngle( dAtof(argv[2]) );
 }
 
 //-----------------------------------------------------------------------------
 
-/*! Gets the emitter angle.
-    @return (float angle) The emitter's current angle.
+/*! Gets the emitter angle in degrees.
+    @return (float angle) The emitter's current angle, in degrees.
 */
 ConsoleMethodWithDocs(ParticleAssetEmitter, getEmitterAngle, ConsoleFloat, 2, 2, ())
 {
     // Return angle.
-    return mRadToDeg( object->getEmitterAngle());
+    return object->getEmitterAngle();
 }
 
 //-----------------------------------------------------------------------------
@@ -768,6 +776,23 @@ ConsoleMethodWithDocs(ParticleAssetEmitter, getAnimation, ConsoleString, 2, 2, (
 
 //------------------------------------------------------------------------------
 
+/*! Gets whether the emitter draws a still frame of an image asset rather than
+    playing an animation asset.
+
+    The mode is a side effect of which of setImage and setAnimation ran last --
+    each clears the other's asset -- and it is NOT the same question as "which
+    asset is set": an emitter switched to animation before an animation was
+    chosen is in animated mode holding nothing, which is indistinguishable from
+    a static one holding nothing if you only look at the assets.
+    @return (bool staticMode) Whether the emitter is in static-image mode.
+*/
+ConsoleMethodWithDocs(ParticleAssetEmitter, isStaticMode, ConsoleBool, 2, 2, ())
+{
+    return object->isStaticFrameProvider();
+}
+
+//------------------------------------------------------------------------------
+
 /*! Sets whether to use render blending or not.
     @param blendMode Whether to use render blending or not.
     @return No return value.
@@ -1077,11 +1102,18 @@ ConsoleMethodWithDocs(ParticleAssetEmitter, getMaxTime, ConsoleFloat, 2, 2, ())
 
 //-----------------------------------------------------------------------------
 
-/*! Get the fields' value at the specified time.
+/*! Get the selected graph field's value at the specified time.
+
+    Named getFieldValueAtTime rather than getFieldValue because SimObject already
+    has a getFieldValue(fieldName), and this SHADOWED it -- on a particle asset or
+    an emitter, the ordinary "read me a persistent field by name" call every other
+    object answers instead sampled whichever curve happened to be selected, at
+    dAtof(fieldName) == 0 seconds, and handed back a number. It did not fail: it
+    returned a plausible 1.0, so an editor reading EmitterName got "1".
     @param time The time to sample the field value at.
     @return The fields' value at the specified time or always 0.0 if no field is selected.
 */
-ConsoleMethodWithDocs(ParticleAssetEmitter, getFieldValue, ConsoleFloat, 3, 3, (time))
+ConsoleMethodWithDocs(ParticleAssetEmitter, getFieldValueAtTime, ConsoleFloat, 3, 3, (time))
 {
    return object->getParticleFields().getFieldValue( dAtof(argv[2]) );
 }

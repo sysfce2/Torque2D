@@ -46,7 +46,7 @@ function AssetWindow::displayImageAsset(%this, %imageAsset, %assetID)
 			Scene = AssetAdmin.AssetScene;
 			Image = %assetID;
 			size = %size;
-			BlandColor = "1 1 1 1";
+			BlendColor = "1 1 1 1";
 			SceneLayer = 1;
 			Position = "0 0";
 			BodyType = static;
@@ -118,32 +118,52 @@ function AssetWindow::displayAnimationAsset(%this, %imageAsset, %animationAsset,
 	AssetAdmin.AssetScene.clear(true);
 
 	%size = %this.getWorldSize(%imageAsset.getFrameSize(0));
-	new Sprite()
+	%sprite = new Sprite()
 	{
+		// It needs a class only so onAnimationEnd has somewhere to land -- that is
+		// how the transport bar learns a one-shot animation has finished.
+		class = "AssetPreviewSprite";
 		Scene = AssetAdmin.AssetScene;
 		Animation = %assetID;
 		size = %size;
-		BlandColor = "1 1 1 1";
+		BlendColor = "1 1 1 1";
 		SceneLayer = 1;
 		Position = "0 0";
 		BodyType = static;
 	};
+
+	// This sprite is a different object every time -- the scene is cleared and
+	// rebuilt above -- so whatever was following the old one has to be told.
+	AssetAdmin.previewSprite = %sprite;
+	AssetAdmin.animationStage.onPreviewRebuilt(%sprite);
 }
 
 function AssetWindow::displayParticleAsset(%this, %particleAsset, %assetID)
 {
 	AssetAdmin.AssetScene.clear(true);
 
-	new ParticlePlayer()
+	// Fitted to the camera like the image and font previews are, rather than left
+	// at a hardcoded ten metres. A particle player's own size does not bound what
+	// it draws -- the emitters do that -- but it is what the emitter offsets and
+	// the size scale are measured against, so an effect authored around one scale
+	// arrived at another.
+	%size = %this.getWorldSize("10 10");
+
+	%player = new ParticlePlayer()
 	{
 		Scene = AssetAdmin.AssetScene;
 		Particle = %assetID;
-		size = "10 10";
-		BlandColor = "1 1 1 1";
+		size = %size;
+		BlendColor = "1 1 1 1";
 		SceneLayer = 1;
 		Position = "0 0";
 		BodyType = static;
 	};
+
+	// A different object every time -- the scene is cleared above -- so the
+	// transport, which drives this and nothing else, has to be handed the new one.
+	AssetAdmin.previewPlayer = %player;
+	AssetAdmin.showParticleTransport(%player, %assetID);
 }
 
 function AssetWindow::displayFontAsset(%this, %fontAsset, %assetID)
@@ -157,7 +177,7 @@ function AssetWindow::displayFontAsset(%this, %fontAsset, %assetID)
 		Font = %assetID;
 		fontSize = 4;
 		size = %size;
-		BlandColor = "1 1 1 1";
+		BlendColor = "1 1 1 1";
 		SceneLayer = 1;
 		Position = "0 0";
 		BodyType = static;
@@ -172,6 +192,13 @@ function AssetWindow::displayFontAsset(%this, %fontAsset, %assetID)
 function AssetWindow::displayAudioAsset(%this, %audioAsset, %assetID)
 {
 	AssetAdmin.AssetScene.clear(true);
+
+	// Before anything tries to make a sound. Nothing in the editor starts the
+	// audio driver -- only a game module ever did -- so until now alxPlay had no
+	// context to play through and answered with a null handle, and .wav was not
+	// even a registered resource extension. The Play button worked in the sense
+	// that it changed its own label.
+	AssetAdmin.ensureAudioDriver();
 
 	AssetAdmin.audioPlayButtonContainer.setVisible(true);
 	AssetAdmin.AssetWindow.setVisible(false);
@@ -240,6 +267,16 @@ function AssetWindow::onExtentChange(%this, %d)
 	%area = %topLeft SPC %bottomRight;
 	%this.setCameraArea(%area);
 	%this.setViewLimitOn(%area);
+
+	// The animation stage gets first refusal. It resizes the sprite it already has
+	// rather than letting the whole preview be rebuilt, which would restart the
+	// animation every time a divider moved -- and while it is putting its split up
+	// or taking it down it answers for the resizes that causes, which are its own
+	// and not a reason to rebuild anything.
+	if(AssetAdmin.animationStage.absorbResize())
+	{
+		return;
+	}
 
 	if(isObject(AssetAdmin.chosenButton))
 	{

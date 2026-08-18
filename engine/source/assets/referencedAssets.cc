@@ -39,7 +39,11 @@ void ReferencedAssets::initPersistFields()
     // Call Parent.
     Parent::initPersistFields();
         
-    addField("Path", TypeString, Offset(mPath, ReferencedAssets), "" );
-    addField("Extension", TypeString, Offset(mExtension, ReferencedAssets), "" );
+    // TypeCaseString for the same reason DeclaredAssets uses it: these name a
+    // directory and an extension on disk, and TypeString would hand back
+    // whichever spelling of them the string table saw first. Neither is ever
+    // compared as a StringTableEntry.
+    addField("Path", TypeCaseString, Offset(mPath, ReferencedAssets), "" );
+    addField("Extension", TypeCaseString, Offset(mExtension, ReferencedAssets), "" );
     addField("Recurse", TypeBool, Offset(mRecurse, ReferencedAssets), "" );
 }

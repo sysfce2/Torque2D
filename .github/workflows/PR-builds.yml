@@ -1,129 +1,194 @@
 name: Build Packages
+
 on: [push, pull_request, workflow_dispatch]
+
+# Cancel superseded runs on the same ref to save runner minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# NOTE: every job now builds from the CMake source of truth (generate a project
+# file, then build it) instead of the checked-in solution/make/xcode files.
+# Windows is verified; macOS / Linux / iOS are freshly migrated to CMake and may
+# need iteration — these jobs ARE the verification loop for those platforms.
+
 jobs:
-  Build-Windows-32bit-VS2019:
-    name: 32-bit Windows On VS2019
-    runs-on: windows-2019
+  # ===========================================================================
+  # Windows — generate the Visual Studio solution from CMake and build it.
+  # VS2019 is retired; we test VS2026 and VS2022, each in 64- and 32-bit.
+  # ===========================================================================
+  windows:
+    name: Windows ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { label: 'VS2026 x64',   runner: windows-2025-vs2026, generator: 'Visual Studio 18 2026', arch: x64,   artifact: Torque2D_Windows_x64_VS2026 }
+          - { label: 'VS2026 Win32', runner: windows-2025-vs2026, generator: 'Visual Studio 18 2026', arch: Win32, artifact: Torque2D_Windows_x86_VS2026 }
+          - { label: 'VS2022 x64',   runner: windows-2022,        generator: 'Visual Studio 17 2022', arch: x64,   artifact: Torque2D_Windows_x64_VS2022 }
+          - { label: 'VS2022 Win32', runner: windows-2022,        generator: 'Visual Studio 17 2022', arch: Win32, artifact: Torque2D_Windows_x86_VS2022 }
     steps:
-      - uses: actions/checkout@v2
-      - uses: microsoft/setup-msbuild@v1.1
-        with:
-          vs-version: '[16.0, 17.0)'
-      - run: msbuild -m "engine/compilers/VisualStudio 2019/Torque 2D.sln" /p:Configuration=Debug /p:Platform=win32
-      - run: msbuild -m "engine/compilers/VisualStudio 2019/Torque 2D.sln" /p:Configuration=Release /p:Platform=win32
+      - uses: actions/checkout@v4
+      # Ensure a recent CMake — the "Visual Studio 18 2026" generator needs CMake 4.x.
+      - uses: lukka/get-cmake@latest
+      - name: Configure
+        run: cmake -S . -B build/ci -G "${{ matrix.generator }}" -A ${{ matrix.arch }}
+      - name: Build Debug
+        run: cmake --build build/ci --config Debug --parallel
+      - name: Build Release
+        run: cmake --build build/ci --config Release --parallel
       - uses: actions/upload-artifact@v4
         with:
-          name: Torque2D_Windows_x86_32bit_VS2019
+          name: ${{ matrix.artifact }}
           path: |
             .
-            ! .git/
-            ! engine/
-  Build-Windows-64bit-VS2019:
-    name: 64-bit Windows On VS2019
-    runs-on: windows-2019
+            !.git/**
+            !engine/**
+            !build/**
+
+  # ===========================================================================
+  # Linux — generate Unix Makefiles from CMake and build (x86_64 and 32-bit x86).
+  # ===========================================================================
+  linux-x64:
+    name: Linux x86_64
+    # Pinned to 22.04: the engine's X11 back-end needs GENUINE SDL 1.2 (it links
+    # the SDL-1.2 X11 driver symbol X11_KeyToUnicode and calls 1.2-only APIs).
+    # On 24.04, libsdl1.2-dev is the SDL2-based sdl12-compat shim, which does NOT
+    # export those symbols, so the link fails.
+    runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v2
-      - uses: microsoft/setup-msbuild@v1.1
-        with:
-          vs-version: '[16.0, 17.0)'
-          msbuild-architecture: x64
-      - run: msbuild -m "engine/compilers/VisualStudio 2019/Torque 2D.sln" /p:Configuration=Debug /p:Platform=x64
-      - run: msbuild -m "engine/compilers/VisualStudio 2019/Torque 2D.sln" /p:Configuration=Release /p:Platform=x64
+      - uses: actions/checkout@v4
+      - uses: lukka/get-cmake@latest
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential \
+            libsdl1.2-dev libx11-dev libxft-dev libfreetype6-dev libopenal-dev libgl1-mesa-dev
+      - name: Build Debug
+        run: |
+          cmake -S . -B build/linux-debug -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug
+          # Bound parallelism to the core count: bare `--parallel` passes `make -j`
+          # with NO limit, which fires off every TU at once (100s of g++) and
+          # OOM-kills the runner ("received a shutdown signal"), hit by the
+          # memory-heavier 64-bit Debug build.
+          cmake --build build/linux-debug --parallel "$(nproc)"
+      - name: Build Release
+        run: |
+          cmake -S . -B build/linux-release -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/linux-release --parallel "$(nproc)"
       - uses: actions/upload-artifact@v4
         with:
-          name: Torque2D_Windows_x86_64bit_VS2019
+          name: Torque2D_Linux_x86_64
           path: |
             .
-            ! .git/
-            ! engine/
-  Build-Windows-32bit-VS2022:
-    name: 32-bit Windows On VS2022
-    runs-on: windows-latest
+            !.git/**
+            !engine/**
+            !build/**
+
+  linux-x86:
+    name: Linux x86 (32-bit)
+    # Pinned to 22.04 for genuine SDL 1.2 (see the linux-x64 job). The 32-bit
+    # build additionally needs NASM: platform/platformCPUInfo.asm (detectX86CPUInfo)
+    # is compiled only on 32-bit (it is x86-only and is skipped on 64-bit via
+    # TORQUE_64).
+    runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v2
-      - uses: microsoft/setup-msbuild@v1.1
-        with:
-          vs-version: '[17.0, 18.0)'
-      - run: msbuild -m "engine/compilers/VisualStudio 2022/Torque 2D.sln" /p:Configuration=Debug /p:Platform=win32
-      - run: msbuild -m "engine/compilers/VisualStudio 2022/Torque 2D.sln" /p:Configuration=Release /p:Platform=win32
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Torque2D_Windows_x86_32bit_VS2022
-          path: |
-            .
-            ! .git/
-            ! engine/
-  Build-Windows-64bit-VS2022:
-    name: 64-bit Windows On VS2022
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: microsoft/setup-msbuild@v1.1
-        with:
-          vs-version: '[17.0, 18.0)'
-          msbuild-architecture: x64
-      - uses: ChristopheLav/windows-sdk-install@v1
-        with:
-          version-sdk: 22621
-          features: 'OptionId.UWPCPP,OptionId.DesktopCPParm64'
-      - run: msbuild -m "engine/compilers/VisualStudio 2022/Torque 2D.sln" /p:Configuration=Debug /p:Platform=x64
-      - run: msbuild -m "engine/compilers/VisualStudio 2022/Torque 2D.sln" /p:Configuration=Release /p:Platform=x64
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Torque2D_Windows_x86_64bit_VS2022
-          path: |
-            .
-            ! .git/
-            ! engine/
-  Build-Linux-32Bit:
-    name: Build package for 32-bit x86 Linux
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - run: cd engine/compilers/Make-32bit/ && make
+      - uses: actions/checkout@v4
+      - uses: lukka/get-cmake@latest
+      # 32-bit (multilib) toolchain + NASM + :i386 dev libraries.
+      - name: Install 32-bit dependencies (multilib)
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y gcc-multilib g++-multilib nasm \
+            libsdl1.2-dev:i386 libx11-dev:i386 libxft-dev:i386 libfreetype6-dev:i386 \
+            libopenal-dev:i386 libgl1-mesa-dev:i386
+      - name: Build Release (-m32)
+        env:
+          # Point pkg-config / find_package at the 32-bit libraries.
+          PKG_CONFIG_PATH: /usr/lib/i386-linux-gnu/pkgconfig
+        run: |
+          cmake -S . -B build/linux32 -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_FLAGS=-m32 -DCMAKE_CXX_FLAGS=-m32 -DCMAKE_EXE_LINKER_FLAGS=-m32
+          cmake --build build/linux32 --parallel "$(nproc)"
       - uses: actions/upload-artifact@v4
         with:
           name: Torque2D_Linux_x86_32bit
           path: |
             .
-            ! .git/
-            ! engine/
-  Build-Linux-64bit:
-    name: Build package for 64-bit x86 Linux
-    runs-on: ubuntu-latest
+            !.git/**
+            !engine/**
+            !build/**
+
+  # ===========================================================================
+  # macOS — generate an Xcode project from CMake and build it.
+  # ===========================================================================
+  macos:
+    name: macOS
+    runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v2
-      - run: cd engine/compilers/Make-64bit/ && make
+      - uses: actions/checkout@v4
+      - uses: lukka/get-cmake@latest
+      - name: Configure
+        run: cmake -S . -B build/xcode -G Xcode
+      - name: Build Debug
+        run: cmake --build build/xcode --config Debug
+      - name: Build Release
+        run: cmake --build build/xcode --config Release
       - uses: actions/upload-artifact@v4
         with:
-          name: Torque2D_Linux_x86_64bit
+          name: Torque2D_macOS
           path: |
             .
-            ! .git/
-            ! engine/
-  Build-MacOS:
-    name: Build package for MacOS
-    runs-on: macOS-latest
+            !.git/**
+            !engine/**
+            !build/**
+
+  # ===========================================================================
+  # iOS — generate an Xcode project targeting iOS; build without code signing.
+  # ===========================================================================
+  ios:
+    name: iOS
+    runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v2
-      - run: cd engine/compilers/Xcode && xcodebuild -project Torque2D.xcodeproj
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Torque2D_MacOS
-          path: |
-            .
-            ! .git/
-            ! engine/
-  Build-iOS:
-    name: Build package for iOS
-    runs-on: macOS-latest
-    steps:
-      - uses: actions/checkout@v2
-      - run: cd engine/compilers/Xcode_iOS && xcodebuild CODE_SIGNING_ALLOWED=no -project Torque2D.xcodeproj
+      - uses: actions/checkout@v4
+      - uses: lukka/get-cmake@latest
+      - name: Configure (iOS)
+        run: cmake -S . -B build/ios -G Xcode -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
+      - name: Build Release (no code signing)
+        run: cmake --build build/ios --config Release -- CODE_SIGNING_ALLOWED=NO
       - uses: actions/upload-artifact@v4
         with:
           name: Torque2D_iOS
           path: |
             .
-            ! .git/
-            ! engine/
+            !.git/**
+            !engine/**
+            !build/**
+
+  # ===========================================================================
+  # Android — modern Gradle build whose native step runs CMake via the NDK,
+  # producing libtorque2d.so packaged into an APK. arm64-v8a only for now.
+  # ===========================================================================
+  android:
+    name: Android (arm64-v8a)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install NDK + CMake (match app/build.gradle ndkVersion)
+        run: sdkmanager "ndk;25.2.9519653" "cmake;3.22.1"
+      - name: Build APK (assembleDebug)
+        working-directory: engine/compilers/android-studio
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Torque2D_Android_arm64
+          path: engine/compilers/android-studio/app/build/outputs/apk/**/*.apk

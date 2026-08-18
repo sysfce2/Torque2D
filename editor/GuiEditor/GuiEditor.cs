@@ -23,17 +23,116 @@
 function GuiEditor::create( %this )
 {
 	exec("./scripts/GuiEditorBrain.cs");
+	exec("./scripts/GuiEditorControlIcons.cs");
 	exec("./scripts/GuiEditorControlListWindow.cs");
-	exec("./scripts/GuiEditorControlListBox.cs");
+	exec("./scripts/GuiEditorControlGroup.cs");
+	exec("./scripts/GuiEditorControlTile.cs");
 	exec("./scripts/GuiEditorInspectorWindow.cs");
-    exec("./scripts/GuiEditorInspector.cs");
 	exec("./scripts/GuiEditorExplorerWindow.cs");
     exec("./scripts/GuiEditorExplorerTree.cs");
     exec("./scripts/GuiEditorSaveGuiDialog.cs");
+    exec("./scripts/GuiEditorConfirmSaveDialog.cs");
     exec("./scripts/GuiEditorGridSizeDialog.cs");
-    exec("./scripts/GuiEditorColorWindow.cs");
+    exec("./scripts/GuiEditorToolsWindow.cs");
+    exec("./scripts/GuiProfileEditorDialog.cs");
+    exec("./scripts/GuiProfileEditorColorPopup.cs");
+    exec("./scripts/GuiProfileEditorBorderGrid.cs");
+    exec("./scripts/GuiProfileEditorBorderSetter.cs");
+    exec("./scripts/GuiProfileEditorBorderForm.cs");
+    exec("./scripts/GuiProfileEditorFieldSpec.cs");
+    exec("./scripts/GuiProfileEditorStateColorRow.cs");
+    exec("./scripts/GuiProfileEditorProfileForm.cs");
+    exec("./scripts/GuiProfileEditorCursorForm.cs");
+    exec("./scripts/ProfileThemeEditForm.cs");
+    exec("./scripts/GuiProfileEditorLibrary.cs");
+    exec("./scripts/GuiProfileEditorTree.cs");
+    exec("./scripts/GuiProfileEditorPreview.cs");
+    exec("./scripts/GuiProfileEditorNameDialog.cs");
+    exec("./scripts/GuiProfileEditorConfirmDialog.cs");
+    exec("./scripts/GuiEditorThemeApplier.cs");
+    exec("./scripts/GuiEditorThemeDialog.cs");
+
+    // The properties pane that replaced the native GuiInspector.
+    exec("./scripts/GuiEditorControlSpec.cs");
+    exec("./scripts/GuiEditorAnchorPicker.cs");
+    exec("./scripts/GuiEditorTextBlock.cs");
+    exec("./scripts/GuiEditorMenuItemBlock.cs");
+    exec("./scripts/GuiEditorHeaderBlock.cs");
+    exec("./scripts/GuiEditorDynamicFields.cs");
+    exec("./scripts/GuiEditorItemRow.cs");
+    exec("./scripts/GuiEditorItemsBlock.cs");
+    exec("./scripts/GuiEditorInspectorPane.cs");
+
+    // Undo. The engine has owned the machinery all along - GuiEditCtrl holds an
+    // UndoManager and a trash group it never empties - and nothing had ever
+    // built it an action.
+    exec("./scripts/GuiEditorUndoAction.cs");
+    exec("./scripts/GuiEditorUndoRecorder.cs");
+
+    // Copy, cut and paste, which is undo's machinery plus a deep clone.
+    exec("./scripts/GuiEditorClipboard.cs");
+
+    // File, Edit, Layout and Select, which this editor owns and lends to the
+    // shared bar for as long as it is the one open.
+    exec("./scripts/GuiEditorMenus.cs");
 
 	%this.guiPage = EditorCore.RegisterEditor("Gui Editor", %this);
+
+    // Built here, because a menu can only be built into the bar and EditorCore
+    // has made it by now - every editor module depends on EditorCore. The set
+    // takes itself back off again immediately; open() puts it on.
+    %this.menus = new ScriptObject()
+    {
+        class = "GuiEditorMenus";
+        superclass = "EditorMenuSet";
+        tool = %this;
+    };
+
+    // What the control palette can offer and what each entry looks like. Built
+    // before the palette window, which reads it as it populates. Generated from
+    // the icon sheets, so the table and the art cannot disagree.
+    %this.controlIcons = new ScriptObject()
+    {
+        class = "GuiEditorControlIcons";
+    };
+
+    // The theme library and the applier are both wanted before the Profile
+    // Editor is ever opened - the Set Theme button and every newly dropped
+    // control go through them - so they are built with the editor rather than on
+    // demand. The library also outlives each Profile Editor session so theme
+    // member profiles stay alive for the Guis wearing them.
+    %this.themeLibrary = new ScriptObject()
+    {
+        class = "GuiProfileEditorLibrary";
+        owner = %this;
+    };
+
+    // rootContainer is filled in below, once the simulated canvas exists: the
+    // applier compares against it to tell a Gui's root controls (which take the
+    // Panel profile) from everything nested inside them.
+    %this.themeApplier = new ScriptObject()
+    {
+        class = "GuiEditorThemeApplier";
+        library = %this.themeLibrary;
+    };
+
+    // Every change to the Gui being authored goes through the recorder. It asks
+    // the brain for the UndoManager when it needs one, so it can be built before
+    // the brain is.
+    %this.undoRecorder = new ScriptObject()
+    {
+        class = "GuiEditorUndoRecorder";
+        owner = %this;
+    };
+
+    // Holds copied controls for as long as the editor is open, which is longer
+    // than any one document: a copy taken from one Gui can be pasted into the
+    // next one opened.
+    %this.clipboard = new ScriptObject()
+    {
+        class = "GuiEditorClipboard";
+        owner = %this;
+    };
 
     %this.content = %this.createFrameSet();
 
@@ -46,6 +145,32 @@ function GuiEditor::create( %this )
         Extent = "100 100";
     };
     ThemeManager.setProfile(%this.brain, "guiEditorProfile");
+
+    // The frameset docks children into empty frames in add-order (depth-first
+    // through the splits), so the Gui Tools window must be added before the
+    // inspector window to land in the frame above it.
+    %this.guiToolsWindow = new GuiWindowCtrl()
+    {
+        Class = "GuiEditorToolsWindow";
+        HorizSizing = "right";
+        VertSizing = "bottom";
+        Position = "0 0";
+        Extent = "360 92";
+        MinExtent = "100 64";
+        text = "Gui Tools";
+        canMove = true;
+        canClose = false;
+        canMinimize = true;
+        canMaximize = false;
+        resizeWidth = true;
+        resizeHeight = true;
+    };
+    ThemeManager.setProfile(%this.guiToolsWindow, "windowProfile");
+    ThemeManager.setProfile(%this.guiToolsWindow, "windowContentProfile", "ContentProfile");
+    ThemeManager.setProfile(%this.guiToolsWindow, "windowButtonProfile", "CloseButtonProfile");
+    ThemeManager.setProfile(%this.guiToolsWindow, "windowButtonProfile", "MinButtonProfile");
+    ThemeManager.setProfile(%this.guiToolsWindow, "windowButtonProfile", "MaxButtonProfile");
+    %this.content.add(%this.guiToolsWindow);
 
     %this.inspectorWindow = new GuiWindowCtrl()
     {
@@ -145,6 +270,7 @@ function GuiEditor::create( %this )
         class = "SimulatedCanvas";
     };
     %this.background.add(%this.rootGui);
+    %this.themeApplier.rootContainer = %this.rootGui;
     %this.brain.extent = %this.background.getExtent();
     %this.background.add(%this.brain);
     %this.fileName = "";
@@ -155,29 +281,6 @@ function GuiEditor::create( %this )
     %this.brain.setRoot(%this.rootGui);
     %this.brain.root = %this.rootGui;
     %this.explorerWindow.inspect(%this.rootGui);
-
-    /* %this.colorWindow = new GuiWindowCtrl()
-    {
-        Class = "GuiEditorColorWindow";
-        HorizSizing = "right";
-        VertSizing = "bottom";
-        Position = "610 0";
-        Extent = "400  380";
-        MinExtent = "100 100";
-        text = "Color Test";
-        canMove = true;
-        canClose = false;
-        canMinimize = true;
-        canMaximize = false;
-        resizeWidth = true;
-        resizeHeight = true;
-    };
-    ThemeManager.setProfile(%this.colorWindow, "windowProfile");
-    ThemeManager.setProfile(%this.colorWindow, "windowContentProfile", "ContentProfile");
-    ThemeManager.setProfile(%this.colorWindow, "windowButtonProfile", "CloseButtonProfile");
-    ThemeManager.setProfile(%this.colorWindow, "windowButtonProfile", "MinButtonProfile");
-    ThemeManager.setProfile(%this.colorWindow, "windowButtonProfile", "MaxButtonProfile");
-    %this.guiPage.add(%this.colorWindow); */
 
     EditorCore.FinishRegistration(%this.guiPage);
 }
@@ -204,13 +307,24 @@ function GuiEditor::createFrameSet(%this)
     %leftID = getWord(%idList, 0);
     %rightID = getWord(%idList, 1);
     %content.anchorFrame(%rightID);
-    %content.setFrameSize(%rightID, 300);
+
+    // 340, not 300: this column holds the control palette, whose grid view fits
+    // as many 100-pixel tiles per row as the width allows. At 300, once the
+    // scroll bar is taken out, that is two -- and the leftover is shared between
+    // them, so the tiles sit in gappy columns. 340 makes it three.
+    %content.setFrameSize(%rightID, 340);
     
     %ids = %content.createHorizontalSplit(%leftID);
     %inspectorFrameID = getWord(%ids, 0);
     %centerFrameID = getWord(%ids, 1);
     %content.setFrameSize(%inspectorFrameID, 360);
-    
+
+    // Split the inspector column so the Gui Tools window docks above the
+    // Gui Inspector. The top child of a vertical split is the anchored frame.
+    %ids = %content.createVerticalSplit(%inspectorFrameID);
+    %guiToolsFrameID = getWord(%ids, 0);
+    %content.setFrameSize(%guiToolsFrameID, 92);
+
     %ids = %content.createVerticalSplit(%rightID);
     %toolFrameID = getWord(%ids, 0);
     %explorerFrameID = getWord(%ids, 1);
@@ -223,29 +337,95 @@ function GuiEditor::createFrameSet(%this)
 
 function GuiEditor::destroy( %this )
 {
+	// Order matters. The Profile Editor's live preview wears theme member
+	// profiles owned by the theme library, and the library deliberately outlives
+	// the dialog (see openProfileEditor). Freeing it while the dialog is still up
+	// leaves those preview controls holding freed profiles, and the dangling
+	// mProfile is not touched until the canvas itself is torn down - inside
+	// Sim::shutdown, long after this runs - so it surfaces as an access violation
+	// at exit with no obvious cause. Close the dialog first.
+	%this.closeProfileEditor();
 
+	if(isObject(%this.themeApplier))
+	{
+		%this.themeApplier.delete();
+	}
+
+	if(isObject(%this.themeLibrary))
+	{
+		%this.themeLibrary.delete();
+	}
+
+	if(isObject(%this.controlIcons))
+	{
+		%this.controlIcons.delete();
+	}
+
+	// Empty the stacks while the brain (and so the UndoManager it owns) is still
+	// here, rather than leaving the actions to the manager's destructor during
+	// canvas teardown.
+	if(isObject(%this.undoRecorder))
+	{
+		%this.undoRecorder.clear();
+		%this.undoRecorder.delete();
+	}
+
+	// The copies it holds are real controls wearing real profiles, so they go the
+	// same way and for the same reason: before the profiles do.
+	if(isObject(%this.clipboard))
+	{
+		%this.clipboard.delete();
+	}
+
+	// Takes itself off the bar first if it is still on it.
+	if(isObject(%this.menus))
+	{
+		%this.menus.delete();
+	}
 }
 
 function GuiEditor::open(%this, %content)
 {
-    EditorCore.menuBar.setMenuActive("File", true);
-    //EditorCore.menuBar.setMenuActive("Edit", true); //These features still need development
-    EditorCore.menuBar.setMenuActive("Layout", true);
-    EditorCore.menuBar.setMenuActive("Select", true);
+    // First time in: pick up the project's theme. Not done at create time -
+    // the editor registers before a project's AppCore has loaded its themes.
+    if(%this.themeName $= "")
+    {
+        %this.adoptTheme("");
+    }
+
+    // Puts the four menus on the shared bar, and refreshes them on the way: Undo
+    // and Redo grey from the stacks, Cut and Copy from the selection, Paste from
+    // whether anything has been copied, and Revert from whether the document has
+    // a file. The menus look new every time the editor is opened.
+    EditorCore.setEditorMenus(%this.menus);
+
+    // The window title is the other thing that looks new every time: the tools
+    // window was built with a placeholder and has not been told about the
+    // document since.
+    %this.refreshDocumentTitle();
+
     editorMode(true);
 }
 
 function GuiEditor::close(%this)
 {
     editorMode(false);
-    EditorCore.menuBar.setMenuActive("File", false);
-    EditorCore.menuBar.setMenuActive("Edit", false);
-    EditorCore.menuBar.setMenuActive("Layout", false);
-    EditorCore.menuBar.setMenuActive("Select", false);
+    EditorCore.setEditorMenus("");
 }
 
 //MENU FUNCTIONS---------------------------------------------------------------
+//
+// The two that replace the document ask first and then do it. The asking half is
+// what the menu calls; the doing half is what the guard runs once there is
+// nothing left to lose.
+//-----------------------------------------------------------------------------
+
 function GuiEditor::NewGui(%this)
+{
+    %this.guardDocument("GuiEditor.newGuiNow();");
+}
+
+function GuiEditor::newGuiNow(%this)
 {
     %this.rootGui.clear();
     %this.fileName = "";
@@ -255,9 +435,28 @@ function GuiEditor::NewGui(%this)
     %this.module = "";
     %this.brain.clearSelection();
     %this.explorerWindow.tree.refresh();
+
+    // Every record on the stack names controls that have just been freed.
+    %this.undoRecorder.clear();
+
+    // A new Gui joins the theme this session is working in, so the first control
+    // dropped into it is already themed.
+    %theme = %this.defaultTheme();
+    %this.themeName = isObject(%theme) ? %theme.getName() : "";
+
+    // Last, and after the clear above: emptying the stack leaves the recorder
+    // somewhere no replay can reach, which is right for a document that lost its
+    // records and wrong for this one, which has nothing in it to save.
+    %this.undoRecorder.markClean();
+    %this.refreshFileMenu();
 }
 
 function GuiEditor::OpenGui(%this)
+{
+    %this.guardDocument("GuiEditor.openGuiNow();");
+}
+
+function GuiEditor::openGuiNow(%this)
 {
     %path = pathConcat(getMainDotCsDir(), ProjectManager.getProjectFolder());
 	%dialog = new OpenFileDialog()
@@ -273,45 +472,79 @@ function GuiEditor::OpenGui(%this)
 
 	if ( %result )
 	{
-        if(fileExt(%dialog.fileName) $= ".taml")
-        {
-            %guiContent = TAMLRead(%dialog.fileName);
-            %includesSimulatedCanvas = (%guiContent.class $= "SimulatedCanvas");
-        }
-        else 
-        {
-            exec(%dialog.fileName);
-        }
-        if(%includesSimulatedCanvas $= "")
-        {
-            %includesSimulatedCanvas = true;
-        }
-        if(isObject(%guiContent))
-        {
-            %this.fileName = fileName(%dialog.fileName);
-            %this.filePath = %dialog.fileName;
-            %this.formatIndex = 0;
-            if(getSubStr(%dialog.fileName, strlen(%dialog.fileName) - 5, 5) $= ".taml")
-            {
-                %this.formatIndex = 1;
-            }
-            %this.folder = makeRelativePath(filePath(%dialog.fileName), getMainDotCsDir());
-            %this.module = EditorCore.findModuleOfPath(%dialog.fileName);
-            %this.DisplayGuiContent(%guiContent, %includesSimulatedCanvas);
-        }
-        else 
-        {
-            EditorCore.alert("Something went wrong while opening the Gui File. Gui Files should be structures with the root object assigned to %guiContent. If this file was made outside of the editor, you can change it manually and then open it in the Gui Editor.");
-        }
+        %this.loadGuiFile(%dialog.fileName);
     }
 	// Cleanup
 	%dialog.delete();
+}
+
+// Read a Gui file and make it the document. Everything about opening except
+// choosing the file, so that Revert - which has already chosen - reads exactly
+// what Open reads and the two cannot drift apart.
+function GuiEditor::loadGuiFile(%this, %path)
+{
+    if(fileExt(%path) $= ".taml")
+    {
+        %guiContent = TAMLRead(%path);
+        %includesSimulatedCanvas = (%guiContent.class $= "SimulatedCanvas");
+    }
+    else
+    {
+        exec(%path);
+    }
+    if(%includesSimulatedCanvas $= "")
+    {
+        %includesSimulatedCanvas = true;
+    }
+    if(isObject(%guiContent))
+    {
+        %this.fileName = fileName(%path);
+        %this.filePath = %path;
+        %this.formatIndex = 0;
+        if(getSubStr(%path, strlen(%path) - 5, 5) $= ".taml")
+        {
+            %this.formatIndex = 1;
+        }
+        %this.folder = makeRelativePath(filePath(%path), getMainDotCsDir());
+        %this.module = EditorCore.findModuleOfPath(%path);
+        %this.DisplayGuiContent(%guiContent, %includesSimulatedCanvas);
+        %this.refreshFileMenu();
+    }
+    else
+    {
+        EditorCore.alert("Something went wrong while opening the Gui File. Gui Files should be structures with the root object assigned to %guiContent. If this file was made outside of the editor, you can change it manually and then open it in the Gui Editor.");
+    }
+}
+
+// Throw away everything done since the last save by reading the file again.
+// Guarded like the rest: it is the most deliberate discard there is, and it
+// should still say what it is about to lose.
+function GuiEditor::Revert(%this)
+{
+    if(%this.filePath $= "")
+    {
+        return;
+    }
+
+    %this.guardDocument("GuiEditor.revertNow();");
+}
+
+function GuiEditor::revertNow(%this)
+{
+    %this.loadGuiFile(%this.filePath);
 }
 
 function GuiEditor::DisplayGuiContent(%this, %content, %includesSimulatedCanvas)
 {
     %this.rootGui.deleteObjects();
     %this.brain.clearSelection();
+
+    // The document the stack was recorded against has just been deleted.
+    %this.undoRecorder.clear();
+
+    // Read off the root before it is unpacked - in the simulated-canvas case the
+    // object carrying the field is deleted a few lines down.
+    %recordedTheme = %content.guiTheme;
 
     if(%includesSimulatedCanvas)
     {
@@ -328,12 +561,20 @@ function GuiEditor::DisplayGuiContent(%this, %content, %includesSimulatedCanvas)
         %this.explorerWindow.tree.refresh();
         %this.brain.onSelect(%this.rootGui.getObject(0));
     }
-    else 
+    else
     {
         %this.rootGui.add(%content);
         %this.explorerWindow.tree.refresh();
         %this.brain.onSelect(%content);
     }
+
+    %this.adoptTheme(%recordedTheme);
+
+    // What was just put on the canvas is what is on disk. The clear above left
+    // the recorder unreachable by any replay, which is the right answer for a
+    // document whose records were thrown away and the wrong one for a document
+    // that has only this moment been read in.
+    %this.undoRecorder.markClean();
 }
 
 function GuiEditor::SaveGui(%this)
@@ -369,10 +610,421 @@ function GuiEditor::SaveGuiAs(%this)
 	Canvas.pushDialog(%dialog);
 }
 
+function GuiEditor::getThemeLibrary(%this)
+{
+	%this.themeLibrary.scanThemes();
+	return %this.themeLibrary;
+}
+
+function GuiEditor::openProfileEditor(%this)
+{
+	%canvasSize = Canvas.getExtent();
+	%width = getWord(%canvasSize, 0) - 80;
+	%height = getWord(%canvasSize, 1) - 80;
+
+	%dialog = new GuiControl()
+	{
+		class = "GuiProfileEditorDialog";
+		superclass = "EditorDialog";
+		dialogSize = (%width + 8) SPC (%height + 8);
+		dialogCanClose = true;
+		dialogText = "Gui Profile Editor";
+		library = %this.themeLibrary;
+	};
+	%dialog.init(%width, %height);
+	%this.profileEditorDialog = %dialog;
+
+	Canvas.pushDialog(%dialog);
+}
+
+//THE DOCUMENT-----------------------------------------------------------------
+//
+// What is being edited and whether it has changes that are not on disk. The
+// answer to the second lives on the undo recorder, which is already the one
+// funnel every change goes through, so there is no second flag here to fall out
+// of step with it.
+//-----------------------------------------------------------------------------
+
+// A Gui that has never been saved has no name to show, so it is given one. It is
+// what the file will be called if the user accepts the Save dialog's default,
+// which is where the same string comes from.
+function GuiEditor::documentName(%this)
+{
+	return (%this.fileName $= "") ? "untitled.gui" : %this.fileName;
+}
+
+// Called by the recorder every time the document moves, and by the three places
+// that change its file name. Guarded because the recorder is built before the
+// window is (see create), so a record made in between would arrive early.
+function GuiEditor::refreshDocumentTitle(%this)
+{
+	if(isObject(%this.guiToolsWindow))
+	{
+		%this.guiToolsWindow.showDocument(%this.documentName(),
+			%this.undoRecorder.isModified());
+	}
+}
+
+// Revert is the only File item whose offer changes, and what it turns on is
+// whether the document has a file to go back to. That changes far more rarely
+// than the document does - on a save, a new one and an open - so it is called
+// from those three rather than from refreshDocumentTitle, which runs on every
+// edit. The menu set refreshes it for itself when it goes back on the bar.
+function GuiEditor::refreshFileMenu(%this)
+{
+	%this.menus.refreshFile();
+}
+
+//-----------------------------------------------------------------------------
+// The guard.
+//
+// Four commands throw the document away: New, Open, Revert, and - from the
+// Torque2D menu - Close Project and Exit. Each of them hands what it was about
+// to do to guardDocument instead of doing it, and gets it back either at once or
+// once the user has answered for it.
+//
+// A command string rather than a method name, because a menu item in this
+// codebase IS a command string: the caller passes exactly what it would have
+// run, and quit() and restartInstance() - which belong to nobody - go through
+// unchanged.
+//
+// Not guarded, and it cannot be: the window's own close button. quit() posts the
+// quit message the moment it is called, and the X posts it straight from the
+// window procedure with no script in between, so there is no moment at which to
+// ask. onPreExit runs inside shutdown, long past it.
+//-----------------------------------------------------------------------------
+
+function GuiEditor::guardDocument(%this, %command)
+{
+	if(!%this.undoRecorder.isModified())
+	{
+		eval(%command);
+		return;
+	}
+
+	%this.pendingCommand = %command;
+
+	%width = 460;
+	%height = 150;
+	%dialog = new GuiControl()
+	{
+		class = "GuiEditorConfirmSaveDialog";
+		superclass = "EditorDialog";
+		dialogSize = (%width + 8) SPC (%height + 8);
+		dialogCanClose = true;
+		dialogText = "Unsaved Changes";
+		message = "\"" @ %this.documentName() @
+			"\" has changes that have not been saved.";
+	};
+	%dialog.init(%width, %height);
+
+	Canvas.pushDialog(%dialog);
+}
+
+// Go through with whatever was interrupted. Called from exactly two places: the
+// Discard button, and the end of a save that really did write a file.
+function GuiEditor::runPendingCommand(%this)
+{
+	%command = %this.pendingCommand;
+	%this.pendingCommand = "";
+
+	if(%command !$= "")
+	{
+		eval(%command);
+	}
+}
+
+// And the other end: nothing was saved and nothing else is going to happen.
+// Cancel on the prompt, and Cancel on the Save As dialog it can lead to - which
+// is the one that matters, because a save that was called off has to call off
+// what it was saving for.
+function GuiEditor::dropPendingCommand(%this)
+{
+	%this.pendingCommand = "";
+}
+
+//THEMES-----------------------------------------------------------------------
+//
+// A Gui belongs to a theme. Setting one re-profiles every control in the
+// document by category, a newly dropped control joins it on arrival, and the
+// theme's name is saved with the Gui so reopening it lands back where it was.
+// The intent is that profiles are something a developer chooses once, in the
+// Profile Editor, and rarely thinks about again.
+//-----------------------------------------------------------------------------
+
+function GuiEditor::openThemeDialog(%this)
+{
+	%width = 420;
+	%height = 200;
+	%dialog = new GuiControl()
+	{
+		class = "GuiEditorThemeDialog";
+		superclass = "EditorDialog";
+		dialogSize = (%width + 8) SPC (%height + 8);
+		dialogCanClose = true;
+		dialogText = "Set Gui Theme";
+	};
+	%dialog.init(%width, %height);
+
+	Canvas.pushDialog(%dialog);
+}
+
+// Put %theme on the whole document. The simulated canvas is skipped: it is the
+// editor's stage, not part of the Gui being authored.
+function GuiEditor::setTheme(%this, %theme, %overrideStandalone)
+{
+	if(!isObject(%theme))
+	{
+		return;
+	}
+
+	%this.themeName = %theme.getName();
+	%this.lastThemeName = %this.themeName;
+
+	// One undo step for the whole sweep, however many profile slots it fills.
+	%this.undoRecorder.begin("Set Theme", "");
+	%changed = %this.themeApplier.applyToChildren(%this.rootGui, %theme, %overrideStandalone);
+	%this.undoRecorder.end();
+
+	%this.explorerWindow.tree.refresh();
+
+	// The properties pane caches which profiles it offers, so it has to be told
+	// as well -- otherwise it goes on showing the profile the selected control
+	// wore before the sweep, from a theme that is no longer the Gui's.
+	%this.inspectorWindow.onRethemed(%this.inspectorWindow.pane.target);
+
+	echo("Gui Editor: " @ %this.themeName @ " applied to " @ %changed @ " profile slot(s).");
+}
+
+// The theme a new Gui starts on: the last one used this session, falling back to
+// whatever the project has. There is no preferences file to remember it across
+// runs, and none is needed - an existing Gui carries its own theme.
+function GuiEditor::defaultTheme(%this)
+{
+	%themes = %this.getThemeLibrary().getThemes();
+
+	if(%this.lastThemeName !$= "")
+	{
+		for(%i = 0; %i < getWordCount(%themes); %i++)
+		{
+			%theme = getWord(%themes, %i);
+			if(%theme.getName() $= %this.lastThemeName)
+			{
+				return %theme;
+			}
+		}
+	}
+
+	return (getWordCount(%themes) > 0) ? getWord(%themes, 0) : 0;
+}
+
+function GuiEditor::themeByName(%this, %name)
+{
+	if(%name $= "")
+	{
+		return 0;
+	}
+
+	%themes = %this.getThemeLibrary().getThemes();
+	for(%i = 0; %i < getWordCount(%themes); %i++)
+	{
+		%theme = getWord(%themes, %i);
+		if(%theme.getName() $= %name)
+		{
+			return %theme;
+		}
+	}
+
+	return 0;
+}
+
+// Work out which theme a freshly opened Gui is on. The name recorded when it was
+// saved wins; a Gui written before that field existed, or authored by hand, is
+// judged by the profiles its controls wear; failing both, it joins the theme the
+// session is already working in.
+function GuiEditor::adoptTheme(%this, %recordedName)
+{
+	%theme = %this.themeByName(%recordedName);
+
+	if(!isObject(%theme))
+	{
+		%theme = %this.themeApplier.inferTheme(%this.rootGui);
+	}
+
+	if(!isObject(%theme))
+	{
+		%theme = %this.defaultTheme();
+	}
+
+	%this.themeName = isObject(%theme) ? %theme.getName() : "";
+	if(%this.themeName !$= "")
+	{
+		%this.lastThemeName = %this.themeName;
+	}
+}
+
+// Called by the theme library before it frees a theme or profile the document
+// might be wearing. A control's profile field is a raw pointer, so it has to be
+// moved off the doomed profile before the delete rather than after.
+function GuiEditor::detachTheme(%this, %theme, %profile)
+{
+	// The stack is full of profile ids that are about to stop resolving, and a
+	// detach is not itself something to undo - the profile it moved off will not
+	// exist to move back to.
+	%this.undoRecorder.clear();
+
+	// And the clipboard holds controls whose profile fields are raw pointers to
+	// the same doomed profiles. Nothing reads them while the copy sits in the
+	// stash, but a paste would - and by then the profile is gone.
+	%this.clipboard.clear();
+
+	%this.themeApplier.detach(%this.rootGui, %theme, %profile);
+}
+
+// The other half: after a revert has re-read the theme files, the document's
+// theme is a new object with the same name, so put it back on.
+function GuiEditor::reattachTheme(%this)
+{
+	%theme = %this.themeByName(%this.themeName);
+	if(isObject(%theme))
+	{
+		// Repairing the document after a revert is not an edit the user made, so
+		// it is not one they can take back. Suspended rather than cleared: the
+		// detach that preceded this already emptied the stack.
+		%this.undoRecorder.suspend();
+		%this.themeApplier.applyToChildren(%this.rootGui, %theme, false);
+		%this.undoRecorder.resume();
+
+		%this.explorerWindow.tree.refresh();
+	}
+}
+
+// Tear the Profile Editor dialog down synchronously (not via the usual deferred
+// close). Called at shutdown before the editor and AppCore modules unload, so
+// the dialog's live preview and controls stop referencing theme and editor
+// profiles before those profiles are freed - otherwise the controls' onSleep
+// runs decRefCount on freed profiles during final teardown and crashes.
+function GuiEditor::closeProfileEditor(%this)
+{
+	if(isObject(%this.profileEditorDialog))
+	{
+		if(isObject(Canvas))
+		{
+			Canvas.popDialog(%this.profileEditorDialog);
+		}
+		%this.profileEditorDialog.delete();
+		%this.profileEditorDialog = "";
+	}
+}
+
+//-----------------------------------------------------------------------------
+// What the legacy .gui script format cannot carry.
+//
+// FileObject::writeObject walks a control's fields and its child objects, and
+// that is the whole of it. Two things in the engine are neither: a list box or
+// drop down's static rows, and a frame set's layout. Both are written as TAML
+// custom nodes, so saving as .gui drops them silently - which the frame set has
+// done since it was written, and which is worth saying out loud now that
+// something people use every day is in the same boat.
+//
+// Returns a sentence naming what would go, or "" when there is nothing to say.
+//-----------------------------------------------------------------------------
+
+function GuiEditor::tamlOnlyStateSummary(%this)
+{
+    %this.tamlOnlyRows = 0;
+    %this.tamlOnlyLists = 0;
+    %this.tamlOnlyFrameSets = 0;
+    %this.countTamlOnlyState(%this.rootGui);
+
+    if(%this.tamlOnlyRows == 0 && %this.tamlOnlyFrameSets == 0)
+    {
+        return "";
+    }
+
+    // Only what the document actually holds gets named, in the heading and in
+    // the tally both: telling someone their frame layouts are at risk when there
+    // is not a frame set in the Gui is how a warning gets ignored.
+    %kinds = "";
+    %parts = "";
+
+    if(%this.tamlOnlyRows > 0)
+    {
+        %kinds = "list rows";
+        %parts = %this.tamlOnlyRows SPC
+            ((%this.tamlOnlyRows == 1) ? "row" : "rows") SPC "on" SPC
+            %this.tamlOnlyLists SPC ((%this.tamlOnlyLists == 1) ? "list" : "lists");
+    }
+
+    if(%this.tamlOnlyFrameSets > 0)
+    {
+        %kinds = (%kinds $= "") ? "frame layouts" : (%kinds @ " or frame layouts");
+
+        %frames = %this.tamlOnlyFrameSets SPC
+            ((%this.tamlOnlyFrameSets == 1) ? "frame layout" : "frame layouts");
+        %parts = (%parts $= "") ? %frames : (%parts @ " and " @ %frames);
+    }
+
+    return "This format cannot save" SPC %kinds @ ":" SPC %parts SPC
+        "would be lost. Save as TAML to keep them.";
+}
+
+function GuiEditor::countTamlOnlyState(%this, %ctrl)
+{
+    if(!isObject(%ctrl))
+    {
+        return;
+    }
+
+    // A tree's rows are generated from a root object and are never written, so
+    // it is not a list for this purpose however much it derives from one.
+    if((%ctrl.isMemberOfClass("GuiListBoxCtrl") || %ctrl.isMemberOfClass("GuiDropDownCtrl")) &&
+        !%ctrl.isMemberOfClass("GuiTreeViewCtrl"))
+    {
+        %rows = %ctrl.getItemCount();
+        if(%rows > 0)
+        {
+            %this.tamlOnlyRows += %rows;
+            %this.tamlOnlyLists++;
+        }
+    }
+
+    // An unsplit frame set has a layout of one frame holding one control, which
+    // is what it would be rebuilt as anyway. Eight numbers is one frame.
+    if(%ctrl.isMemberOfClass("GuiFrameSetCtrl") && getWordCount(%ctrl.getFrameLayout()) > 8)
+    {
+        %this.tamlOnlyFrameSets++;
+    }
+
+    for(%i = 0; %i < %ctrl.getCount(); %i++)
+    {
+        %this.countTamlOnlyState(%ctrl.getObject(%i));
+    }
+}
+
 function GuiEditor::SaveCore(%this, %filePath, %formatIndex, %folder, %module)
 {
+    // Record the theme on whichever object is about to be written, so reopening
+    // the Gui does not have to guess. It means nothing to the game.
+    //
+    // canSaveDynamicFields has to be turned on for it to survive the trip: every
+    // GuiControl clears that flag in its constructor (guiControl.cc), so dynamic
+    // fields on controls are dropped by both writers by default.
+    %root = (%this.rootGui.getCount() == 1) ? %this.rootGui.getObject(0) : %this.rootGui;
+    %root.canSaveDynamicFields = true;
+    %root.guiTheme = %this.themeName;
+
     if(%formatIndex == 0)
     {
+        // The save dialog says this in its feedback line, but a re-save never
+        // opens one: Ctrl+S goes straight here with the format the Gui was
+        // last written in.
+        %warning = %this.tamlOnlyStateSummary();
+        if(%warning !$= "")
+        {
+            warn("Gui Editor: " @ %warning);
+        }
+
         %fo = new FileObject();
         %fo.openForWrite(%filePath);
         %fo.writeLine("//--- Created with the GuiEditor ---//");
@@ -409,47 +1061,219 @@ function GuiEditor::SaveCore(%this, %filePath, %formatIndex, %folder, %module)
     %this.formatIndex = %formatIndex;
     %this.folder = %folder;
     %this.module = %module;
+
+    // After the name is set, not before: marking clean refreshes the title, and
+    // the title is the name that was just written.
+    %this.undoRecorder.markClean();
+
+    // The file is on disk, so whatever was waiting on it can go ahead. This is
+    // one of only two places that releases it, and the only one reached by a
+    // save - which is what makes a cancelled Save As call the whole thing off
+    // rather than quietly continuing without a file.
+    %this.refreshFileMenu();
+    %this.runPendingCommand();
 }
+
+//UNDO-------------------------------------------------------------------------
+//
+// The stack lives on the UndoManager the brain (a C++ GuiEditCtrl) has always
+// owned; GuiEditorUndoRecorder is what fills it. Undoing writes to the same
+// controls the editor writes to, so the recorder is suspended for the duration
+// or the replay would record itself.
+//-----------------------------------------------------------------------------
 
 function GuiEditor::Undo(%this)
 {
     %undoManager = %this.brain.getUndoManager();
+    if(%undoManager.getUndoCount() == 0)
+    {
+        return;
+    }
+
+    %this.undoRecorder.suspend();
     %undoManager.undo();
+    %this.undoRecorder.resume();
+
+    %this.afterReplay();
 }
 
 function GuiEditor::Redo(%this)
 {
     %undoManager = %this.brain.getUndoManager();
+    if(%undoManager.getRedoCount() == 0)
+    {
+        return;
+    }
+
+    %this.undoRecorder.suspend();
     %undoManager.redo();
+    %this.undoRecorder.resume();
 
-    %count = %undoManager.getRedoCount();
-
+    %this.afterReplay();
 }
 
-function GuiEditor::Cut(%this)
+// What the rest of the editor has to be told after a replay. The action reports
+// which controls it touched on its way through, so the selection can land on
+// what just changed - a Ctrl+Z that moves a control scrolled off the top of the
+// canvas would otherwise look like nothing happened.
+function GuiEditor::afterReplay(%this)
 {
-    
+    %this.explorerWindow.tree.refresh();
+    %this.selectAfterReplay(%this.undoRecorder.replayTouched);
+    %this.undoRecorder.refreshMenu();
 }
+
+function GuiEditor::selectAfterReplay(%this, %list)
+{
+    %wanted = "";
+
+    for(%i = 0; %i < getWordCount(%list); %i++)
+    {
+        %ctrl = getWord(%list, %i);
+
+        // Undoing an add puts the control in the trash, and redoing a delete
+        // puts it back there. Either way it is no longer part of the Gui, so
+        // there is nothing to select.
+        if(isObject(%ctrl) && %this.inDocument(%ctrl))
+        {
+            %wanted = (%wanted $= "") ? %ctrl : (%wanted SPC %ctrl);
+        }
+    }
+
+    %this.brain.restoreSelection(%wanted);
+}
+
+function GuiEditor::inDocument(%this, %ctrl)
+{
+    %parent = %ctrl.getParent();
+    while(isObject(%parent))
+    {
+        if(%parent == %this.rootGui)
+        {
+            return true;
+        }
+        %parent = %parent.getParent();
+    }
+
+    return false;
+}
+
+//CLIPBOARD--------------------------------------------------------------------
+//
+// The copies live on GuiEditorClipboard; these three are the Edit menu's way in.
+// Ctrl+X/C/V reach them as menu accelerators, which the canvas only consults
+// once the first responder has passed on the key (guiCanvas.cc) - so a text box
+// in the properties pane keeps Ctrl+C for its own text, and the canvas gets it
+// only when nothing else wanted it.
+//-----------------------------------------------------------------------------
 
 function GuiEditor::Copy(%this)
 {
-    
+    %this.clipboard.copy(%this.brain.getSelected());
+}
+
+// Copy, then delete. Cut is those two things and has no third thing of its own,
+// so it says so rather than keeping a second copy of what deleting means.
+function GuiEditor::Cut(%this)
+{
+    if(!%this.clipboard.copy(%this.brain.getSelected()))
+    {
+        return;
+    }
+
+    %this.DeleteSelection();
+}
+
+// What the Delete key already does, reachable from the Edit menu - which is the
+// only place that says the command exists at all. The C++ moves the selection
+// into the trash and announces it, and the recorder turns that into one undo
+// step (GuiEditorBrain::onTrashSelection). Nothing is deleted for real, so this
+// is undoable and the controls are still alive in the trash - which is also why
+// a cut and paste keeps the names it had: a trashed control is not in the
+// document, so nothing there holds its name.
+//
+// DeleteSelection rather than Delete, and it has to be: delete is a console
+// method on every SimObject, so GuiEditor.Delete() would destroy the editor.
+function GuiEditor::DeleteSelection(%this)
+{
+    %this.brain.deleteSelection();
+    %this.brain.onDelete();
 }
 
 function GuiEditor::Paste(%this)
 {
-    
+    %this.clipboard.paste();
 }
+
+// A copy that goes straight back into the parent it came from, leaving whatever
+// is on the clipboard where it is.
+function GuiEditor::Duplicate(%this)
+{
+    %this.clipboard.duplicate(%this.brain.getSelected());
+}
+
+//LAYOUT-----------------------------------------------------------------------
+//
+// The Layout menu's commands go through here rather than straight to the brain,
+// because the brain's C++ says nothing when it aligns or restacks a selection -
+// unlike a drag or a nudge, which it brackets with callbacks. Recording either
+// side of the call is cheaper than teaching the engine to announce them.
+//-----------------------------------------------------------------------------
 
 function GuiEditor::changeExtent(%this, %x, %y)
 {
     %set = %this.brain.getSelected();
     if(%set.getCount() >= 1)
     {
+        %this.undoRecorder.snapshot(%set);
+
         %obj = %set.getObject(0);
         %ext = %obj.getExtent();
         %obj.setExtent(getWord(%ext, 0) + %x, getWord(%ext, 1) + %y);
+
+        // Same kind as a nudge, and for the same reason: holding the key down is
+        // one resize, not one per repeat.
+        %this.undoRecorder.commitGeometry("Resize Control", "resize");
     }
+}
+
+function GuiEditor::Justify(%this, %mode)
+{
+    %this.undoRecorder.snapshot(%this.brain.getSelected());
+    %this.brain.Justify(%mode);
+    %this.undoRecorder.commitGeometry("Align Controls", "");
+}
+
+function GuiEditor::BringToFront(%this)
+{
+    %this.restack("BringToFront", "Bring to Front");
+}
+
+function GuiEditor::PushToBack(%this)
+{
+    %this.restack("PushToBack", "Push to Back");
+}
+
+// Both do the same thing to the same one control - the C++ ignores anything but
+// a single selection - and both change only its index among its siblings.
+function GuiEditor::restack(%this, %method, %name)
+{
+    %set = %this.brain.getSelected();
+    if(%set.getCount() != 1)
+    {
+        return;
+    }
+
+    %ctrl = %set.getObject(0);
+    %parent = %ctrl.getParent();
+    if(!isObject(%parent))
+    {
+        return;
+    }
+
+    %oldIndex = %this.undoRecorder.indexOf(%parent, %ctrl);
+    %this.brain.call(%method);
+    %this.undoRecorder.recordMove(%ctrl, %parent, %oldIndex, %name);
 }
 
 function GuiEditor::SetGridSize(%this)
@@ -469,13 +1293,20 @@ function GuiEditor::SetGridSize(%this)
 	Canvas.pushDialog(%dialog);
 }
 
+// The Layout menu's Snap to Grid toggle, which says whether to use the grid and
+// nothing about how big it is. Turning it back on asks the brain what the grid
+// was rather than naming a number: setSnapToGrid(0) clears the flag and leaves
+// the spacing alone precisely so that it can be picked back up here, and a size
+// the user chose in Set Grid Size should not be thrown away by a switch that was
+// never about the size. There is always an answer to pick up - the brain sets a
+// grid of 10 in onAdd, and 0 only ever means "off".
 function GuiEditor::SnapToGrid(%this, %gridOn)
 {
     if(%gridOn)
     {
-        %this.brain.setSnapToGrid(10);
+        %this.brain.setSnapToGrid(%this.brain.getGridSize());
     }
-    else 
+    else
     {
         %this.brain.setSnapToGrid(0);
     }

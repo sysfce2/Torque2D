@@ -115,6 +115,15 @@ public:
 
    TextureHandle getTextureHandle(S32 index)
    {
+       // Guard against an out-of-range sheet index — e.g. a glyph whose bitmapIndex
+       // points at a texture sheet that never loaded (seen on the web build when a
+       // cached .uft's sheet upload is incomplete, or for a partially-built font).
+       // The OOB Vector read otherwise returns a garbage TextureHandle whose object
+       // pointer is non-NULL but invalid, and TextureHandle::lock() then dereferences
+       // it and crashes. A default (NULL) handle is lock-safe (lock() no-ops on NULL),
+       // so the glyph is simply skipped instead.
+       if (index < 0 || index >= (S32)mTextureSheets.size())
+           return TextureHandle();
        return mTextureSheets[index];
    }
 
@@ -211,6 +220,19 @@ inline U32 GFont::getCharHeight(const UTF16 in_charIndex)
 
 inline bool GFont::isValidChar(const UTF16 in_charIndex) const
 {
+   // A line break is not a glyph. Every caller reads "valid" as "draw this and
+   // count its width", and a platform font may well claim it is drawable --
+   // WinFont::isValidChar answers true for everything but NUL, its range check
+   // commented out -- so a newline inside a string rendered as the font's
+   // missing-glyph box AND took up space, which in a text edit moved the caret
+   // as well. Answered here rather than in each back-end so every platform
+   // agrees.
+   //
+   // Before the remap table, not after: a font cached to a .uft with the box
+   // already in it would otherwise go on saying yes.
+   if(in_charIndex == '\n' || in_charIndex == '\r')
+      return false;
+
    if(mRemapTable[in_charIndex] != -1)
       return true;
 

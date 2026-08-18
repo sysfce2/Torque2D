@@ -63,9 +63,20 @@ static void MapKey(Uint16 SDLkey, U8 tkey)
 {
    SDLtoTKeyMap[SDLkey] = tkey;
 
-   AsciiTable[tkey].lower.ascii = SDLkey;
-   AsciiTable[tkey].upper.ascii = SDLkey;
-   AsciiTable[tkey].goofy.ascii = SDLkey;
+   // Only printable-ASCII keysyms carry a character ascii. SDL's special keys
+   // (modifiers, function keys, arrows, keypad, locks, navigation -- all keysyms
+   // >= 0x100) and the 0x7F-0xFF range must map to ascii 0; otherwise they're
+   // treated as character input and insert phantom glyphs into text fields (e.g.
+   // pressing Ctrl typed a stray "box" character). The desktop x86UNIX back-end
+   // gets this for free via X11_KeyToUnicode (which returns 0 for non-character
+   // keys), but emscripten's SDL1 port has no working X11_KeyToUnicode, hence this
+   // explicit filter. Control keys (< 0x20: Tab/Enter/Backspace/Esc) also map to 0
+   // here and are handled by keycode, not by character input. Shifted variants of
+   // the printable keys are still set by the switch below.
+   const U16 charAscii = (SDLkey >= 0x20 && SDLkey <= 0x7E) ? SDLkey : 0;
+   AsciiTable[tkey].lower.ascii = charAscii;
+   AsciiTable[tkey].upper.ascii = charAscii;
+   AsciiTable[tkey].goofy.ascii = charAscii;
 
    switch (tkey)
    {

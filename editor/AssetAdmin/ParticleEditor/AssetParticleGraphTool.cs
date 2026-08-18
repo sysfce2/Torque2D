@@ -49,9 +49,11 @@ function AssetParticleGraphEmitterTool::onAdd(%this)
 	%this.addItem("Emission Force");
 	%this.addItem("Emission Angle");
 	%this.addItem("Emission Arc");
-	%this.addItem("Red Channel");
-	%this.addItem("Green Channel");
-	%this.addItem("Blue Channel");
+
+	// One entry for red, green and blue together. They were three, and three
+	// pictures cannot answer what color a particle is at half its life -- which is
+	// the only thing anyone opens them to find out.
+	%this.addItem("Color Channel");
 	%this.addItem("Alpha Channel");
 }
 
@@ -107,14 +109,17 @@ function AssetParticleGraphTool::init(%this)
 	ThemeManager.setProfile(%this.toolScroll, "scrollingPanelArrowProfile", "ArrowProfile");
 	%this.add(%this.toolScroll);
 
-	%itemWidth = 360;
+	// A field rather than a local: initEmitter builds three more units from it, and
+	// as a local it was simply empty there -- which made their authored Extent a
+	// malformed point, and every button in them was placed against it.
+	%this.itemWidth = 360;
 	%this.toolGrid = new GuiGridCtrl()
 	{
 		HorizSizing="width";
 		VertSizing="height";
 		Position="0 0";
 		Extent = (getWord(%this.toolScroll.Extent, 0) - 14) SPC getWord(%this.extent, 1);
-		CellSizeX = %itemWidth;
+		CellSizeX = %this.itemWidth;
 		CellSizeY = 0;
 		CellModeX = variable;
 		CellModeY = variable;
@@ -131,8 +136,9 @@ function AssetParticleGraphTool::init(%this)
 		HorizSizing="right";
 		VertSizing="bottom";
 		Position="0 0";
-		Extent= %itemWidth SPC (getWord(%this.extent, 1) - 30);
+		Extent= %this.itemWidth SPC (getWord(%this.extent, 1) - 30);
 		Text = "Base Value";
+		Tool = %this.toolGrid;
 	};
 	ThemeManager.setProfile(%this.baseGraph, "labelProfile");
 	%this.toolGrid.add(%this.baseGraph);
@@ -146,7 +152,7 @@ function AssetParticleGraphEmitterTool::initEmitter(%this)
 		HorizSizing="right";
 		VertSizing="bottom";
 		Position="0 0";
-		Extent= %itemWidth SPC (getWord(%this.extent, 1) - 30);
+		Extent= %this.itemWidth SPC (getWord(%this.extent, 1) - 30);
 		Text = "Variation";
 		Tool = %this.toolGrid;
 	};
@@ -160,12 +166,47 @@ function AssetParticleGraphEmitterTool::initEmitter(%this)
 		HorizSizing="right";
 		VertSizing="bottom";
 		Position="0 0";
-		Extent= %itemWidth SPC (getWord(%this.extent, 1) - 30);
+		Extent= %this.itemWidth SPC (getWord(%this.extent, 1) - 30);
 		Text = "Scale Over Particle Lifetime";
 		Tool = %this.toolGrid;
 	};
 	ThemeManager.setProfile(%this.lifeGraph, "labelProfile");
 	%this.toolGrid.add(%this.lifeGraph);
+
+	// The color unit is wider than the others: it is the only one on screen when
+	// it is showing, and the strip under its plot reads better with the room. It
+	// starts out of the grid, since the tool opens on Lifetime.
+	%this.colorGraph = new GuiControl()
+	{
+		Class = "AssetParticleColorGraphUnit";
+		superclass = "AssetParticleGraphUnit";
+		HorizSizing="right";
+		VertSizing="bottom";
+		Position="0 0";
+		Extent= (%this.itemWidth * 2) SPC (getWord(%this.extent, 1) - 30);
+		Text = "Color Over Particle Lifetime";
+		Tool = %this.toolGrid;
+	};
+	ThemeManager.setProfile(%this.colorGraph, "labelProfile");
+	%this.colorGraph.detach();
+}
+
+// The grid deletes the units inside it. A unit that is currently detached is not
+// inside anything, so it is this tool's to delete.
+function AssetParticleGraphEmitterTool::onRemove(%this)
+{
+	%this.deleteDetachedUnit(%this.baseGraph);
+	%this.deleteDetachedUnit(%this.variGraph);
+	%this.deleteDetachedUnit(%this.lifeGraph);
+	%this.deleteDetachedUnit(%this.colorGraph);
+}
+
+function AssetParticleGraphEmitterTool::deleteDetachedUnit(%this, %unit)
+{
+	if(isObject(%unit) && !%this.toolGrid.isMember(%unit))
+	{
+		%unit.delete();
+	}
 }
 
 function AssetParticleGraphTool::addItem(%this, %item, %color)
@@ -191,6 +232,10 @@ function AssetParticleGraphTool::inspect(%this, %asset, %emitterID)
 	if(isObject(%this.lifeGraph))
 	{
 		%this.lifeGraph.graph.inspect(%asset);
+	}
+	if(isObject(%this.colorGraph))
+	{
+		%this.colorGraph.graph.inspect(%asset);
 	}
 	%this.baseList.clearSelection();
 	%this.emitterID = %emitterID;
@@ -265,9 +310,7 @@ function AssetParticleGraphEmitterTool::onSelect(%this, %index)
 	%graphTable[%i] = "EmissionForce"; %i++;
 	%graphTable[%i] = "EmissionAngle"; %i++;
 	%graphTable[%i] = "EmissionArc"; %i++;
-	%graphTable[%i] = "RedChannel"; %i++;
-	%graphTable[%i] = "GreenChannel"; %i++;
-	%graphTable[%i] = "BlueChannel"; %i++;
+	%graphTable[%i] = "ColorChannel"; %i++;
 	%graphTable[%i] = "AlphaChannel";
 
 	for(%i = 0; %i < 11; %i++)
@@ -281,6 +324,26 @@ function AssetParticleGraphEmitterTool::onSelect(%this, %index)
 	}
 
 	%name = %graphTable[%index];
+
+	// Color is the one selection that shows a different graph rather than a
+	// different field, so it swaps the whole set of units in the grid.
+	if(%name $= "ColorChannel")
+	{
+		%this.baseGraph.detach();
+		%this.variGraph.detach();
+		%this.lifeGraph.detach();
+
+		%this.colorGraph.setToColor(%this.emitterID);
+
+		// Any of the three channels gives the same window: they are registered with
+		// identical bounds, 0 to 1 over a lifetime of 0 to 1.
+		%this.colorGraph.setValueController(%this.getValueController("RedChannel"));
+		%this.colorGraph.setTimeController(%this.getTimeController("RedChannel"));
+		return;
+	}
+
+	%this.colorGraph.detach();
+	%this.baseGraph.attach();
 	%this.baseGraph.setToBase(%name, %varTable[%index], %this.emitterID);
 	%this.baseGraph.setValueController(%this.getValueController(%name));
 	%this.baseGraph.setTimeController(%this.getTimeController(%name));

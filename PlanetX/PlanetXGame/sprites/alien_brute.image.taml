@@ -1,0 +1,9 @@
+<ImageAsset
+    AssetName="alienBrute"
+    AssetCategory="badguy"
+    ImageFile="@assetFile=alien_brute.png"
+    FilterMode="NEAREST"
+    CellWidth="64"
+    CellCountX="2"
+    CellHeight="40"
+    CellCountY="2" />
