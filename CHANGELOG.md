@@ -100,6 +100,7 @@ and makes CMake the only build system.
 - A menu bar's `findHitControl` hid rather than overrode its base, so clicking a menu on an authored bar handed the editor the wrong control.
 - Declared asset paths kept the case they were written in. `Path` and `Extension` were plain strings, which the string table interns case-insensitively and hands back whichever spelling reached it first -- so a module copied from a template could come out declaring `Path="Sprites"` where the template said `sprites`. On Windows nobody noticed; on Linux that directory does not exist, so images dropped into `sprites/` were never scanned and never became assets, silently, with a `module.taml` that looked correct.
 - Directory names survive a scan with the case they have on disk. `readdir` results were interned case-insensitively, and two of the most ordinary asset folder names -- `sprites` and `fonts` -- are interned during static initialisation by unrelated engine code, so those two could never come back correctly. A folder could be reported by a scan and then fail to open.
+- The engine reported its version as 1.0. `TORQUE_GAME_ENGINE` had never been raised past `1000`, so `getVersionNumber()` answered `1000` where 4.0 is `4000`, and the server-query compatibility check compared every build as 1.0. `getVersionString()` returned `"Open Source"`, which is not a version at all; it now returns `"4.0 Early Access 4"`, which is also what Linux prints at start-up.
 
 ### Removed
 
