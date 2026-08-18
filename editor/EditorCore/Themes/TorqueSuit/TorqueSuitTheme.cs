@@ -6,7 +6,7 @@ function TorqueSuitTheme::init(%this)
 	%this.font[1] = "raleway";//Most common font
 	%this.font[2] = "Audiowide";//Title fontType
 	%this.font[3] = "vt323";//Code and console font
-	%this.fontDirectory = expandPath("^EditorCore/Themes/TorqueSuit/Fonts");
+	%this.fontDirectory = expandPath("^EditorCore/Themes/TorqueSuit/fonts");
 	%this.fontSize = 22;
 
 	%this.color1 = "34 19 30 255";

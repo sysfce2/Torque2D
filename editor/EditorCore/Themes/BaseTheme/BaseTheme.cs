@@ -81,7 +81,7 @@ function BaseTheme::init(%this)
 	%this.font[1] = "raleway";//Most common font
 	%this.font[2] = "black ops one";//Title fontType
 	%this.font[3] = "fira code semibold";//Code and console font
-	%this.fontDirectory = expandPath("^EditorCore/Themes/BaseTheme/Fonts");
+	%this.fontDirectory = expandPath("^EditorCore/Themes/BaseTheme/fonts");
 	%this.fontSize = 20;
 
 	%this.color1 = "10 10 10 255";//Most commonly used for backgrounds

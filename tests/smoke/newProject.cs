@@ -208,6 +208,14 @@ function npStep3()
 	// happened to hold -- so a project came out declaring Sprites and Fonts,
 	// and anything put in sprites/ afterwards was never scanned. Checked
 	// exactly, because the whole point is the spelling.
+	// Every path the definition declares has to exist in the copy, or the asset
+	// manager warns about each missing one the first time the project is opened
+	// -- four warnings on a brand new project, which is a poor first thing to
+	// see and hides a real one when it turns up.
+	npCheck("the declared sprites folder came with it", isDirectory(pathConcat(%module, "sprites")));
+	npCheck("the declared fonts folder came with it", isDirectory(pathConcat(%module, "fonts")));
+	npCheck("the declared particles folder came with it", isDirectory(pathConcat(%module, "particles")));
+
 	npCheck("the declared sprites path keeps its spelling", npFileHasExact(%definition, "Path=\"sprites\""));
 	npCheck("the declared fonts path keeps its spelling", npFileHasExact(%definition, "Path=\"fonts\""));
 	npCheck("the declared extensions keep their spelling", npFileHasExact(%definition, "Extension=\"image.taml\""));
