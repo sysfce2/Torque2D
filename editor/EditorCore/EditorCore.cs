@@ -77,10 +77,16 @@ function EditorCore::create( %this )
 	exec("./EditorAssetPickerItem.cs");
 	exec("./EditorPreferences.cs");
 
+	// Out here rather than with NewProjectDialog above, because the Project
+	// Manager renames modules too and it is loaded once a project is open.
+	exec("./ModuleStamper.cs");
+
 	new ScriptObject(ThemeManager);
 
 	// Before any editor builds a control that wants to remember how it was left.
 	new ScriptObject(EditorPreferences);
+
+	new ScriptObject(ModuleStamper);
 
 	%this.initGui();
 	%this.editorKeyMap.push();
@@ -93,6 +99,11 @@ function EditorCore::destroy( %this )
 	if(isObject(EditorPreferences))
 	{
 		EditorPreferences.delete();
+	}
+
+	if(isObject(ModuleStamper))
+	{
+		ModuleStamper.delete();
 	}
 
 	// Empty by now - every editor deletes its own menus before this runs, and

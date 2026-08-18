@@ -45,7 +45,8 @@ public:
     static void             initPersistFields();
 
     /// Module merge.
-    inline void             setModuleMergePath( const char* pModuleMergePath )          { mModuleMergePath = StringTable->insert(pModuleMergePath); }
+    // Case sensitive, to match the TypeCaseString field this backs.
+    inline void             setModuleMergePath( const char* pModuleMergePath )          { mModuleMergePath = StringTable->insert(pModuleMergePath, true); }
     inline StringTableEntry getModuleMergePath( void ) const                            { return mModuleMergePath; }
 
     /// Declare Console Object.

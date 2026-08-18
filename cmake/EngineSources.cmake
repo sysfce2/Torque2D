@@ -346,6 +346,8 @@ set(TORQUE_ENGINE_SOURCES
     ${TORQUE_SRC}/testing/tests/animationFrameConversionTests.cc
     ${TORQUE_SRC}/testing/tests/assetStateCopyTests.cc
     ${TORQUE_SRC}/testing/tests/bitmapFontParseTests.cc
+    ${TORQUE_SRC}/testing/tests/declaredPathCaseTests.cc
+    ${TORQUE_SRC}/testing/tests/directoryScanCaseTests.cc
     ${TORQUE_SRC}/testing/tests/guiControlReparentTests.cc
     ${TORQUE_SRC}/testing/tests/guiCursorHotSpotTests.cc
     ${TORQUE_SRC}/testing/tests/guiFrameStripLayoutTests.cc
@@ -362,6 +364,7 @@ set(TORQUE_ENGINE_SOURCES
     ${TORQUE_SRC}/testing/tests/platformMemoryTests.cc
     ${TORQUE_SRC}/testing/tests/platformStringTests.cc
     ${TORQUE_SRC}/testing/tests/simObjectCloneTests.cc
+    ${TORQUE_SRC}/testing/tests/stringTableCaseTests.cc
     # ---- platform ----
     ${TORQUE_SRC}/platform/CursorManager.cc
     ${TORQUE_SRC}/platform/Tickable.cc

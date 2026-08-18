@@ -2,7 +2,9 @@
 	ModuleId="ArtPack"
 	VersionId="1"
 	BuildID="1"
-	Type="Template"
+	Template="1"
+	Type="Art Pack"
+	DisplayName="Art Pack"
 	Description="A module to pack your art. How refined."
 	Author="Torque2D">
 		<DeclaredAssets

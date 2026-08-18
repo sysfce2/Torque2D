@@ -6,7 +6,7 @@ function ForestRobeTheme::init(%this)
 	%this.font[1] = "raleway";//Most common font
 	%this.font[2] = "cinzel decorative bold";//Title fontType
 	%this.font[3] = "fira code semibold";//Code and console font
-	%this.fontDirectory = expandPath("^EditorCore/Themes/ForestRobe/Fonts");
+	%this.fontDirectory = expandPath("^EditorCore/Themes/ForestRobe/fonts");
 	%this.fontSize = 20;
 
 	%this.color1 = "43 53 66 255";

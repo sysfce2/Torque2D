@@ -45,6 +45,20 @@ ResDictionary::~ResDictionary()
    delete[] hashTable;
 }
 
+// NOTE the bucket is derived from the POINTER VALUES of path and file, and the
+// comparison in find() below is pointer equality too. That only works while
+// every string table entry reaching this dictionary was interned the same way,
+// which is why the four insert() calls in this file, ResManager::getPaths, the
+// zip and openFileForWrite paths in resourceManager.cc, and the platform layer's
+// dumpPath all pass caseSens = true together. Flip one of them alone and a
+// lookup does not merely compare false -- it hashes into the wrong bucket and
+// the file is reported missing.
+//
+// They are case sensitive because these name real files: the string table's hash
+// is case insensitive by construction, so an ordinary insert returns whichever
+// spelling of a name reached the table first, and a directory called fonts came
+// back as "Fonts" because guiProfileTheme.cc interns that word as a field group
+// during static initialisation.
 S32 ResDictionary::hash(StringTableEntry path, StringTableEntry file)
 {
    return ((U32)((((dsize_t)path) >> 2) + (((dsize_t)file) >> 2) )) % hashTableSize;
@@ -56,7 +70,7 @@ void ResDictionary::insert(ResourceObject *obj, StringTableEntry path, StringTab
    {
       char fullPath[1024];
       Platform::makeFullPathName(path, fullPath, sizeof(fullPath));
-      path = StringTable->insert(fullPath);
+      path = StringTable->insert(fullPath, true);
    }
 
    obj->name = file;
@@ -102,7 +116,7 @@ ResourceObject* ResDictionary::find(StringTableEntry path, StringTableEntry name
    {
       char fullPath[1024];
       Platform::makeFullPathName(path, fullPath, sizeof(fullPath));
-      path = StringTable->insert(fullPath);
+      path = StringTable->insert(fullPath, true);
    }
 
    for(ResourceObject *walk = hashTable[hash(path, name)]; walk; walk = walk->nextEntry)
@@ -117,7 +131,7 @@ ResourceObject* ResDictionary::find(StringTableEntry path, StringTableEntry name
    {
       char fullPath[1024];
       Platform::makeFullPathName(path, fullPath, sizeof(fullPath));
-      path = StringTable->insert(fullPath);
+      path = StringTable->insert(fullPath, true);
    }
 
    for(ResourceObject *walk = hashTable[hash(path, name)]; walk; walk = walk->nextEntry)
@@ -132,7 +146,7 @@ ResourceObject* ResDictionary::find(StringTableEntry path, StringTableEntry name
    {
       char fullPath[1024];
       Platform::makeFullPathName(path, fullPath, sizeof(fullPath));
-      path = StringTable->insert(fullPath);
+      path = StringTable->insert(fullPath, true);
    }
 
    for(ResourceObject *walk = hashTable[hash(path, name)]; walk; walk = walk->nextEntry)

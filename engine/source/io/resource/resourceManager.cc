@@ -310,15 +310,15 @@ static void getPaths (const char *fullPath, StringTableEntry & path,
    if (!ptr)
    {
       path = NULL;
-      fileName = StringTable->insert (fullPath);
+      fileName = StringTable->insert (fullPath, true);
    }
    else
    {
       S32 len = (S32)(ptr - fullPath);
       dStrncpy (buf, fullPath, len);
       buf[len] = 0;
-      fileName = StringTable->insert (ptr + 1);
-      path = StringTable->insert (buf);
+      fileName = StringTable->insert (ptr + 1, true);
+      path = StringTable->insert (buf, true);
    }
 }
 
@@ -397,8 +397,8 @@ bool ResManager::scanZip (ResourceObject * zipObject)
          continue;
 
       pPathEnd[0] = '\0';
-      const char * path = StringTable->insert(zipPath);
-      const char * file = StringTable->insert(pPathEnd + 1);
+      const char * path = StringTable->insert(zipPath, true);
+      const char * file = StringTable->insert(pPathEnd + 1, true);
    
       ResourceObject *ro = createZipResource(path, file, zipObject->zipPath, zipObject->zipName);
 
@@ -1297,7 +1297,7 @@ bool ResManager::openFileForWrite (FileStream & stream, const char *fileName, U3
       return false;
 
    // create a resource for the file.
-   ResourceObject *ro = createResource (StringTable->insert (path), StringTable->insert (file));
+   ResourceObject *ro = createResource (StringTable->insert (path, true), StringTable->insert (file, true));
    ro->flags = ResourceObject::File;
    ro->fileOffset = 0;
    ro->fileSize = 0;

@@ -151,7 +151,16 @@ public:
     inline StringTableEntry getModuleType( void ) const                         { return mModuleType; }
     inline void             setDependencies( const typeModuleDependencyVector& dependencies ) { if ( checkUnlocked() ) { mDependencies.clear(); mDependencies.merge(dependencies); } }
     inline const typeModuleDependencyVector& getDependencies( void ) const      { return mDependencies; }
-    inline void             setScriptFile( const char* pScriptFile )            { if ( checkUnlocked() ) { mScriptFile = StringTable->insert(pScriptFile); } }
+    // Case sensitive: this is a filename on disk, and the string table's hash
+    // is case insensitive, so an ordinary insert returns whichever spelling of
+    // the name reached the table first -- which on Linux is a script the module
+    // then cannot find. Safe here because mScriptFile is only ever compared
+    // against EmptyString (moduleManager.cc) and otherwise formatted into a
+    // path. NOT done for ModuleId, Group, Type or the create/destroy function
+    // names below: those are identifiers, they ARE compared as string table
+    // pointers, and dependency resolution has always matched them regardless of
+    // case.
+    inline void             setScriptFile( const char* pScriptFile )            { if ( checkUnlocked() ) { mScriptFile = StringTable->insert(pScriptFile, true); } }
     inline StringTableEntry getScriptFile( void ) const                         { return mScriptFile; }
     inline void             setCreateFunction( const char* pCreateFunction )    { if ( checkUnlocked() ) { mCreateFunction = StringTable->insert(pCreateFunction); } }
     inline StringTableEntry getCreateFunction( void ) const                     { return mCreateFunction; }
@@ -160,7 +169,9 @@ public:
     inline SimObjectId      getScopeSet( void ) const                           { return mScopeSet; }
 
     /// Module assets.
-    inline void             setAssetTagsManifest( const char* pTagsAssetManifest ) { if ( checkUnlocked() ) { mAssetTagsManifest = StringTable->insert(pTagsAssetManifest); } }
+    // Case sensitive for the same reason as setScriptFile: a filename. Only
+    // ever handed to Con::expandPath, never compared.
+    inline void             setAssetTagsManifest( const char* pTagsAssetManifest ) { if ( checkUnlocked() ) { mAssetTagsManifest = StringTable->insert(pTagsAssetManifest, true); } }
     inline StringTableEntry getAssetTagsManifest( void ) const                  { return mAssetTagsManifest; }
     inline typeModuleAssetsVector& getModuleAssets( void )                      { return mModuleAssets; }
 

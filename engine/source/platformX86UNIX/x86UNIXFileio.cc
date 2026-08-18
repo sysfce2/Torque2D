@@ -380,10 +380,10 @@
           Platform::FileInfo& rInfo = fileVector.last();
  
           if (relativePath)
-             rInfo.pFullPath = StringTable->insert(relativePath);
+             rInfo.pFullPath = StringTable->insert(relativePath, true);
           else
-             rInfo.pFullPath = StringTable->insert(path);
-          rInfo.pFileName = StringTable->insert(fEntry->d_name);
+             rInfo.pFullPath = StringTable->insert(path, true);
+          rInfo.pFileName = StringTable->insert(fEntry->d_name, true);
           rInfo.fileSize  = fStat.st_size;
           //dPrintf("Adding file: %s/%s\n", rInfo.pFullPath, rInfo.pFileName);
        }
@@ -1061,6 +1061,23 @@
      return false;
 
    // Add path to our return list (provided it is valid).
+   //
+   // Interned CASE SENSITIVELY, and that is load bearing on this platform. The
+   // string table's hash is case insensitive by construction, so an ordinary
+   // insert returns whichever spelling of a name reached the table first -- and
+   // several spellings get there during static initialisation, before any of
+   // this runs: SpriteBatch.cc interns "Sprites" as a taml node name and
+   // guiProfileTheme.cc interns "Fonts" as a field group. The result was that a
+   // directory genuinely called sprites or fonts came back out of readdir as
+   // "Sprites" or "Fonts", and every caller that then tried to open it on a case
+   // sensitive filesystem failed: deleteDirectory could not recurse into it,
+   // getDirectoryList reported a name nothing could stat, and scanModules
+   // skipped it.
+   //
+   // The file names in RecurseDumpPath above are interned the same way, and the
+   // two have to stay in step with ResManager::getPaths and the ResDictionary:
+   // that dictionary hashes by pointer value, so a half-applied change misses
+   // the bucket rather than merely comparing false.
    if (!Platform::isExcludedDirectory(subPath)){
       if (noBasePath){
          // No base path requested: store only non-empty subpaths, and NEVER the
@@ -1069,10 +1086,10 @@
          // code fell into the else below for the empty-subPath root call and
          // pushed the base path, so getDirectoryList() returned just the path.
          if (subPath && (dStrncmp(subPath, "", 1) != 0))
-            directoryVector.push_back(StringTable->insert(subPath));
+            directoryVector.push_back(StringTable->insert(subPath, true));
       } else {
          // There is a base path. Store the concatenated path.
-         directoryVector.push_back(StringTable->insert(Path));
+         directoryVector.push_back(StringTable->insert(Path, true));
       }
    }
 
